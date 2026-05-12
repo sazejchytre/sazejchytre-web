@@ -1,0 +1,263 @@
+{
+  "nav": {
+    "home": "Domov",
+    "pricing": "Cenník",
+    "howItWorks": "Ako to funguje",
+    "about": "O nás",
+    "contact": "Kontakt",
+    "login": "Prihlásenie",
+    "register": "Registrácia",
+    "dashboard": "Dashboard",
+    "admin": "Admin",
+    "logout": "Odhlásiť sa"
+  },
+  "hero": {
+    "badge": "Analytická platforma pre stávkovanie",
+    "title": "Stavte s dátami,\nnie s náhodou",
+    "subtitle": "Prémiové stávkové analýzy od expertov. Týždenné tipy, štatistiky a exkluzívne prehľady pre vážnych stávkarov.",
+    "cta": "Začať zadarmo",
+    "ctaSecondary": "Zobraziť ukážku",
+    "disclaimer": "Stávkovanie je riziková aktivita. Výsledky nie sú garantované.",
+    "stats": {
+      "accuracy": "Presnosť",
+      "tips": "Aktívnych tipov",
+      "members": "Členov platformy"
+    }
+  },
+  "plans": {
+    "title": "Vyberte si plán",
+    "subtitle": "Transparentné ceny, žiadne skryté poplatky. Každý plán zahŕňa týždenný prístup.",
+    "perWeek": "/ týždeň",
+    "price": "1 499 Kč",
+    "popular": "Najobľúbenejší",
+    "cta": "Vybrať plán",
+    "ctaLogin": "Prihlásiť sa a kúpiť",
+    "basic": {
+      "name": "BASIC",
+      "description": "Pre začínajúcich stávkarov",
+      "features": [
+        "Základné tipy každý týždeň",
+        "Obmedzený počet tipov",
+        "Základné štatistiky",
+        "Emailová podpora"
+      ]
+    },
+    "pro": {
+      "name": "PRO",
+      "description": "Pre skúsených stávkarov",
+      "features": [
+        "Všetko z BASIC",
+        "Pokročilé analýzy",
+        "História tipov",
+        "Detailné štatistiky",
+        "Prioritná podpora"
+      ]
+    },
+    "elite": {
+      "name": "ELITE",
+      "description": "Pre profesionálnych stávkarov",
+      "features": [
+        "Všetko z PRO",
+        "VIP tipy",
+        "Prémiové analýzy",
+        "Exkluzívny obsah",
+        "Najvyššia priorita"
+      ]
+    }
+  },
+  "howItWorks": {
+    "title": "Ako to funguje",
+    "subtitle": "Tri jednoduché kroky k lepšiemu stávkovaniu",
+    "steps": [
+      {
+        "title": "Zaregistrujte sa",
+        "description": "Vytvorte si účet za 30 sekúnd. Žiadna kreditná karta pre registráciu."
+      },
+      {
+        "title": "Vyberte plán",
+        "description": "Zvoľte balík zodpovedajúci vašim potrebám a zaplaťte bezpečne cez Stripe."
+      },
+      {
+        "title": "Stavte chytro",
+        "description": "Pristupujte k prémiovým analýzam a tipom od našich expertov."
+      }
+    ]
+  },
+  "faq": {
+    "title": "Časté otázky",
+    "items": [
+      {
+        "question": "Sú tipy zárukou výhry?",
+        "answer": "Nie. Stávkovanie je riziková aktivita a žiadna platforma nemôže garantovať výhry. Naše analýzy sú podložené dátami, ale výsledky sa môžu líšiť."
+      },
+      {
+        "question": "Môžem kedykoľvek zrušiť predplatné?",
+        "answer": "Áno. Predplatné je možné kedykoľvek zrušiť cez zákaznícky portál Stripe. Prístup zostane aktívny do konca zaplateného obdobia."
+      },
+      {
+        "question": "Ako prebieha platba?",
+        "answer": "Platba prebieha bezpečne cez Stripe. Prijímame karty Visa, Mastercard a ďalšie. Vaše platobné údaje neukladáme."
+      },
+      {
+        "question": "Môžem prejsť na vyšší plán?",
+        "answer": "Áno, upgrade je možný kedykoľvek cez váš dashboard."
+      },
+      {
+        "question": "Čo sú VIP tipy?",
+        "answer": "VIP tipy sú exkluzívne analýzy dostupné iba pre ELITE členov. Ide o naše najlepšie vybrané príležitosti s najpodrobnejšou analýzou."
+      }
+    ]
+  },
+  "testimonials": {
+    "title": "Čo hovoria naši členovia",
+    "items": [
+      {
+        "name": "Tomáš K.",
+        "plan": "PRO člen",
+        "text": "Vďaka SázejChytře som začal pristupovať k stávkovaniu systematicky. Analýzy sú zrozumiteľné a tipy dobre podložené."
+      },
+      {
+        "name": "Martin V.",
+        "plan": "ELITE člen",
+        "text": "VIP tipy sú skutočne exkluzívne. Hodnota, ktorú dostávam za predplatné, mnohonásobne prevyšuje cenu."
+      },
+      {
+        "name": "Ján P.",
+        "plan": "BASIC člen",
+        "text": "Skvelý začiatok. BASIC plán mi dal solídny základ a čoskoro prejdem na PRO."
+      }
+    ]
+  },
+  "dashboard": {
+    "title": "Váš Dashboard",
+    "welcome": "Vitajte späť",
+    "subscription": "Vaše predplatné",
+    "plan": "Aktuálny plán",
+    "validUntil": "Platné do",
+    "manageBilling": "Spravovať fakturáciu",
+    "upgrade": "Upgradovať plán",
+    "noPlan": "Žiadny aktívny plán",
+    "noPlanDesc": "Vyberte si plán pre prístup k prémiovému obsahu",
+    "choosePlan": "Vybrať plán",
+    "latestTips": "Najnovšie tipy",
+    "lockedContent": "Zamknutý obsah",
+    "lockedDesc": "Upgradujte svoj plán pre prístup k tomuto obsahu",
+    "tipHistory": "História tipov",
+    "results": "Prehľad výsledkov",
+    "won": "Výhry",
+    "lost": "Prehry",
+    "void": "Anulované",
+    "pending": "Čaká",
+    "noTips": "Zatiaľ žiadne tipy"
+  },
+  "tips": {
+    "confidence": "Istota",
+    "odds": "Kurz",
+    "prediction": "Predpoveď",
+    "matchDate": "Dátum zápasu",
+    "sport": "Šport",
+    "category": "Kategória",
+    "requiredPlan": "Požadovaný plán",
+    "status": "Stav",
+    "result": "Výsledok",
+    "analysis": "Analýza",
+    "summary": "Zhrnutie",
+    "locked": "Zamknutý obsah",
+    "lockedDesc": "Tento obsah je dostupný pre {plan} a vyšší",
+    "upgrade": "Upgradovať na {plan}"
+  },
+  "auth": {
+    "email": "Email",
+    "password": "Heslo",
+    "confirmPassword": "Potvrdiť heslo",
+    "fullName": "Celé meno",
+    "login": "Prihlásiť sa",
+    "register": "Registrovať sa",
+    "loginTitle": "Vitajte späť",
+    "loginSubtitle": "Prihláste sa do svojho účtu",
+    "registerTitle": "Vytvoriť účet",
+    "registerSubtitle": "Začnite stavkovať chytro ešte dnes",
+    "forgotPassword": "Zabudnuté heslo?",
+    "noAccount": "Nemáte účet?",
+    "hasAccount": "Máte už účet?",
+    "signUpHere": "Registrujte sa tu",
+    "signInHere": "Prihláste sa tu",
+    "orContinueWith": "alebo pokračujte cez",
+    "googleLogin": "Pokračovať cez Google",
+    "loginSuccess": "Prihlásenie úspešné",
+    "registerSuccess": "Registrácia úspešná. Skontrolujte email.",
+    "logoutSuccess": "Odhlásenie úspešné",
+    "errors": {
+      "invalidCredentials": "Nesprávny email alebo heslo",
+      "emailRequired": "Email je povinný",
+      "passwordRequired": "Heslo je povinné",
+      "passwordTooShort": "Heslo musí mať aspoň 8 znakov",
+      "passwordMismatch": "Heslá sa nezhodujú",
+      "emailInUse": "Tento email je už registrovaný",
+      "generic": "Nastala chyba. Skúste to znova."
+    }
+  },
+  "admin": {
+    "title": "Admin Panel",
+    "tips": "Tipy",
+    "categories": "Kategórie",
+    "users": "Používatelia",
+    "newTip": "Nový tip",
+    "editTip": "Upraviť tip",
+    "deleteTip": "Zmazať tip",
+    "publishTip": "Publikovať",
+    "unpublishTip": "Zrušiť publikáciu",
+    "saveDraft": "Uložiť ako draft",
+    "confirmDelete": "Naozaj chcete zmazať tento tip?",
+    "tipTitle": "Názov tipu",
+    "sport": "Šport",
+    "category": "Kategória",
+    "odds": "Kurz",
+    "confidence": "Istota (1-5)",
+    "matchDate": "Dátum zápasu",
+    "requiredPlan": "Požadovaný plán",
+    "status": "Stav",
+    "result": "Výsledok",
+    "prediction": "Predpoveď",
+    "summary": "Zhrnutie",
+    "analysis": "Analýza",
+    "translations": "Preklady",
+    "save": "Uložiť",
+    "cancel": "Zrušiť",
+    "success": "Uložené úspešne",
+    "error": "Nastala chyba"
+  },
+  "footer": {
+    "disclaimer": "SázejChytře poskytuje analytické nástroje a tipy. Stávkovanie je riziková aktivita. Vždy stavkujte zodpovedne. 18+.",
+    "links": {
+      "terms": "Obchodné podmienky",
+      "privacy": "Ochrana osobných údajov",
+      "cookies": "Cookies",
+      "responsible": "Zodpovedné stávkovanie",
+      "risk": "Upozornenie na riziká"
+    },
+    "rights": "Všetky práva vyhradené"
+  },
+  "riskWarning": {
+    "title": "Upozornenie na riziká stávkovania",
+    "text": "Stávkovanie je riziková aktivita. Výsledky nie sú nikdy garantované. Stavkujte iba sumy, ktoré ste schopní stratiť."
+  },
+  "common": {
+    "loading": "Načítavanie...",
+    "error": "Nastala chyba",
+    "save": "Uložiť",
+    "cancel": "Zrušiť",
+    "delete": "Zmazať",
+    "edit": "Upraviť",
+    "create": "Vytvoriť",
+    "back": "Späť",
+    "next": "Ďalší",
+    "previous": "Predchádzajúci",
+    "search": "Hľadať",
+    "filter": "Filtrovať",
+    "yes": "Áno",
+    "no": "Nie",
+    "active": "Aktívny",
+    "inactive": "Neaktívny"
+  }
+}

@@ -1,0 +1,263 @@
+{
+  "nav": {
+    "home": "Domů",
+    "pricing": "Ceník",
+    "howItWorks": "Jak to funguje",
+    "about": "O nás",
+    "contact": "Kontakt",
+    "login": "Přihlášení",
+    "register": "Registrace",
+    "dashboard": "Dashboard",
+    "admin": "Admin",
+    "logout": "Odhlásit se"
+  },
+  "hero": {
+    "badge": "Analytická platforma pro sázení",
+    "title": "Sázejte s daty,\nne s náhodou",
+    "subtitle": "Prémiové sázkové analýzy od expertů. Týdenní tipy, statistiky a exkluzivní přehledy pro vážné sázkaře.",
+    "cta": "Začít zdarma",
+    "ctaSecondary": "Zobrazit ukázku",
+    "disclaimer": "Sázení je riziková aktivita. Výsledky nejsou garantované.",
+    "stats": {
+      "accuracy": "Přesnost",
+      "tips": "Aktivních tipů",
+      "members": "Členů platformy"
+    }
+  },
+  "plans": {
+    "title": "Vyberte si plán",
+    "subtitle": "Transparentní ceny, žádné skryté poplatky. Každý plán zahrnuje týdenní přístup.",
+    "perWeek": "/ týden",
+    "price": "1 499 Kč",
+    "popular": "Nejoblíbenější",
+    "cta": "Vybrat plán",
+    "ctaLogin": "Přihlásit se a koupit",
+    "basic": {
+      "name": "BASIC",
+      "description": "Pro začínající sázkaře",
+      "features": [
+        "Základní tipy každý týden",
+        "Omezený počet tipů",
+        "Základní statistiky",
+        "Emailová podpora"
+      ]
+    },
+    "pro": {
+      "name": "PRO",
+      "description": "Pro zkušené sázkaře",
+      "features": [
+        "Vše z BASIC",
+        "Pokročilé analýzy",
+        "Historie tipů",
+        "Detailní statistiky",
+        "Prioritní podpora"
+      ]
+    },
+    "elite": {
+      "name": "ELITE",
+      "description": "Pro profesionální sázkaře",
+      "features": [
+        "Vše z PRO",
+        "VIP tipy",
+        "Prémiové analýzy",
+        "Exkluzivní obsah",
+        "Nejvyšší priorita"
+      ]
+    }
+  },
+  "howItWorks": {
+    "title": "Jak to funguje",
+    "subtitle": "Tři jednoduché kroky k lepšímu sázení",
+    "steps": [
+      {
+        "title": "Zaregistrujte se",
+        "description": "Vytvořte si účet za 30 sekund. Žádná kreditní karta pro registraci."
+      },
+      {
+        "title": "Vyberte plán",
+        "description": "Zvolte balíček odpovídající vašim potřebám a zaplaťte bezpečně přes Stripe."
+      },
+      {
+        "title": "Sázejte chytře",
+        "description": "Přistupte k prémiovým analýzám a tipům od našich expertů."
+      }
+    ]
+  },
+  "faq": {
+    "title": "Časté dotazy",
+    "items": [
+      {
+        "question": "Jsou tipy zárukou výhry?",
+        "answer": "Ne. Sázení je riziková aktivita a žádná platforma nemůže garantovat výhry. Naše analýzy jsou podloženy daty, ale výsledky se mohou lišit."
+      },
+      {
+        "question": "Mohu kdykoliv zrušit předplatné?",
+        "answer": "Ano. Předplatné lze kdykoliv zrušit přes zákaznický portál Stripe. Přístup zůstane aktivní do konce zaplaceného období."
+      },
+      {
+        "question": "Jak probíhá platba?",
+        "answer": "Platba probíhá bezpečně přes Stripe. Akceptujeme karty Visa, Mastercard a další. Vaše platební údaje neukládáme."
+      },
+      {
+        "question": "Mohu přejít na vyšší plán?",
+        "answer": "Ano, upgrade je možný kdykoliv přes váš dashboard."
+      },
+      {
+        "question": "Co jsou VIP tipy?",
+        "answer": "VIP tipy jsou exkluzivní analýzy dostupné pouze pro ELITE členy. Jde o naše nejlepší vybrané příležitosti s nejpodrobnější analýzou."
+      }
+    ]
+  },
+  "testimonials": {
+    "title": "Co říkají naši členové",
+    "items": [
+      {
+        "name": "Tomáš K.",
+        "plan": "PRO člen",
+        "text": "Díky SázejChytře jsem začal přistupovat k sázení systematicky. Analýzy jsou srozumitelné a tipy dobře podložené."
+      },
+      {
+        "name": "Martin V.",
+        "plan": "ELITE člen",
+        "text": "VIP tipy jsou skutečně exkluzivní. Hodnota, kterou dostávám za předplatné, mnohonásobně převyšuje cenu."
+      },
+      {
+        "name": "Jan P.",
+        "plan": "BASIC člen",
+        "text": "Skvělý začátek. BASIC plán mi dal solidní základ a brzy přejdu na PRO."
+      }
+    ]
+  },
+  "dashboard": {
+    "title": "Váš Dashboard",
+    "welcome": "Vítejte zpět",
+    "subscription": "Vaše předplatné",
+    "plan": "Aktuální plán",
+    "validUntil": "Platné do",
+    "manageBilling": "Spravovat fakturaci",
+    "upgrade": "Upgradovat plán",
+    "noPlan": "Žádný aktivní plán",
+    "noPlanDesc": "Vyberte si plán pro přístup k prémiovému obsahu",
+    "choosePlan": "Vybrat plán",
+    "latestTips": "Nejnovější tipy",
+    "lockedContent": "Zamčený obsah",
+    "lockedDesc": "Upgradujte svůj plán pro přístup k tomuto obsahu",
+    "tipHistory": "Historie tipů",
+    "results": "Přehled výsledků",
+    "won": "Výhry",
+    "lost": "Prohry",
+    "void": "Anulováno",
+    "pending": "Čeká",
+    "noTips": "Zatím žádné tipy"
+  },
+  "tips": {
+    "confidence": "Jistota",
+    "odds": "Kurz",
+    "prediction": "Předpověď",
+    "matchDate": "Datum zápasu",
+    "sport": "Sport",
+    "category": "Kategorie",
+    "requiredPlan": "Požadovaný plán",
+    "status": "Stav",
+    "result": "Výsledek",
+    "analysis": "Analýza",
+    "summary": "Shrnutí",
+    "locked": "Zamčený obsah",
+    "lockedDesc": "Tento obsah je dostupný pro {plan} a vyšší",
+    "upgrade": "Upgradovat na {plan}"
+  },
+  "auth": {
+    "email": "Email",
+    "password": "Heslo",
+    "confirmPassword": "Potvrdit heslo",
+    "fullName": "Celé jméno",
+    "login": "Přihlásit se",
+    "register": "Registrovat se",
+    "loginTitle": "Vítejte zpět",
+    "loginSubtitle": "Přihlaste se ke svému účtu",
+    "registerTitle": "Vytvořit účet",
+    "registerSubtitle": "Začněte sázet chytře ještě dnes",
+    "forgotPassword": "Zapomenuté heslo?",
+    "noAccount": "Nemáte účet?",
+    "hasAccount": "Máte již účet?",
+    "signUpHere": "Registrujte se zde",
+    "signInHere": "Přihlaste se zde",
+    "orContinueWith": "nebo pokračujte přes",
+    "googleLogin": "Pokračovat přes Google",
+    "loginSuccess": "Přihlášení úspěšné",
+    "registerSuccess": "Registrace úspěšná. Zkontrolujte email.",
+    "logoutSuccess": "Odhlášení úspěšné",
+    "errors": {
+      "invalidCredentials": "Nesprávný email nebo heslo",
+      "emailRequired": "Email je povinný",
+      "passwordRequired": "Heslo je povinné",
+      "passwordTooShort": "Heslo musí mít alespoň 8 znaků",
+      "passwordMismatch": "Hesla se neshodují",
+      "emailInUse": "Tento email je již registrován",
+      "generic": "Nastala chyba. Zkuste to znovu."
+    }
+  },
+  "admin": {
+    "title": "Admin Panel",
+    "tips": "Tipy",
+    "categories": "Kategorie",
+    "users": "Uživatelé",
+    "newTip": "Nový tip",
+    "editTip": "Upravit tip",
+    "deleteTip": "Smazat tip",
+    "publishTip": "Publikovat",
+    "unpublishTip": "Zrušit publikaci",
+    "saveDraft": "Uložit jako draft",
+    "confirmDelete": "Opravdu chcete smazat tento tip?",
+    "tipTitle": "Název tipu",
+    "sport": "Sport",
+    "category": "Kategorie",
+    "odds": "Kurz",
+    "confidence": "Jistota (1-5)",
+    "matchDate": "Datum zápasu",
+    "requiredPlan": "Požadovaný plán",
+    "status": "Stav",
+    "result": "Výsledek",
+    "prediction": "Předpověď",
+    "summary": "Shrnutí",
+    "analysis": "Analýza",
+    "translations": "Překlady",
+    "save": "Uložit",
+    "cancel": "Zrušit",
+    "success": "Uloženo úspěšně",
+    "error": "Nastala chyba"
+  },
+  "footer": {
+    "disclaimer": "SázejChytře poskytuje analytické nástroje a tipy. Sázení je riziková aktivita. Vždy sázejte zodpovědně. 18+.",
+    "links": {
+      "terms": "Obchodní podmínky",
+      "privacy": "Ochrana osobních údajů",
+      "cookies": "Cookies",
+      "responsible": "Zodpovědné sázení",
+      "risk": "Upozornění na rizika"
+    },
+    "rights": "Všechna práva vyhrazena"
+  },
+  "riskWarning": {
+    "title": "Upozornění na rizika sázení",
+    "text": "Sázení je riziková aktivita. Výsledky nejsou nikdy garantované. Sázejte pouze částky, které jste schopni ztratit."
+  },
+  "common": {
+    "loading": "Načítání...",
+    "error": "Nastala chyba",
+    "save": "Uložit",
+    "cancel": "Zrušit",
+    "delete": "Smazat",
+    "edit": "Upravit",
+    "create": "Vytvořit",
+    "back": "Zpět",
+    "next": "Další",
+    "previous": "Předchozí",
+    "search": "Hledat",
+    "filter": "Filtrovat",
+    "yes": "Ano",
+    "no": "Ne",
+    "active": "Aktivní",
+    "inactive": "Neaktivní"
+  }
+}
