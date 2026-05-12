@@ -24,7 +24,7 @@ function getPathnameWithoutLocale(pathname: string): string {
 }
 
 export async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl
+  const { pathname, searchParams } = request.nextUrl
 
   // Skip static files, API routes and Next.js internals
   if (
@@ -34,6 +34,17 @@ export async function middleware(request: NextRequest) {
     pathname.includes('.')
   ) {
     return NextResponse.next()
+  }
+
+  // Forward Supabase auth code to the callback handler
+  // (Supabase sometimes redirects to Site URL + ?code= instead of the callback path)
+  const code = searchParams.get('code')
+  if (code) {
+    const callbackUrl = new URL('/api/auth/callback', request.url)
+    callbackUrl.searchParams.set('code', code)
+    const next = searchParams.get('next')
+    if (next) callbackUrl.searchParams.set('next', next)
+    return NextResponse.redirect(callbackUrl)
   }
 
   const cleanPath = getPathnameWithoutLocale(pathname)
