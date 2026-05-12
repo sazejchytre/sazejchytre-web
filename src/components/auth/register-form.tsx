@@ -66,8 +66,12 @@ export function RegisterForm({ locale: _locale }: { locale: string }) {
     if (authError) {
       if (authError.message.includes('already registered') || authError.message.includes('already exists')) {
         setError(t('errors.emailInUse'))
+      } else if (authError.message.includes('Email rate limit')) {
+        setError('Příliš mnoho pokusů. Zkuste to za chvíli.')
+      } else if (authError.message.includes('redirect')) {
+        setError('Chyba konfigurace: přidejte ' + window.location.origin + '/api/auth/callback do povolených URL v Supabase → Authentication → URL Configuration.')
       } else {
-        setError(t('errors.generic'))
+        setError(authError.message)
       }
       setLoading(false)
       return
