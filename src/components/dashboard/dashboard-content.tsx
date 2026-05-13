@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import type { Profile, Subscription, UserEntitlement, Tip, TipTranslation } from '@/types/database'
 import { canAccessPlan } from '@/types'
+import { vocative } from '@/lib/utils/vocative'
 
 interface DashboardContentProps {
   profile: Profile
@@ -73,7 +74,10 @@ export function DashboardContent({
     <div className="container py-10">
       <div className="mb-8">
         <h1 className="text-3xl font-bold">
-          {t('welcome')}, {profile.full_name?.split(' ')[0] ?? profile.email.split('@')[0]}
+          {t('welcome')},{' '}
+          {profile.full_name
+            ? vocative(profile.full_name.split(' ')[0], locale)
+            : profile.email.split('@')[0]}
         </h1>
         <p className="text-muted-foreground mt-1">{t('title')}</p>
       </div>
