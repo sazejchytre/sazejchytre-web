@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { Menu, X, TrendingUp, ChevronDown } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Menu, X, ChevronDown } from 'lucide-react'
 import { Link, usePathname } from '@/i18n/navigation'
 import NextLink from 'next/link'
 import { createClient } from '@/lib/supabase/client'
@@ -38,11 +38,18 @@ const LOCALES = [
 export function NavbarClient({ locale, user, profile, translations: t }: NavbarClientProps) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [langOpen, setLangOpen] = useState(false)
+  const [scrolled, setScrolled] = useState(false)
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
 
   const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin'
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 16)
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -58,27 +65,36 @@ export function NavbarClient({ locale, user, profile, translations: t }: NavbarC
   ]
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-xl">
-      <div className="container flex h-16 items-center justify-between">
+    <header
+      className={cn(
+        'sticky top-0 z-50 w-full transition-all duration-300',
+        scrolled
+          ? 'bg-white/95 backdrop-blur-xl border-b border-border shadow-sm shadow-brand-900/5'
+          : 'bg-white border-b border-border/60'
+      )}
+    >
+      <div className="container flex h-16 items-center justify-between max-w-[1280px]">
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-2 font-bold text-lg">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg gradient-brand">
-            <TrendingUp className="h-5 w-5 text-white" />
+        <Link href="/" className="flex items-center gap-2.5 font-bold text-lg shrink-0">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg gradient-brand shadow-sm">
+            <span className="text-white font-black text-xs tracking-tight">SCH</span>
           </div>
-          <span className="text-gradient">SázejChytře</span>
+          <span className="text-forest font-black tracking-tight hidden sm:block">
+            Sázej<span className="text-primary">Chytře</span>
+          </span>
         </Link>
 
         {/* Desktop Nav */}
-        <nav className="hidden items-center gap-1 md:flex">
+        <nav className="hidden items-center gap-0.5 md:flex">
           {navLinks.map((link) => (
             <Link
               key={link.href}
               href={link.href}
               className={cn(
-                'px-3 py-2 text-sm rounded-lg transition-colors',
+                'px-3.5 py-2 text-sm font-medium rounded-lg transition-colors',
                 pathname === link.href
-                  ? 'text-foreground bg-secondary'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
+                  ? 'text-primary bg-primary/8'
+                  : 'text-forest/70 hover:text-forest hover:bg-secondary'
               )}
             >
               {link.label}
@@ -92,13 +108,13 @@ export function NavbarClient({ locale, user, profile, translations: t }: NavbarC
           <div className="relative">
             <button
               onClick={() => setLangOpen(!langOpen)}
-              className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+              className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-forest/60 hover:text-forest hover:bg-secondary transition-colors"
             >
               {locale.toUpperCase()}
-              <ChevronDown className="h-3 w-3" />
+              <ChevronDown className={cn('h-3 w-3 transition-transform', langOpen && 'rotate-180')} />
             </button>
             {langOpen && (
-              <div className="absolute right-0 top-full mt-1 rounded-lg border border-border bg-card shadow-xl z-50">
+              <div className="absolute right-0 top-full mt-1 rounded-xl border border-border bg-white card-shadow z-50 overflow-hidden min-w-[80px]">
                 {LOCALES.map((l) => (
                   <Link
                     key={l.code}
@@ -106,8 +122,8 @@ export function NavbarClient({ locale, user, profile, translations: t }: NavbarC
                     locale={l.code as 'cs' | 'en' | 'sk'}
                     onClick={() => setLangOpen(false)}
                     className={cn(
-                      'block px-4 py-2 text-xs hover:bg-secondary transition-colors first:rounded-t-lg last:rounded-b-lg',
-                      l.code === locale ? 'text-primary font-semibold' : 'text-muted-foreground'
+                      'block px-4 py-2.5 text-xs font-medium transition-colors hover:bg-secondary',
+                      l.code === locale ? 'text-primary font-semibold bg-primary/5' : 'text-forest/70'
                     )}
                   >
                     {l.label}
@@ -121,29 +137,25 @@ export function NavbarClient({ locale, user, profile, translations: t }: NavbarC
             <>
               {isAdmin && (
                 <NextLink href="/admin">
-                  <Button variant="outline" size="sm">
-                    {t.admin}
-                  </Button>
+                  <Button variant="outline" size="sm">{t.admin}</Button>
                 </NextLink>
               )}
               <Link href="/dashboard">
-                <Button variant="secondary" size="sm">
-                  {t.dashboard}
-                </Button>
+                <Button variant="default" size="sm">{t.dashboard}</Button>
               </Link>
-              <Button variant="ghost" size="sm" onClick={handleLogout}>
+              <Button variant="ghost" size="sm" onClick={handleLogout} className="text-forest/60">
                 {t.logout}
               </Button>
             </>
           ) : (
             <>
               <Link href="/login">
-                <Button variant="ghost" size="sm">
+                <Button variant="ghost" size="sm" className="text-forest/70 hover:text-forest">
                   {t.login}
                 </Button>
               </Link>
               <Link href="/register">
-                <Button size="sm">{t.register}</Button>
+                <Button variant="cta" size="sm">{t.register}</Button>
               </Link>
             </>
           )}
@@ -151,30 +163,37 @@ export function NavbarClient({ locale, user, profile, translations: t }: NavbarC
 
         {/* Mobile Toggle */}
         <button
-          className="md:hidden"
+          className="md:hidden p-2 rounded-lg hover:bg-secondary transition-colors text-forest"
           onClick={() => setMobileOpen(!mobileOpen)}
           aria-label="Toggle menu"
         >
-          {mobileOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+          {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </button>
       </div>
 
       {/* Mobile Menu */}
       {mobileOpen && (
-        <div className="border-t border-border bg-background md:hidden">
-          <div className="container py-4 flex flex-col gap-2">
+        <div className="border-t border-border bg-white md:hidden">
+          <div className="container py-4 flex flex-col gap-1">
             {navLinks.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
                 onClick={() => setMobileOpen(false)}
-                className="px-3 py-2 text-sm rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary"
+                className={cn(
+                  'px-3 py-2.5 text-sm font-medium rounded-lg transition-colors',
+                  pathname === link.href
+                    ? 'text-primary bg-primary/8'
+                    : 'text-forest/70 hover:text-forest hover:bg-secondary'
+                )}
               >
                 {link.label}
               </Link>
             ))}
+
             <div className="my-2 h-px bg-border" />
-            <div className="flex gap-2">
+
+            <div className="flex gap-1.5">
               {LOCALES.map((l) => (
                 <Link
                   key={l.code}
@@ -182,48 +201,43 @@ export function NavbarClient({ locale, user, profile, translations: t }: NavbarC
                   locale={l.code as 'cs' | 'en' | 'sk'}
                   onClick={() => setMobileOpen(false)}
                   className={cn(
-                    'px-3 py-1.5 text-xs rounded-lg transition-colors',
+                    'px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors',
                     l.code === locale
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-secondary text-muted-foreground'
+                      ? 'bg-primary text-white'
+                      : 'bg-secondary text-forest/70 hover:text-forest'
                   )}
                 >
                   {l.label}
                 </Link>
               ))}
             </div>
-            {user ? (
-              <>
-                {isAdmin && (
-                  <NextLink href="/admin" onClick={() => setMobileOpen(false)}>
-                    <Button variant="outline" size="sm" className="w-full">
-                      {t.admin}
-                    </Button>
-                  </NextLink>
-                )}
-                <Link href="/dashboard" onClick={() => setMobileOpen(false)}>
-                  <Button variant="secondary" size="sm" className="w-full">
-                    {t.dashboard}
+
+            <div className="mt-2 flex flex-col gap-2">
+              {user ? (
+                <>
+                  {isAdmin && (
+                    <NextLink href="/admin" onClick={() => setMobileOpen(false)}>
+                      <Button variant="outline" size="sm" className="w-full">{t.admin}</Button>
+                    </NextLink>
+                  )}
+                  <Link href="/dashboard" onClick={() => setMobileOpen(false)}>
+                    <Button variant="default" size="sm" className="w-full">{t.dashboard}</Button>
+                  </Link>
+                  <Button variant="ghost" size="sm" className="w-full text-forest/60" onClick={handleLogout}>
+                    {t.logout}
                   </Button>
-                </Link>
-                <Button variant="ghost" size="sm" className="w-full" onClick={handleLogout}>
-                  {t.logout}
-                </Button>
-              </>
-            ) : (
-              <div className="flex gap-2">
-                <Link href="/login" className="flex-1" onClick={() => setMobileOpen(false)}>
-                  <Button variant="outline" size="sm" className="w-full">
-                    {t.login}
-                  </Button>
-                </Link>
-                <Link href="/register" className="flex-1" onClick={() => setMobileOpen(false)}>
-                  <Button size="sm" className="w-full">
-                    {t.register}
-                  </Button>
-                </Link>
-              </div>
-            )}
+                </>
+              ) : (
+                <div className="flex gap-2">
+                  <Link href="/login" className="flex-1" onClick={() => setMobileOpen(false)}>
+                    <Button variant="outline" size="sm" className="w-full">{t.login}</Button>
+                  </Link>
+                  <Link href="/register" className="flex-1" onClick={() => setMobileOpen(false)}>
+                    <Button variant="cta" size="sm" className="w-full">{t.register}</Button>
+                  </Link>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
