@@ -3,7 +3,7 @@
 import { useEffect, useRef } from 'react'
 import { useTranslations } from 'next-intl'
 import { UserPlus, CreditCard, Zap } from 'lucide-react'
-import { gsap, ScrollTrigger, prefersReducedMotion } from '@/lib/gsap'
+import { gsap, prefersReducedMotion } from '@/lib/gsap'
 
 const icons = [UserPlus, CreditCard, Zap]
 
