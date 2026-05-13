@@ -13,8 +13,8 @@ interface TipCardProps {
 }
 
 const PLAN_BADGE_MAP = {
-  basic: 'basic' as const,
-  pro: 'pro' as const,
+  start: 'basic' as const,
+  smart: 'pro' as const,
   elite: 'elite' as const,
 }
 

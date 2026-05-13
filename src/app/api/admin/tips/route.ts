@@ -15,7 +15,7 @@ function getRawAdminClient() {
 const tipSchema = z.object({
   sport: z.string().min(1).max(100),
   category_id: z.string().uuid().nullable().optional(),
-  required_plan: z.enum(['basic', 'pro', 'elite']),
+  required_plan: z.enum(['start', 'smart', 'elite']),
   odds: z.number().min(1).max(1000).nullable().optional(),
   confidence: z.number().int().min(1).max(5).nullable().optional(),
   match_date: z.string().datetime().nullable().optional(),

@@ -51,7 +51,7 @@ export function BillingContent({ subscription, locale }: BillingContentProps) {
           <div className="space-y-3">
             <div className="flex justify-between items-center py-2 border-b border-border">
               <span className="text-sm text-muted-foreground">{t('plan')}</span>
-              <Badge variant={subscription.plan === 'elite' ? 'elite' : subscription.plan === 'pro' ? 'pro' : 'basic'}>
+              <Badge variant={subscription.plan === 'elite' ? 'elite' : subscription.plan === 'smart' ? 'pro' : 'basic'}>
                 {subscription.plan?.toUpperCase() ?? 'N/A'}
               </Badge>
             </div>

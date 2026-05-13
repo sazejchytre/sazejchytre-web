@@ -21,8 +21,8 @@ export const stripe = new Proxy({} as Stripe, {
 })
 
 export const PLAN_PRICE_MAP: Record<string, string> = {
-  basic: process.env.STRIPE_BASIC_PRICE_ID ?? '',
-  pro: process.env.STRIPE_PRO_PRICE_ID ?? '',
+  start: process.env.STRIPE_START_PRICE_ID ?? '',
+  smart: process.env.STRIPE_SMART_PRICE_ID ?? '',
   elite: process.env.STRIPE_ELITE_PRICE_ID ?? '',
 }
 

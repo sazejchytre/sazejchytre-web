@@ -26,7 +26,7 @@ export function TipForm({ tip, categories, actorId: _actorId }: TipFormProps) {
   const [form, setForm] = useState({
     sport: tip?.sport ?? '',
     category_id: tip?.category_id ?? '',
-    required_plan: tip?.required_plan ?? 'basic',
+    required_plan: tip?.required_plan ?? 'start',
     odds: tip?.odds?.toString() ?? '',
     confidence: tip?.confidence?.toString() ?? '3',
     match_date: tip?.match_date ? tip.match_date.slice(0, 16) : '',
@@ -139,14 +139,14 @@ export function TipForm({ tip, categories, actorId: _actorId }: TipFormProps) {
             <Label>Požadovaný plán *</Label>
             <Select
               value={form.required_plan}
-              onValueChange={(v) => setForm({ ...form, required_plan: v as 'basic' | 'pro' | 'elite' })}
+              onValueChange={(v) => setForm({ ...form, required_plan: v as 'start' | 'smart' | 'elite' })}
             >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="basic">BASIC</SelectItem>
-                <SelectItem value="pro">PRO</SelectItem>
+                <SelectItem value="start">START</SelectItem>
+                <SelectItem value="smart">SMART</SelectItem>
                 <SelectItem value="elite">ELITE</SelectItem>
               </SelectContent>
             </Select>

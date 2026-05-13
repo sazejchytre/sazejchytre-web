@@ -1,5 +1,5 @@
 export type UserRole = 'user' | 'admin' | 'super_admin'
-export type PlanType = 'basic' | 'pro' | 'elite'
+export type PlanType = 'start' | 'smart' | 'elite'
 export type SubscriptionStatus =
   | 'active'
   | 'trialing'
@@ -21,6 +21,7 @@ export interface Profile {
   avatar_url: string | null
   role: UserRole
   locale: LocaleType
+  free_tip_used: boolean
   created_at: string
   updated_at: string
 }
@@ -131,6 +132,7 @@ export type Database = {
           avatar_url?: string | null
           role?: UserRole
           locale?: LocaleType
+          free_tip_used?: boolean
           created_at?: string
           updated_at?: string
         }
@@ -140,6 +142,7 @@ export type Database = {
           avatar_url?: string | null
           role?: UserRole
           locale?: LocaleType
+          free_tip_used?: boolean
           updated_at?: string
         }
       }

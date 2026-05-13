@@ -26,42 +26,54 @@
   },
   "plans": {
     "title": "Choose Your Plan",
-    "subtitle": "Transparent pricing, no hidden fees. Every plan includes weekly access.",
-    "perWeek": "/ week",
-    "price": "1,499 CZK",
+    "subtitle": "Transparent pricing, no hidden fees.",
     "popular": "Most Popular",
     "cta": "Choose Plan",
-    "ctaLogin": "Login & Purchase",
-    "basic": {
-      "name": "BASIC",
-      "description": "For beginning bettors",
+    "ctaFree": "Register for Free",
+    "free": {
+      "name": "FREE",
+      "description": "Perfect for a taste",
       "features": [
-        "Basic weekly tips",
-        "Limited number of tips",
-        "Basic statistics",
-        "Email support"
+        "1 free tip after registration",
+        "Sample daily pick",
+        "Basic explanation why to play / not play"
       ]
     },
-    "pro": {
-      "name": "PRO",
-      "description": "For experienced bettors",
+    "start": {
+      "name": "START",
+      "description": "For people who want to start without big risk",
       "features": [
-        "Everything in BASIC",
-        "Advanced analysis",
-        "Tip history",
-        "Detailed statistics",
-        "Priority support"
+        "Daily top tip if it passes validation",
+        "NO_PLAY days when there's no value",
+        "Basic tip analysis",
+        "Access to result history",
+        "Basic source overview"
+      ]
+    },
+    "smart": {
+      "name": "SMART",
+      "description": "The main package we recommend most",
+      "features": [
+        "Everything in START",
+        "Detailed analysis of every recommendation",
+        "Bet Smart Score",
+        "Reason why to play / not play",
+        "Confidence and risk overview",
+        "Access to tipsters and their ROI",
+        "Odds limit where the tip makes sense"
       ]
     },
     "elite": {
       "name": "ELITE",
-      "description": "For professional bettors",
+      "description": "For people who want the maximum",
       "features": [
-        "Everything in PRO",
-        "VIP tips",
-        "Premium analysis",
-        "Exclusive content",
-        "Highest priority"
+        "Everything in SMART",
+        "Faster notifications",
+        "Detailed tipster tracking",
+        "Score breakdown",
+        "Advanced value / risk overview",
+        "Priority access to premium picks",
+        "Monthly performance summary"
       ]
     }
   },
@@ -148,7 +160,12 @@
     "lost": "Lost",
     "void": "Void",
     "pending": "Pending",
-    "noTips": "No tips yet"
+    "noTips": "No tips yet",
+    "freeTip": "Your 1 free tip",
+    "freeTipDesc": "As a new member you have 1 free tip. Upgrade for unlimited access.",
+    "freeTipBanner": "This is your free tip. Upgrade your plan to access all tips.",
+    "freeTipUsed": "Free tip has been shown",
+    "freeTipUsedDesc": "Choose a plan to access all tips"
   },
   "tips": {
     "confidence": "Confidence",

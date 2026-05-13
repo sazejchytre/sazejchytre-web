@@ -26,42 +26,54 @@
   },
   "plans": {
     "title": "Vyberte si plán",
-    "subtitle": "Transparentné ceny, žiadne skryté poplatky. Každý plán zahŕňa týždenný prístup.",
-    "perWeek": "/ týždeň",
-    "price": "1 499 Kč",
+    "subtitle": "Transparentné ceny, žiadne skryté poplatky.",
     "popular": "Najobľúbenejší",
     "cta": "Vybrať plán",
-    "ctaLogin": "Prihlásiť sa a kúpiť",
-    "basic": {
-      "name": "BASIC",
-      "description": "Pre začínajúcich stávkarov",
+    "ctaFree": "Registrovať sa zadarmo",
+    "free": {
+      "name": "FREE",
+      "description": "Ideálne na ochutnanie",
       "features": [
-        "Základné tipy každý týždeň",
-        "Obmedzený počet tipov",
-        "Základné štatistiky",
-        "Emailová podpora"
+        "1 tip zadarmo po registrácii",
+        "Ukážka denného výberu",
+        "Základné vysvetlenie prečo hrať / nehrať"
       ]
     },
-    "pro": {
-      "name": "PRO",
-      "description": "Pre skúsených stávkarov",
+    "start": {
+      "name": "START",
+      "description": "Pre ľudí, ktorí chcú začať bez veľkého rizika",
       "features": [
-        "Všetko z BASIC",
-        "Pokročilé analýzy",
-        "História tipov",
-        "Detailné štatistiky",
-        "Prioritná podpora"
+        "Denný top tip, ak prejde validáciou",
+        "NO_PLAY dni, keď nie je hodnota",
+        "Základná analýza tipu",
+        "Prístup do histórie výsledkov",
+        "Základný prehľad zdrojov"
+      ]
+    },
+    "smart": {
+      "name": "SMART",
+      "description": "Hlavný balík, ktorý odporúčame najviac",
+      "features": [
+        "Všetko zo START",
+        "Detailná analýza každého odporúčania",
+        "Sázej Chytře Score",
+        "Dôvod prečo tip hrať / nehrať",
+        "Prehľad confidence a rizika",
+        "Prístup k tipérom a ich ROI",
+        "Kurzová hranica, do ktorej má tip zmysel"
       ]
     },
     "elite": {
       "name": "ELITE",
-      "description": "Pre profesionálnych stávkarov",
+      "description": "Pre ľudí, ktorí chcú maximum",
       "features": [
-        "Všetko z PRO",
-        "VIP tipy",
-        "Prémiové analýzy",
-        "Exkluzívny obsah",
-        "Najvyššia priorita"
+        "Všetko zo SMART",
+        "Rýchlejšie notifikácie",
+        "Detailný tracking tipérov",
+        "Rozpad skóre",
+        "Pokročilý prehľad value / risk",
+        "Prioritný prístup k prémiovým výberom",
+        "Mesačný súhrn výkonu"
       ]
     }
   },
@@ -148,7 +160,12 @@
     "lost": "Prehry",
     "void": "Anulované",
     "pending": "Čaká",
-    "noTips": "Zatiaľ žiadne tipy"
+    "noTips": "Zatiaľ žiadne tipy",
+    "freeTip": "Váš 1 tip zadarmo",
+    "freeTipDesc": "Ako nový člen máte 1 tip zadarmo. Upgradujte pre neobmedzený prístup.",
+    "freeTipBanner": "Toto je váš bezplatný tip. Upgradujte plán pre prístup ku všetkým tipom.",
+    "freeTipUsed": "Bezplatný tip bol zobrazený",
+    "freeTipUsedDesc": "Vyberte si plán pre prístup ku všetkým tipom"
   },
   "tips": {
     "confidence": "Istota",

@@ -15,7 +15,7 @@ function getRawAdminClient() {
 const updateSchema = z.object({
   sport: z.string().min(1).max(100).optional(),
   category_id: z.string().uuid().nullable().optional(),
-  required_plan: z.enum(['basic', 'pro', 'elite']).optional(),
+  required_plan: z.enum(['start', 'smart', 'elite']).optional(),
   odds: z.number().min(1).max(1000).nullable().optional(),
   confidence: z.number().int().min(1).max(5).nullable().optional(),
   match_date: z.string().datetime().nullable().optional(),

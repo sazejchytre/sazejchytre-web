@@ -16,7 +16,7 @@ function getRawAdminClient() {
 }
 
 const checkoutSchema = z.object({
-  plan: z.enum(['basic', 'pro', 'elite']),
+  plan: z.enum(['start', 'smart', 'elite']),
   locale: z.enum(['cs', 'en', 'sk']).default('cs'),
 })
 

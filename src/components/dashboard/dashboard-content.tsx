@@ -15,6 +15,7 @@ import {
   XCircle,
   Clock,
   ArrowRight,
+  Gift,
 } from 'lucide-react'
 import type { Profile, Subscription, UserEntitlement, Tip, TipTranslation } from '@/types/database'
 import { canAccessPlan } from '@/types'
@@ -24,6 +25,7 @@ interface DashboardContentProps {
   subscription: Subscription | null
   entitlement: UserEntitlement | null
   tips: Array<Tip & { translations: TipTranslation[] }>
+  freeTip: (Tip & { translations: TipTranslation[] }) | null
   locale: string
 }
 
@@ -32,6 +34,7 @@ export function DashboardContent({
   subscription,
   entitlement,
   tips,
+  freeTip,
   locale,
 }: DashboardContentProps) {
   const t = useTranslations('dashboard')
@@ -40,10 +43,11 @@ export function DashboardContent({
   const activePlan = entitlement?.active ? entitlement.plan : null
   const isAdmin = profile.role === 'admin' || profile.role === 'super_admin'
 
-  const won = tips.filter((t) => t.result === 'won').length
-  const lost = tips.filter((t) => t.result === 'lost').length
-  const pending = tips.filter((t) => t.result === 'pending').length
-  const voidCount = tips.filter((t) => t.result === 'void').length
+  const allTips = freeTip ? [freeTip, ...tips] : tips
+  const won = allTips.filter((tip) => tip.result === 'won').length
+  const lost = allTips.filter((tip) => tip.result === 'lost').length
+  const pending = allTips.filter((tip) => tip.result === 'pending').length
+  const voidCount = allTips.filter((tip) => tip.result === 'void').length
 
   async function handleBillingPortal() {
     setBillingLoading(true)
@@ -60,9 +64,13 @@ export function DashboardContent({
     }
   }
 
+  const planBadgeVariant =
+    isAdmin ? 'elite' :
+    activePlan === 'elite' ? 'elite' :
+    activePlan === 'smart' ? 'pro' : 'basic'
+
   return (
     <div className="container py-10">
-      {/* Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold">
           {t('welcome')}, {profile.full_name?.split(' ')[0] ?? profile.email.split('@')[0]}
@@ -84,13 +92,7 @@ export function DashboardContent({
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">{t('plan')}</span>
-                  <Badge
-                    variant={
-                      isAdmin ? 'elite' :
-                      activePlan === 'elite' ? 'elite' :
-                      activePlan === 'pro' ? 'pro' : 'basic'
-                    }
-                  >
+                  <Badge variant={planBadgeVariant}>
                     {isAdmin ? 'ADMIN' : activePlan?.toUpperCase()}
                   </Badge>
                 </div>
@@ -121,6 +123,32 @@ export function DashboardContent({
                     {t('manageBilling')}
                   </Button>
                 )}
+              </div>
+            ) : freeTip ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-sm">
+                  <Gift className="h-4 w-4 text-primary" />
+                  <span className="font-medium">{t('freeTip')}</span>
+                </div>
+                <p className="text-xs text-muted-foreground">{t('freeTipDesc')}</p>
+                <Link href="/pricing">
+                  <Button size="sm" className="w-full mt-1">
+                    {t('choosePlan')}
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                </Link>
+              </div>
+            ) : profile.free_tip_used ? (
+              <div className="text-center py-4">
+                <Lock className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+                <p className="text-sm font-medium mb-1">{t('freeTipUsed')}</p>
+                <p className="text-xs text-muted-foreground mb-4">{t('freeTipUsedDesc')}</p>
+                <Link href="/pricing">
+                  <Button size="sm" className="w-full">
+                    {t('choosePlan')}
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                </Link>
               </div>
             ) : (
               <div className="text-center py-4">
@@ -176,14 +204,24 @@ export function DashboardContent({
         {/* Right Column - Tips */}
         <div className="lg:col-span-2">
           <h2 className="font-semibold text-lg mb-4">{t('latestTips')}</h2>
-          {tips.length === 0 ? (
+
+          {freeTip && (
+            <div className="mb-4 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 text-sm text-primary flex items-center gap-2">
+              <Gift className="h-4 w-4 shrink-0" />
+              {t('freeTipBanner')}
+            </div>
+          )}
+
+          {allTips.length === 0 ? (
             <div className="rounded-xl border border-border bg-card p-12 text-center text-muted-foreground">
-              {t('noTips')}
+              {profile.free_tip_used && !activePlan && !isAdmin
+                ? t('freeTipUsedDesc')
+                : t('noTips')}
             </div>
           ) : (
             <div className="space-y-4">
-              {tips.map((tip) => {
-                const hasAccess = isAdmin || canAccessPlan(activePlan, tip.required_plan)
+              {allTips.map((tip) => {
+                const hasAccess = isAdmin || canAccessPlan(activePlan, tip.required_plan) || tip.id === freeTip?.id
                 const translation =
                   tip.translations.find((tr) => tr.locale === locale) ??
                   tip.translations.find((tr) => tr.locale === 'cs') ??
@@ -199,6 +237,20 @@ export function DashboardContent({
                   />
                 )
               })}
+            </div>
+          )}
+
+          {profile.free_tip_used && !activePlan && !isAdmin && allTips.length > 0 && (
+            <div className="mt-6 rounded-xl border border-border bg-card p-6 text-center">
+              <Lock className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+              <p className="font-medium mb-1">{t('freeTipUsed')}</p>
+              <p className="text-sm text-muted-foreground mb-4">{t('freeTipUsedDesc')}</p>
+              <Link href="/pricing">
+                <Button>
+                  {t('choosePlan')}
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+              </Link>
             </div>
           )}
         </div>

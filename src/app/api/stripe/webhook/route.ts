@@ -159,7 +159,7 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription, db: 
 
   await db.from('user_entitlements').upsert({
     user_id: userId,
-    plan: 'basic',
+    plan: 'start',
     active: false,
     source: 'stripe',
     valid_until: new Date(periodEnd * 1000).toISOString(),

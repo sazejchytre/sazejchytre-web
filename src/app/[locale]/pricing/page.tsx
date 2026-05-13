@@ -3,7 +3,6 @@ import { getTranslations } from 'next-intl/server'
 import { Navbar } from '@/components/layout/navbar'
 import { Footer } from '@/components/layout/footer'
 import { PricingSection } from '@/components/marketing/pricing-section'
-import { CheckoutButtons } from '@/components/marketing/checkout-buttons'
 
 export async function generateMetadata({
   params,
@@ -27,7 +26,6 @@ export default async function PricingPage({ params }: { params: Promise<{ locale
           <p className="text-muted-foreground text-lg">Transparentní ceny, žádné skryté poplatky</p>
         </div>
         <PricingSection locale={locale} />
-        <CheckoutButtons locale={locale} />
       </main>
       <Footer />
     </>

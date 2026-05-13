@@ -6,8 +6,8 @@ export const LOCALES: Locale[] = ['cs', 'en', 'sk']
 export const DEFAULT_LOCALE: Locale = 'cs'
 
 export const PLAN_HIERARCHY: Record<string, number> = {
-  basic: 1,
-  pro: 2,
+  start: 1,
+  smart: 2,
   elite: 3,
 }
 
