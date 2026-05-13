@@ -21,10 +21,6 @@ export default async function PricingPage({ params }: { params: Promise<{ locale
     <>
       <Navbar locale={locale} />
       <main>
-        <div className="container py-16 text-center">
-          <h1 className="text-4xl font-bold mb-4">Ceník</h1>
-          <p className="text-muted-foreground text-lg">Transparentní ceny, žádné skryté poplatky</p>
-        </div>
         <PricingSection locale={locale} />
       </main>
       <Footer />

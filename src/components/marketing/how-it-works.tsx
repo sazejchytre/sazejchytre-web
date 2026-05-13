@@ -34,7 +34,7 @@ export function HowItWorksSection() {
           <div className="inline-flex items-center gap-2 rounded-full bg-primary/8 border border-primary/20 px-4 py-1.5 text-sm font-medium text-primary mb-4">
             Jak to funguje
           </div>
-          <h2 className="text-4xl font-black text-forest mb-4">{t('title')}</h2>
+          <h1 className="text-4xl font-black text-forest mb-4">{t('title')}</h1>
           <p className="text-lg text-muted-foreground">{t('subtitle')}</p>
         </div>
 

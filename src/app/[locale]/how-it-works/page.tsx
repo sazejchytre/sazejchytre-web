@@ -10,9 +10,6 @@ export default async function HowItWorksPage({ params }: { params: Promise<{ loc
     <>
       <Navbar locale={locale} />
       <main>
-        <div className="container py-16 text-center">
-          <h1 className="text-4xl font-bold mb-4">Jak to funguje</h1>
-        </div>
         <HowItWorksSection />
       </main>
       <Footer />

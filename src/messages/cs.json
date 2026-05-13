@@ -259,6 +259,31 @@
     "title": "Upozornění na rizika sázení",
     "text": "Sázení je riziková aktivita. Výsledky nejsou nikdy garantované. Sázejte pouze částky, které jste schopni ztratit."
   },
+  "about": {
+    "title": "O nás",
+    "subtitle": "SázejChytře je analytická platforma pro zodpovědné sázení. Naším cílem je poskytovat transparentní, datově podložené analýzy.",
+    "values": {
+      "data": {
+        "title": "Data-driven přístup",
+        "desc": "Každý tip je podložen hloubkovou analýzou statistik a historických dat."
+      },
+      "transparency": {
+        "title": "Transparentnost",
+        "desc": "Zveřejňujeme veškeré výsledky včetně proher. Žádné cherry-picking."
+      },
+      "responsible": {
+        "title": "Zodpovědné sázení",
+        "desc": "Aktivně propagujeme zodpovědné sázení a upozorňujeme na rizika."
+      }
+    },
+    "warning": "SázejChytře neposkytuje záruku výher. Sázení je riziková aktivita. Sázejte pouze částky, které jste ochotni ztratit. Pokud máte problémy s patologickým hráčstvím, kontaktujte prosím odbornou pomoc."
+  },
+  "contact": {
+    "title": "Kontakt",
+    "subtitle": "Máte dotazy nebo potřebujete pomoc? Neváhejte nás kontaktovat.",
+    "emailLabel": "Email",
+    "emailNote": "Odpovídáme zpravidla do 24 hodin v pracovní dny."
+  },
   "common": {
     "loading": "Načítání...",
     "error": "Nastala chyba",

@@ -259,6 +259,31 @@
     "title": "Betting Risk Warning",
     "text": "Betting is a risky activity. Results are never guaranteed. Only bet amounts you can afford to lose."
   },
+  "about": {
+    "title": "About Us",
+    "subtitle": "SázejChytře is an analytical platform for responsible betting. Our goal is to provide transparent, data-driven analyses.",
+    "values": {
+      "data": {
+        "title": "Data-driven approach",
+        "desc": "Every tip is backed by in-depth analysis of statistics and historical data."
+      },
+      "transparency": {
+        "title": "Transparency",
+        "desc": "We publish all results including losses. No cherry-picking."
+      },
+      "responsible": {
+        "title": "Responsible gambling",
+        "desc": "We actively promote responsible gambling and highlight the risks involved."
+      }
+    },
+    "warning": "SázejChytře does not guarantee winnings. Betting is a risky activity. Only bet amounts you are willing to lose. If you have a problem with gambling, please seek professional help."
+  },
+  "contact": {
+    "title": "Contact",
+    "subtitle": "Have questions or need help? Don't hesitate to reach out.",
+    "emailLabel": "Email",
+    "emailNote": "We typically respond within 24 hours on business days."
+  },
   "common": {
     "loading": "Loading...",
     "error": "An error occurred",

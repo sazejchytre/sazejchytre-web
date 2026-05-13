@@ -259,6 +259,31 @@
     "title": "Upozornenie na riziká stávkovania",
     "text": "Stávkovanie je riziková aktivita. Výsledky nie sú nikdy garantované. Stavkujte iba sumy, ktoré ste schopní stratiť."
   },
+  "about": {
+    "title": "O nás",
+    "subtitle": "SázejChytře je analytická platforma pre zodpovedné stávkovanie. Naším cieľom je poskytovať transparentné, dátami podložené analýzy.",
+    "values": {
+      "data": {
+        "title": "Data-driven prístup",
+        "desc": "Každý tip je podložený hĺbkovou analýzou štatistík a historických dát."
+      },
+      "transparency": {
+        "title": "Transparentnosť",
+        "desc": "Zverejňujeme všetky výsledky vrátane prehier. Žiadne cherry-picking."
+      },
+      "responsible": {
+        "title": "Zodpovedné stávkovanie",
+        "desc": "Aktívne propagujeme zodpovedné stávkovanie a upozorňujeme na riziká."
+      }
+    },
+    "warning": "SázejChytře neposkytuje záruku výhier. Stávkovanie je riziková aktivita. Stavkujte iba sumy, ktoré ste ochotní stratiť. Ak máte problémy s patologickým hráčstvom, kontaktujte odbornú pomoc."
+  },
+  "contact": {
+    "title": "Kontakt",
+    "subtitle": "Máte otázky alebo potrebujete pomoc? Neváhajte nás kontaktovať.",
+    "emailLabel": "Email",
+    "emailNote": "Zvyčajne odpovedáme do 24 hodín v pracovné dni."
+  },
   "common": {
     "loading": "Načítavanie...",
     "error": "Nastala chyba",
