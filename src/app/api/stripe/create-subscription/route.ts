@@ -19,6 +19,61 @@ const schema = z.object({
   locale: z.enum(['cs', 'en', 'sk']).default('cs'),
 })
 
+/**
+ * Extract client_secret from a Stripe Invoice.
+ *
+ * Tries three paths in order:
+ * 1. invoice.confirmation_secret.client_secret  — new dahlia API field
+ * 2. invoice.payment_intent.client_secret       — expanded PaymentIntent object
+ * 3. Re-fetch the invoice with payment_intent expanded — guaranteed fallback
+ */
+async function getClientSecretFromInvoice(
+  invoiceOrId: Stripe.Invoice | string
+): Promise<string | null> {
+  // Resolve to full invoice object
+  let invoice: Stripe.Invoice
+  if (typeof invoiceOrId === 'string') {
+    invoice = await stripe.invoices.retrieve(invoiceOrId, {
+      expand: ['payment_intent'],
+    })
+  } else {
+    invoice = invoiceOrId
+  }
+
+  // 1. New dahlia API field
+  const cs = invoice.confirmation_secret?.client_secret
+  if (cs) return cs
+
+  // 2. payment_intent already expanded inline
+  const piInline = (invoice as unknown as Record<string, unknown>).payment_intent
+  if (piInline && typeof piInline === 'object') {
+    const secret = (piInline as { client_secret?: string }).client_secret
+    if (secret) return secret
+  }
+
+  // 3. Re-fetch with payment_intent explicitly expanded
+  if (invoice.id) {
+    const fresh = await stripe.invoices.retrieve(invoice.id, {
+      expand: ['payment_intent'],
+    })
+    const cs2 = fresh.confirmation_secret?.client_secret
+    if (cs2) return cs2
+
+    const piFresh = (fresh as unknown as Record<string, unknown>).payment_intent
+    if (piFresh && typeof piFresh === 'object') {
+      const secret = (piFresh as { client_secret?: string }).client_secret
+      if (secret) return secret
+    }
+  }
+
+  console.error('[create-subscription] Could not extract clientSecret. Invoice:', {
+    id: invoice.id,
+    status: invoice.status,
+    confirmation_secret: invoice.confirmation_secret,
+  })
+  return null
+}
+
 export async function POST(request: NextRequest) {
   const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown'
   const rl = rateLimit(`create-sub:${ip}`, { maxRequests: 5, windowMs: 60_000 })
@@ -40,7 +95,10 @@ export async function POST(request: NextRequest) {
 
   const { plan } = parsed.data
   const priceId = PLAN_PRICE_MAP[plan]
-  if (!priceId) return NextResponse.json({ error: 'Plan not configured' }, { status: 500 })
+  if (!priceId) {
+    console.error(`[create-subscription] Price ID not configured for plan: ${plan}`)
+    return NextResponse.json({ error: 'Plan not configured — check Stripe price IDs in env vars' }, { status: 500 })
+  }
   if (!process.env.STRIPE_SECRET_KEY) {
     return NextResponse.json({ error: 'Payments not configured' }, { status: 503 })
   }
@@ -48,25 +106,24 @@ export async function POST(request: NextRequest) {
   try {
     const db = getRawAdminClient()
 
-    // Get or create Stripe customer
-    const { data: existingSub } = await db
+    const { data: existingSubData } = await db
       .from('subscriptions')
       .select('stripe_customer_id, stripe_subscription_id, status')
       .eq('user_id', user.id)
       .single()
 
-    const existing = existingSub as {
+    const existingSub = existingSubData as {
       stripe_customer_id: string | null
       stripe_subscription_id: string | null
       status: string | null
     } | null
 
-    // Block if already has active subscription
-    if (existing?.status === 'active' || existing?.status === 'trialing') {
+    if (existingSub?.status === 'active' || existingSub?.status === 'trialing') {
       return NextResponse.json({ error: 'Already subscribed' }, { status: 409 })
     }
 
-    let customerId = existing?.stripe_customer_id ?? null
+    // Get or create Stripe customer
+    let customerId = existingSub?.stripe_customer_id ?? null
 
     if (!customerId) {
       const customer = await stripe.customers.create({
@@ -81,7 +138,7 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Reuse existing incomplete subscription for same price, cancel others
+    // Reuse existing incomplete subscription for same price; cancel others
     const incompleteSubs = await stripe.subscriptions.list({
       customer: customerId,
       status: 'incomplete',
@@ -90,15 +147,19 @@ export async function POST(request: NextRequest) {
     })
 
     for (const sub of incompleteSubs.data) {
-      const invoice = sub.latest_invoice as Stripe.Invoice | null
       const matchesPrice = sub.items.data[0]?.price.id === priceId
-      if (matchesPrice && invoice?.confirmation_secret?.client_secret) {
-        return NextResponse.json({
-          clientSecret: invoice.confirmation_secret.client_secret,
-          subscriptionId: sub.id,
-        })
+      if (matchesPrice) {
+        const invoiceRaw = sub.latest_invoice
+        if (invoiceRaw) {
+          const clientSecret = await getClientSecretFromInvoice(
+            invoiceRaw as Stripe.Invoice | string
+          )
+          if (clientSecret) {
+            return NextResponse.json({ clientSecret, subscriptionId: sub.id })
+          }
+        }
       }
-      // Different plan — cancel it
+      // Different plan — cancel it so we can create a fresh one
       await stripe.subscriptions.cancel(sub.id)
     }
 
@@ -112,8 +173,15 @@ export async function POST(request: NextRequest) {
       metadata: { user_id: user.id, plan },
     })
 
-    const invoice = subscription.latest_invoice as Stripe.Invoice | null
-    const clientSecret = invoice?.confirmation_secret?.client_secret
+    const invoiceRaw = subscription.latest_invoice
+    if (!invoiceRaw) {
+      console.error('[create-subscription] No latest_invoice on subscription', subscription.id)
+      return NextResponse.json({ error: 'No invoice created' }, { status: 500 })
+    }
+
+    const clientSecret = await getClientSecretFromInvoice(
+      invoiceRaw as Stripe.Invoice | string
+    )
 
     if (!clientSecret) {
       return NextResponse.json({ error: 'Failed to get payment secret' }, { status: 500 })
@@ -121,7 +189,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ clientSecret, subscriptionId: subscription.id })
   } catch (err) {
-    console.error('Create subscription error:', err)
+    console.error('[create-subscription] Unexpected error:', err)
     return NextResponse.json({ error: 'Failed to create subscription' }, { status: 500 })
   }
 }

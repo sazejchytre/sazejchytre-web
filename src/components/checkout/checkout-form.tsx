@@ -14,9 +14,12 @@ import { Button } from '@/components/ui/button'
 import { AlertTriangle, Lock } from 'lucide-react'
 import type { StripeElementsOptions } from '@stripe/stripe-js'
 
-const stripePromise: Promise<StripeType | null> = loadStripe(
-  process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!
-)
+const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+
+// Intentionally lazy — if key is missing at runtime we surface it below, not as an unhandled crash
+const stripePromise: Promise<StripeType | null> = publishableKey
+  ? loadStripe(publishableKey)
+  : Promise.resolve(null)
 
 const appearance: StripeElementsOptions['appearance'] = {
   theme: 'stripe',
@@ -149,6 +152,11 @@ export function CheckoutForm({ plan, locale }: CheckoutFormProps) {
   const [alreadySubscribed, setAlreadySubscribed] = useState(false)
 
   useEffect(() => {
+    if (!publishableKey) {
+      setError(t('errors.stripe'))
+      return
+    }
+
     async function init() {
       try {
         const res = await fetch('/api/stripe/create-subscription', {
