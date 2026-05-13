@@ -20,56 +20,53 @@ const schema = z.object({
 })
 
 /**
- * Extract client_secret from a Stripe Invoice.
+ * Extract the Stripe PaymentIntent client_secret from an invoice.
  *
- * Tries three paths in order:
- * 1. invoice.confirmation_secret.client_secret  — new dahlia API field
- * 2. invoice.payment_intent.client_secret       — expanded PaymentIntent object
- * 3. Re-fetch the invoice with payment_intent expanded — guaranteed fallback
+ * The 2026-04-22.dahlia API removed invoice.payment_intent as a top-level
+ * field. client_secret now lives at two places (tried in order):
+ *
+ *  1. invoice.confirmation_secret.client_secret  — set after finalization
+ *  2. invoice.payments.data[0].payment.payment_intent.client_secret
+ *     — via the new InvoicePayment sub-resource
+ *
+ * If the invoice is still in draft state we finalize it first.
  */
-async function getClientSecretFromInvoice(
-  invoiceOrId: Stripe.Invoice | string
-): Promise<string | null> {
-  // Resolve to full invoice object
-  let invoice: Stripe.Invoice
-  if (typeof invoiceOrId === 'string') {
-    invoice = await stripe.invoices.retrieve(invoiceOrId, {
-      expand: ['payment_intent'],
+async function resolveClientSecret(invoiceId: string): Promise<string | null> {
+  // Fetch with both expansion paths at once
+  let invoice = await stripe.invoices.retrieve(invoiceId, {
+    expand: ['payments.data.payment.payment_intent'],
+  })
+
+  // Ensure invoice is finalized — confirmation_secret is only set on open invoices
+  if (invoice.status === 'draft') {
+    await stripe.invoices.finalizeInvoice(invoiceId)
+    invoice = await stripe.invoices.retrieve(invoiceId, {
+      expand: ['payments.data.payment.payment_intent'],
     })
-  } else {
-    invoice = invoiceOrId
   }
 
-  // 1. New dahlia API field
+  // 1. New API field (post-finalization)
   const cs = invoice.confirmation_secret?.client_secret
   if (cs) return cs
 
-  // 2. payment_intent already expanded inline
-  const piInline = (invoice as unknown as Record<string, unknown>).payment_intent
-  if (piInline && typeof piInline === 'object') {
-    const secret = (piInline as { client_secret?: string }).client_secret
-    if (secret) return secret
-  }
-
-  // 3. Re-fetch with payment_intent explicitly expanded
-  if (invoice.id) {
-    const fresh = await stripe.invoices.retrieve(invoice.id, {
-      expand: ['payment_intent'],
-    })
-    const cs2 = fresh.confirmation_secret?.client_secret
-    if (cs2) return cs2
-
-    const piFresh = (fresh as unknown as Record<string, unknown>).payment_intent
-    if (piFresh && typeof piFresh === 'object') {
-      const secret = (piFresh as { client_secret?: string }).client_secret
+  // 2. payments.data[0].payment.payment_intent.client_secret (dahlia API)
+  const payments = invoice.payments?.data ?? []
+  for (const invoicePayment of payments) {
+    const rawPayment = invoicePayment as unknown as {
+      payment?: { payment_intent?: string | Stripe.PaymentIntent }
+    }
+    const pi = rawPayment.payment?.payment_intent
+    if (pi && typeof pi === 'object' && 'client_secret' in pi) {
+      const secret = (pi as Stripe.PaymentIntent).client_secret
       if (secret) return secret
     }
   }
 
-  console.error('[create-subscription] Could not extract clientSecret. Invoice:', {
-    id: invoice.id,
+  console.error('[create-subscription] Cannot extract clientSecret', {
+    invoiceId,
     status: invoice.status,
     confirmation_secret: invoice.confirmation_secret,
+    paymentsCount: invoice.payments?.data?.length ?? 0,
   })
   return null
 }
@@ -97,7 +94,10 @@ export async function POST(request: NextRequest) {
   const priceId = PLAN_PRICE_MAP[plan]
   if (!priceId) {
     console.error(`[create-subscription] Price ID not configured for plan: ${plan}`)
-    return NextResponse.json({ error: 'Plan not configured — check Stripe price IDs in env vars' }, { status: 500 })
+    return NextResponse.json(
+      { error: 'Plan not configured — check Stripe price IDs in Vercel env vars' },
+      { status: 500 }
+    )
   }
   if (!process.env.STRIPE_SECRET_KEY) {
     return NextResponse.json({ error: 'Payments not configured' }, { status: 503 })
@@ -108,13 +108,12 @@ export async function POST(request: NextRequest) {
 
     const { data: existingSubData } = await db
       .from('subscriptions')
-      .select('stripe_customer_id, stripe_subscription_id, status')
+      .select('stripe_customer_id, status')
       .eq('user_id', user.id)
       .single()
 
     const existingSub = existingSubData as {
       stripe_customer_id: string | null
-      stripe_subscription_id: string | null
       status: string | null
     } | null
 
@@ -143,23 +142,21 @@ export async function POST(request: NextRequest) {
       customer: customerId,
       status: 'incomplete',
       limit: 5,
-      expand: ['data.latest_invoice'],
     })
 
     for (const sub of incompleteSubs.data) {
       const matchesPrice = sub.items.data[0]?.price.id === priceId
-      if (matchesPrice) {
-        const invoiceRaw = sub.latest_invoice
-        if (invoiceRaw) {
-          const clientSecret = await getClientSecretFromInvoice(
-            invoiceRaw as Stripe.Invoice | string
-          )
-          if (clientSecret) {
-            return NextResponse.json({ clientSecret, subscriptionId: sub.id })
-          }
+      const invoiceId = typeof sub.latest_invoice === 'string'
+        ? sub.latest_invoice
+        : sub.latest_invoice?.id
+
+      if (matchesPrice && invoiceId) {
+        const clientSecret = await resolveClientSecret(invoiceId)
+        if (clientSecret) {
+          return NextResponse.json({ clientSecret, subscriptionId: sub.id })
         }
       }
-      // Different plan — cancel it so we can create a fresh one
+      // Different plan or can't reuse — cancel so we can create fresh
       await stripe.subscriptions.cancel(sub.id)
     }
 
@@ -169,19 +166,19 @@ export async function POST(request: NextRequest) {
       items: [{ price: priceId }],
       payment_behavior: 'default_incomplete',
       payment_settings: { save_default_payment_method: 'on_subscription' },
-      expand: ['latest_invoice'],
       metadata: { user_id: user.id, plan },
     })
 
-    const invoiceRaw = subscription.latest_invoice
-    if (!invoiceRaw) {
-      console.error('[create-subscription] No latest_invoice on subscription', subscription.id)
+    const invoiceId = typeof subscription.latest_invoice === 'string'
+      ? subscription.latest_invoice
+      : subscription.latest_invoice?.id
+
+    if (!invoiceId) {
+      console.error('[create-subscription] No invoice on subscription', subscription.id)
       return NextResponse.json({ error: 'No invoice created' }, { status: 500 })
     }
 
-    const clientSecret = await getClientSecretFromInvoice(
-      invoiceRaw as Stripe.Invoice | string
-    )
+    const clientSecret = await resolveClientSecret(invoiceId)
 
     if (!clientSecret) {
       return NextResponse.json({ error: 'Failed to get payment secret' }, { status: 500 })
