@@ -57,12 +57,12 @@ export default async function TermsPage({ params }: { params: Promise<{ locale: 
               </li>
             </ul>
             <p className="mt-3">
-              (dále jen <strong>„Provozovatel"</strong>)
+              (dále jen <strong>&bdquo;Provozovatel&ldquo;</strong>)
             </p>
             <p className="mt-3">
-              Tyto obchodní podmínky (dále jen <strong>„OP"</strong>) upravují práva a povinnosti
+              Tyto obchodní podmínky (dále jen <strong>&bdquo;OP&ldquo;</strong>) upravují práva a povinnosti
               mezi Provozovatelem a fyzickými osobami využívajícími platformu SázejChytře (dále jen{' '}
-              <strong>„Uživatel"</strong>). Právní vztah se řídí právním řádem České republiky,
+              <strong>&bdquo;Uživatel&ldquo;</strong>). Právní vztah se řídí právním řádem České republiky,
               zejména zákonem č. 89/2012 Sb., občanský zákoník, ve znění pozdějších předpisů.
             </p>
           </section>
@@ -72,7 +72,7 @@ export default async function TermsPage({ params }: { params: Promise<{ locale: 
             <h2 className="text-lg font-semibold text-foreground mb-3">2. Předmět smlouvy</h2>
             <p>
               Platforma SázejChytře poskytuje statistické analýzy, doporučení a tipy v oblasti
-              sportovního sázení (dále jen <strong>„Tipy"</strong>). Veškerý obsah platformy má
+              sportovního sázení (dále jen <strong>&bdquo;Tipy&ldquo;</strong>). Veškerý obsah platformy má
               výhradně{' '}
               <strong>poradní a informační charakter</strong> a nepředstavuje nabídku ani zprostředkování
               sázkových příležitostí, hazardní hru ve smyslu zákona č. 186/2016 Sb., o hazardních

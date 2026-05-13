@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { Navbar } from '@/components/layout/navbar'
 import { Footer } from '@/components/layout/footer'
 import { LegalPage } from '@/components/layout/legal-page'
@@ -44,9 +45,9 @@ export default async function CookiesPage({ params }: { params: Promise<{ locale
               Cookies samy o sobě neobsahují žádné osobní identifikátory (jako je jméno nebo
               e-mail), nicméně mohou být v kombinaci s dalšími informacemi použity k identifikaci
               osoby. Podrobnosti o zpracování osobních údajů naleznete v našich{' '}
-              <a href="/cs/privacy" className="underline">
+              <Link href={`/${locale}/privacy`} className="underline">
                 Zásadách ochrany osobních údajů
-              </a>
+              </Link>
               .
             </p>
           </section>

@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { Navbar } from '@/components/layout/navbar'
 import { Footer } from '@/components/layout/footer'
 import { LegalPage } from '@/components/layout/legal-page'
@@ -37,7 +38,7 @@ export default async function PrivacyPage({ params }: { params: Promise<{ locale
             </h2>
             <p>
               Správcem osobních údajů ve smyslu čl. 4 odst. 7 nařízení Evropského parlamentu a
-              Rady (EU) 2016/679 (dále jen <strong>„GDPR"</strong>) je:
+              Rady (EU) 2016/679 (dále jen <strong>&bdquo;GDPR&ldquo;</strong>) je:
             </p>
             <ul className="mt-3 space-y-1 list-none pl-0">
               <li>
@@ -57,7 +58,7 @@ export default async function PrivacyPage({ params }: { params: Promise<{ locale
               </li>
             </ul>
             <p className="mt-3">
-              (dále jen <strong>„Správce"</strong>)
+              (dále jen <strong>&bdquo;Správce&ldquo;</strong>)
             </p>
           </section>
 
@@ -91,9 +92,9 @@ export default async function PrivacyPage({ params }: { params: Promise<{ locale
               </li>
               <li>
                 <strong>Cookies a obdobné technologie:</strong> viz samostatné{' '}
-                <a href="/cs/cookies" className="underline">
+                <Link href={`/${locale}/cookies`} className="underline">
                   Zásady cookies
-                </a>
+                </Link>
                 .
               </li>
             </ul>
@@ -253,7 +254,7 @@ export default async function PrivacyPage({ params }: { params: Promise<{ locale
                 doplnění neúplných osobních údajů.
               </li>
               <li>
-                <strong>Právo na výmaz – „právo být zapomenut" (čl. 17):</strong> požadovat
+                <strong>Právo na výmaz &ndash; &bdquo;právo být zapomenut&ldquo; (čl. 17):</strong> požadovat
                 smazání osobních údajů, splňuje-li žádost zákonné podmínky.
               </li>
               <li>
