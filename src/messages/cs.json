@@ -259,6 +259,22 @@
     "title": "Upozornění na rizika sázení",
     "text": "Sázení je riziková aktivita. Výsledky nejsou nikdy garantované. Sázejte pouze částky, které jste schopni ztratit."
   },
+  "checkout": {
+    "title": "Dokončit objednávku",
+    "orderSummary": "Souhrn objednávky",
+    "perMonth": "/ měsíc",
+    "pay": "Zaplatit",
+    "processing": "Zpracování...",
+    "secure": "Platba zabezpečena přes Stripe",
+    "cancelAnytime": "Zrušit předplatné lze kdykoliv",
+    "loadingPayment": "Připravuji platební formulář...",
+    "alreadySubscribed": "Již máte aktivní předplatné. Správu předplatného najdete v dashboardu.",
+    "goToDashboard": "Přejít do dashboardu",
+    "errors": {
+      "generic": "Platba selhala. Zkuste to prosím znovu.",
+      "stripe": "Stripe se nepodařilo načíst. Zkontrolujte připojení."
+    }
+  },
   "about": {
     "title": "O nás",
     "subtitle": "SázejChytře je analytická platforma pro zodpovědné sázení. Naším cílem je poskytovat transparentní, datově podložené analýzy.",

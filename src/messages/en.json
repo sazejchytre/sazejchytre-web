@@ -259,6 +259,22 @@
     "title": "Betting Risk Warning",
     "text": "Betting is a risky activity. Results are never guaranteed. Only bet amounts you can afford to lose."
   },
+  "checkout": {
+    "title": "Complete Your Order",
+    "orderSummary": "Order Summary",
+    "perMonth": "/ month",
+    "pay": "Pay Now",
+    "processing": "Processing...",
+    "secure": "Payment secured by Stripe",
+    "cancelAnytime": "Cancel your subscription anytime",
+    "loadingPayment": "Preparing payment form...",
+    "alreadySubscribed": "You already have an active subscription. Manage it in your dashboard.",
+    "goToDashboard": "Go to Dashboard",
+    "errors": {
+      "generic": "Payment failed. Please try again.",
+      "stripe": "Failed to load Stripe. Check your connection."
+    }
+  },
   "about": {
     "title": "About Us",
     "subtitle": "SázejChytře is an analytical platform for responsible betting. Our goal is to provide transparent, data-driven analyses.",

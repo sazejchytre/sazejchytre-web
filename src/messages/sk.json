@@ -259,6 +259,22 @@
     "title": "Upozornenie na riziká stávkovania",
     "text": "Stávkovanie je riziková aktivita. Výsledky nie sú nikdy garantované. Stavkujte iba sumy, ktoré ste schopní stratiť."
   },
+  "checkout": {
+    "title": "Dokončiť objednávku",
+    "orderSummary": "Súhrn objednávky",
+    "perMonth": "/ mesiac",
+    "pay": "Zaplatiť",
+    "processing": "Spracovanie...",
+    "secure": "Platba zabezpečená cez Stripe",
+    "cancelAnytime": "Predplatné môžete zrušiť kedykoľvek",
+    "loadingPayment": "Pripravujem platobný formulár...",
+    "alreadySubscribed": "Už máte aktívne predplatné. Správu nájdete v dashboarde.",
+    "goToDashboard": "Prejsť na dashboard",
+    "errors": {
+      "generic": "Platba zlyhala. Skúste to prosím znovu.",
+      "stripe": "Stripe sa nepodarilo načítať. Skontrolujte pripojenie."
+    }
+  },
   "about": {
     "title": "O nás",
     "subtitle": "SázejChytře je analytická platforma pre zodpovedné stávkovanie. Naším cieľom je poskytovať transparentné, dátami podložené analýzy.",

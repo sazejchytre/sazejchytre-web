@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { useTranslations } from 'next-intl'
 import { useRouter } from 'next/navigation'
 import { Link } from '@/i18n/navigation'
@@ -30,7 +30,6 @@ const PLAN_BADGE: Record<string, { bg: string; text: string }> = {
 export function PricingSection({ locale }: PricingSectionProps) {
   const t = useTranslations('plans')
   const router = useRouter()
-  const [loading, setLoading] = useState<string | null>(null)
   const sectionRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
@@ -48,25 +47,8 @@ export function PricingSection({ locale }: PricingSectionProps) {
     return () => ctx.revert()
   }, [])
 
-  async function handleCheckout(plan: string) {
-    setLoading(plan)
-    try {
-      const response = await fetch('/api/stripe/checkout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plan, locale }),
-      })
-
-      if (response.status === 401) {
-        router.push(`/${locale}/prihlaseni?redirect=/${locale}/pricing`)
-        return
-      }
-
-      const data = await response.json()
-      if (data.url) window.location.href = data.url
-    } finally {
-      setLoading(null)
-    }
+  function handleCheckout(plan: string) {
+    router.push(`/${locale}/checkout?plan=${plan}`)
   }
 
   const plans = ['free', 'start', 'smart', 'elite'] as const
@@ -79,7 +61,7 @@ export function PricingSection({ locale }: PricingSectionProps) {
             <Zap className="h-3.5 w-3.5" />
             Transparentní ceny
           </div>
-          <h2 className="text-4xl font-black text-forest mb-4">{t('title')}</h2>
+          <h1 className="text-4xl font-black text-forest mb-4">{t('title')}</h1>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">{t('subtitle')}</p>
         </div>
 
@@ -154,7 +136,6 @@ export function PricingSection({ locale }: PricingSectionProps) {
                       className="w-full"
                       variant={isSmart ? 'cta' : plan === 'elite' ? 'default' : 'outline'}
                       size="lg"
-                      loading={loading === plan}
                       onClick={() => handleCheckout(plan)}
                     >
                       {t('cta')}
