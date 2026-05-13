@@ -15,6 +15,7 @@ interface AdminTipsListProps {
 export function AdminTipsList({ tips, actorId: _actorId }: AdminTipsListProps) {
   const [localTips, setLocalTips] = useState(tips)
   const [loading, setLoading] = useState<string | null>(null)
+  const [resultLoading, setResultLoading] = useState<string | null>(null)
 
   async function handleDelete(id: string) {
     if (!confirm('Opravdu smazat tento tip?')) return
@@ -26,6 +27,26 @@ export function AdminTipsList({ tips, actorId: _actorId }: AdminTipsListProps) {
       }
     } finally {
       setLoading(null)
+    }
+  }
+
+  async function handleResultChange(id: string, result: string) {
+    setResultLoading(id)
+    try {
+      const response = await fetch(`/api/admin/tips/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ result }),
+      })
+      if (response.ok) {
+        setLocalTips((prev) =>
+          prev.map((t) =>
+            t.id === id ? { ...t, result: result as Tip['result'] } : t
+          )
+        )
+      }
+    } finally {
+      setResultLoading(null)
     }
   }
 
@@ -94,16 +115,30 @@ export function AdminTipsList({ tips, actorId: _actorId }: AdminTipsListProps) {
                     </Badge>
                   </td>
                   <td className="px-4 py-3">
-                    <Badge
-                      variant={
-                        tip.result === 'won' ? 'won' :
-                        tip.result === 'lost' ? 'lost' :
-                        tip.result === 'void' ? 'void' :
-                        'pending'
-                      }
-                    >
-                      {tip.result}
-                    </Badge>
+                    <div className="flex items-center gap-1">
+                      <Badge
+                        variant={
+                          tip.result === 'won' ? 'won' :
+                          tip.result === 'lost' ? 'lost' :
+                          tip.result === 'void' ? 'void' :
+                          'pending'
+                        }
+                      >
+                        {tip.result}
+                      </Badge>
+                      <select
+                        className="text-xs rounded border border-border bg-background px-2 py-1 ml-1"
+                        value={tip.result}
+                        disabled={resultLoading === tip.id}
+                        onChange={(e) => handleResultChange(tip.id, e.target.value)}
+                        aria-label="Změnit výsledek"
+                      >
+                        <option value="pending">pending</option>
+                        <option value="won">won</option>
+                        <option value="lost">lost</option>
+                        <option value="void">void</option>
+                      </select>
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-muted-foreground text-xs">
                     {tip.match_date ? new Date(tip.match_date).toLocaleDateString('cs-CZ') : '—'}

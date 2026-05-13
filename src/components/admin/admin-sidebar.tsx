@@ -2,7 +2,7 @@
 
 import NextLink from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { TrendingUp, FileText, Tag, Users, LayoutDashboard, LogOut } from 'lucide-react'
+import { TrendingUp, FileText, Tag, Users, LayoutDashboard, LogOut, CreditCard, ScrollText } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 import { createClient } from '@/lib/supabase/client'
 
@@ -19,6 +19,8 @@ export function AdminSidebar({ locale }: AdminSidebarProps) {
     { href: '/admin/tips', label: 'Tipy', icon: FileText, exact: false },
     { href: '/admin/categories', label: 'Kategorie', icon: Tag, exact: false },
     { href: '/admin/users', label: 'Uživatelé', icon: Users, exact: false },
+    { href: '/admin/subscriptions', label: 'Předplatná', icon: CreditCard, exact: false },
+    { href: '/admin/audit', label: 'Audit Log', icon: ScrollText, exact: false },
   ]
 
   async function handleLogout() {
