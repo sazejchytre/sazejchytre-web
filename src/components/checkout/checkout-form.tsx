@@ -135,6 +135,10 @@ function PaymentForm({ locale }: PaymentFormProps) {
       <p className="text-center text-xs text-muted-foreground/60">
         {t('secure')} · {t('cancelAnytime')}
       </p>
+
+      <p className="text-center text-xs text-muted-foreground/40 leading-relaxed">
+        {t('analyticsNote')}
+      </p>
     </form>
   )
 }

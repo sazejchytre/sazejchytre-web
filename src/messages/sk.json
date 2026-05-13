@@ -12,15 +12,15 @@
     "logout": "Odhlásiť sa"
   },
   "hero": {
-    "badge": "Analytická platforma pre stávkovanie",
-    "title": "Stavte s dátami,\nnie s náhodou",
-    "subtitle": "Prémiové stávkové analýzy od expertov. Týždenné tipy, štatistiky a exkluzívne prehľady pre vážnych stávkarov.",
+    "badge": "Platforma športovej dátovej analytiky",
+    "title": "Rozhodujte s dátami,\nnie s náhodou",
+    "subtitle": "Prémiové športové analýzy na základe štatistík a historických dát. Pravdepodobnostné modely a analytické prehľady pre zodpovedných stávkarov.",
     "cta": "Začať zadarmo",
     "ctaSecondary": "Zobraziť ukážku",
-    "disclaimer": "Stávkovanie je riziková aktivita. Výsledky nie sú garantované.",
+    "disclaimer": "Všetok obsah má výhradne informačný a analytický charakter. Prevádzkovateľ nezaručuje výhru ani zisk.",
     "stats": {
-      "accuracy": "Presnosť",
-      "tips": "Aktívnych tipov",
+      "accuracy": "Úspešnosť modelu",
+      "tips": "Aktívnych analýz",
       "members": "Členov platformy"
     }
   },
@@ -34,52 +34,52 @@
       "name": "FREE",
       "description": "Ideálne na ochutnanie",
       "features": [
-        "1 tip zadarmo po registrácii",
-        "Ukážka denného výberu",
-        "Základné vysvetlenie prečo hrať / nehrať"
+        "1 analytický výber zadarmo po registrácii",
+        "Ukážka denného prehľadu",
+        "Základné hodnotenie potenciálu a rizík"
       ]
     },
     "start": {
       "name": "START",
       "description": "Pre ľudí, ktorí chcú začať bez veľkého rizika",
       "features": [
-        "Denný top tip, ak prejde validáciou",
-        "NO_PLAY dni, keď nie je hodnota",
-        "Základná analýza tipu",
-        "Prístup do histórie výsledkov",
-        "Základný prehľad zdrojov"
+        "Denný top výber, ak prejde validáciou modelu",
+        "NO_PLAY dni, keď dáta neukazujú hodnotu",
+        "Základná dátová analýza výberu",
+        "Prístup do histórie výsledkov modelu",
+        "Základný prehľad dátových zdrojov"
       ]
     },
     "smart": {
       "name": "SMART",
-      "description": "Hlavný balík, ktorý odporúčame najviac",
+      "description": "Hlavný balík pre dátovo orientovaných stávkarov",
       "features": [
         "Všetko zo START",
-        "Detailná analýza každého odporúčania",
+        "Detailná dátová analýza každého výberu",
         "Sázej Chytře Score",
-        "Dôvod prečo tip hrať / nehrať",
-        "Prehľad confidence a rizika",
-        "Prístup k tipérom a ich ROI",
-        "Kurzová hranica, do ktorej má tip zmysel"
+        "Hodnotenie modelu: potenciál vs. riziko",
+        "Prehľad confidence skóre a rizikového profilu",
+        "Prístup k analytikom a histórii ich modelu",
+        "Kurzová hranica, pri ktorej analýza stráca zmysel"
       ]
     },
     "elite": {
       "name": "ELITE",
-      "description": "Pre ľudí, ktorí chcú maximum",
+      "description": "Pre ľudí, ktorí chcú maximálny analytický výkon",
       "features": [
         "Všetko zo SMART",
-        "Rýchlejšie notifikácie",
-        "Detailný tracking tipérov",
-        "Rozpad skóre",
-        "Pokročilý prehľad value / risk",
-        "Prioritný prístup k prémiovým výberom",
-        "Mesačný súhrn výkonu"
+        "Rýchlejšie notifikácie nových analýz",
+        "Detailný tracking analytických modelov",
+        "Rozpad skóre jednotlivých faktorov",
+        "Pokročilý prehľad value / risk analýzy",
+        "Prioritný prístup k prémiovým analytickým výberom",
+        "Mesačný súhrn výkonnosti modelu"
       ]
     }
   },
   "howItWorks": {
     "title": "Ako to funguje",
-    "subtitle": "Tri jednoduché kroky k lepšiemu stávkovaniu",
+    "subtitle": "Tri jednoduché kroky k dátovo podloženej analýze",
     "steps": [
       {
         "title": "Zaregistrujte sa",
@@ -90,8 +90,8 @@
         "description": "Zvoľte balík zodpovedajúci vašim potrebám a zaplaťte bezpečne cez Stripe."
       },
       {
-        "title": "Stavte chytro",
-        "description": "Pristupujte k prémiovým analýzam a tipom od našich expertov."
+        "title": "Analyzujte dáta",
+        "description": "Pristupujte k dátovým prehľadom a štatistickým analýzam. Rozhodnutie je vždy na vás."
       }
     ]
   },
@@ -99,8 +99,8 @@
     "title": "Časté otázky",
     "items": [
       {
-        "question": "Sú tipy zárukou výhry?",
-        "answer": "Nie. Stávkovanie je riziková aktivita a žiadna platforma nemôže garantovať výhry. Naše analýzy sú podložené dátami, ale výsledky sa môžu líšiť."
+        "question": "Je obsah platformy zárukou výhry?",
+        "answer": "Nie. Všetok obsah má výhradne informačný a analytický charakter. Stávkovanie je riziková aktivita a žiadna analýza nemôže garantovať výhry. Naše modely sú podložené dátami, ale výsledky sa môžu líšiť."
       },
       {
         "question": "Môžem kedykoľvek zrušiť predplatné?",
@@ -115,8 +115,8 @@
         "answer": "Áno, upgrade je možný kedykoľvek cez váš dashboard."
       },
       {
-        "question": "Čo sú VIP tipy?",
-        "answer": "VIP tipy sú exkluzívne analýzy dostupné iba pre ELITE členov. Ide o naše najlepšie vybrané príležitosti s najpodrobnejšou analýzou."
+        "question": "Čo sú prémiové analytické výbery?",
+        "answer": "Prémiové výbery sú exkluzívne dátové analýzy dostupné iba pre ELITE členov. Obsahujú najpodrobnejšie štatistické hodnotenie a rozpad všetkých faktorov modelu."
       }
     ]
   },
@@ -125,18 +125,18 @@
     "items": [
       {
         "name": "Tomáš K.",
-        "plan": "PRO člen",
-        "text": "Vďaka SázejChytře som začal pristupovať k stávkovaniu systematicky. Analýzy sú zrozumiteľné a tipy dobre podložené."
+        "plan": "SMART člen",
+        "text": "Vďaka SázejChytře som začal pristupovať k stávkovaniu systematicky. Dáta sú zrozumiteľné a analýzy dobre podložené štatistikami."
       },
       {
         "name": "Martin V.",
         "plan": "ELITE člen",
-        "text": "VIP tipy sú skutočne exkluzívne. Hodnota, ktorú dostávam za predplatné, mnohonásobne prevyšuje cenu."
+        "text": "Prémiové analýzy sú skutočne detailné. Oceňujem transparentnosť — zverejňujú aj výsledky, ktoré nevyšli."
       },
       {
         "name": "Ján P.",
-        "plan": "BASIC člen",
-        "text": "Skvelý začiatok. BASIC plán mi dal solídny základ a čoskoro prejdem na PRO."
+        "plan": "START člen",
+        "text": "Skvelý začiatok. START plán mi dal solídny dátový základ a čoskoro prejdem na SMART."
       }
     ]
   },
@@ -149,39 +149,41 @@
     "manageBilling": "Spravovať fakturáciu",
     "upgrade": "Upgradovať plán",
     "noPlan": "Žiadny aktívny plán",
-    "noPlanDesc": "Vyberte si plán pre prístup k prémiovému obsahu",
+    "noPlanDesc": "Vyberte si plán pre prístup k analytickému obsahu",
     "choosePlan": "Vybrať plán",
-    "latestTips": "Najnovšie tipy",
+    "latestTips": "Najnovšie analýzy",
     "lockedContent": "Zamknutý obsah",
     "lockedDesc": "Upgradujte svoj plán pre prístup k tomuto obsahu",
-    "tipHistory": "História tipov",
-    "results": "Prehľad výsledkov",
-    "won": "Výhry",
-    "lost": "Prehry",
+    "tipHistory": "História analýz",
+    "results": "Prehľad výsledkov modelu",
+    "won": "Úspešné",
+    "lost": "Neúspešné",
     "void": "Anulované",
     "pending": "Čaká",
-    "noTips": "Zatiaľ žiadne tipy",
-    "freeTip": "Váš 1 tip zadarmo",
-    "freeTipDesc": "Ako nový člen máte 1 tip zadarmo. Upgradujte pre neobmedzený prístup.",
-    "freeTipBanner": "Toto je váš bezplatný tip. Upgradujte plán pre prístup ku všetkým tipom.",
-    "freeTipUsed": "Bezplatný tip bol zobrazený",
-    "freeTipUsedDesc": "Vyberte si plán pre prístup ku všetkým tipom"
+    "noTips": "Zatiaľ žiadne analýzy",
+    "freeTip": "Vaša 1 analýza zadarmo",
+    "freeTipDesc": "Ako nový člen máte 1 analýzu zadarmo. Upgradujte pre neobmedzený prístup.",
+    "freeTipBanner": "Toto je vaša bezplatná analýza. Upgradujte plán pre prístup ku všetkým dátovým prehľadom.",
+    "freeTipUsed": "Bezplatná analýza bola zobrazená",
+    "freeTipUsedDesc": "Vyberte si plán pre prístup ku všetkým analýzam"
   },
   "tips": {
-    "confidence": "Istota",
+    "modelScore": "Skóre modelu",
+    "confidence": "Skóre modelu",
     "odds": "Kurz",
-    "prediction": "Predpoveď",
+    "prediction": "Analytický výber",
     "matchDate": "Dátum zápasu",
     "sport": "Šport",
     "category": "Kategória",
     "requiredPlan": "Požadovaný plán",
     "status": "Stav",
     "result": "Výsledok",
-    "analysis": "Analýza",
-    "summary": "Zhrnutie",
+    "analysis": "Dátová analýza",
+    "summary": "Zhrnutie modelu",
     "locked": "Zamknutý obsah",
     "lockedDesc": "Tento obsah je dostupný pre {plan} a vyšší",
-    "upgrade": "Upgradovať na {plan}"
+    "upgrade": "Upgradovať na {plan}",
+    "analyticsDisclaimer": "Iba analytická informácia. Prevádzkovateľ nezaručuje výsledky. Rozhodnutie a zodpovednosť sú výhradne na používateľovi."
   },
   "auth": {
     "email": "Email",
@@ -193,7 +195,7 @@
     "loginTitle": "Vitajte späť",
     "loginSubtitle": "Prihláste sa do svojho účtu",
     "registerTitle": "Vytvoriť účet",
-    "registerSubtitle": "Začnite stavkovať chytro ešte dnes",
+    "registerSubtitle": "Získajte prístup k dátovým analýzam ešte dnes",
     "forgotPassword": "Zabudnuté heslo?",
     "noAccount": "Nemáte účet?",
     "hasAccount": "Máte už účet?",
@@ -216,28 +218,28 @@
   },
   "admin": {
     "title": "Admin Panel",
-    "tips": "Tipy",
+    "tips": "Analýzy",
     "categories": "Kategórie",
     "users": "Používatelia",
-    "newTip": "Nový tip",
-    "editTip": "Upraviť tip",
-    "deleteTip": "Zmazať tip",
+    "newTip": "Nová analýza",
+    "editTip": "Upraviť analýzu",
+    "deleteTip": "Zmazať analýzu",
     "publishTip": "Publikovať",
     "unpublishTip": "Zrušiť publikáciu",
     "saveDraft": "Uložiť ako draft",
-    "confirmDelete": "Naozaj chcete zmazať tento tip?",
-    "tipTitle": "Názov tipu",
+    "confirmDelete": "Naozaj chcete zmazať túto analýzu?",
+    "tipTitle": "Názov analýzy",
     "sport": "Šport",
     "category": "Kategória",
     "odds": "Kurz",
-    "confidence": "Istota (1-5)",
+    "confidence": "Skóre modelu (1–5)",
     "matchDate": "Dátum zápasu",
     "requiredPlan": "Požadovaný plán",
     "status": "Stav",
     "result": "Výsledok",
-    "prediction": "Predpoveď",
-    "summary": "Zhrnutie",
-    "analysis": "Analýza",
+    "prediction": "Analytický výber",
+    "summary": "Zhrnutie modelu",
+    "analysis": "Dátová analýza",
     "translations": "Preklady",
     "save": "Uložiť",
     "cancel": "Zrušiť",
@@ -245,7 +247,7 @@
     "error": "Nastala chyba"
   },
   "footer": {
-    "disclaimer": "SázejChytře poskytuje analytické nástroje a tipy. Stávkovanie je riziková aktivita. Vždy stavkujte zodpovedne. 18+.",
+    "disclaimer": "SázejChytře poskytuje výhradne analytické a informačné nástroje. Všetok obsah má informačný charakter a nepredstavuje hazardné ani investičné poradenstvo. Prevádzkovateľ nezaručuje výhru ani zisk. Každý používateľ robí svoje rozhodnutia samostatne a na vlastnú zodpovednosť. 18+.",
     "links": {
       "terms": "Obchodné podmienky",
       "privacy": "Ochrana osobných údajov",
@@ -257,7 +259,7 @@
   },
   "riskWarning": {
     "title": "Upozornenie na riziká stávkovania",
-    "text": "Stávkovanie je riziková aktivita. Výsledky nie sú nikdy garantované. Stavkujte iba sumy, ktoré ste schopní stratiť."
+    "text": "Stávkovanie je riziková aktivita. Výsledky nie sú nikdy garantované. Stavkujte iba sumy, ktoré ste schopní stratiť. Všetok obsah platformy má výhradne informačný a analytický charakter."
   },
   "checkout": {
     "title": "Dokončiť objednávku",
@@ -270,6 +272,7 @@
     "loadingPayment": "Pripravujem platobný formulár...",
     "alreadySubscribed": "Už máte aktívne predplatné. Správu nájdete v dashboarde.",
     "goToDashboard": "Prejsť na dashboard",
+    "analyticsNote": "Kupujete prístup k analytickému obsahu platformy, nie výsledky stávok.",
     "errors": {
       "generic": "Platba zlyhala. Skúste to prosím znovu.",
       "stripe": "Stripe sa nepodarilo načítať. Skontrolujte pripojenie."
@@ -277,22 +280,22 @@
   },
   "about": {
     "title": "O nás",
-    "subtitle": "SázejChytře je analytická platforma pre zodpovedné stávkovanie. Naším cieľom je poskytovať transparentné, dátami podložené analýzy.",
+    "subtitle": "SázejChytře je platforma športovej analytiky. Naším cieľom je poskytovať transparentné, štatisticky podložené analýzy — bez záruk, bez clickbaitu.",
     "values": {
       "data": {
         "title": "Data-driven prístup",
-        "desc": "Každý tip je podložený hĺbkovou analýzou štatistík a historických dát."
+        "desc": "Každý analytický výber je podložený hĺbkovou analýzou štatistík a historických dát modelu."
       },
       "transparency": {
         "title": "Transparentnosť",
-        "desc": "Zverejňujeme všetky výsledky vrátane prehier. Žiadne cherry-picking."
+        "desc": "Zverejňujeme všetky výsledky vrátane neúspešných. Žiadne cherry-picking výsledkov."
       },
       "responsible": {
         "title": "Zodpovedné stávkovanie",
-        "desc": "Aktívne propagujeme zodpovedné stávkovanie a upozorňujeme na riziká."
+        "desc": "Aktívne propagujeme zodpovedné stávkovanie a upozorňujeme na riziká. Obsah nie je určený osobám mladším ako 18 rokov."
       }
     },
-    "warning": "SázejChytře neposkytuje záruku výhier. Stávkovanie je riziková aktivita. Stavkujte iba sumy, ktoré ste ochotní stratiť. Ak máte problémy s patologickým hráčstvom, kontaktujte odbornú pomoc."
+    "warning": "SázejChytře neposkytuje záruku výhier ani garancia zisku. Všetok obsah má výhradne informačný a analytický charakter. Stávkovanie je riziková aktivita — stavkujte iba sumy, ktoré ste ochotní stratiť. Ak máte problémy s patologickým hráčstvom, kontaktujte odbornú pomoc."
   },
   "contact": {
     "title": "Kontakt",

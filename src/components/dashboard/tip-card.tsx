@@ -99,6 +99,12 @@ export function TipCard({ tip, translation, hasAccess, locale }: TipCardProps) {
         )}
       </div>
 
+      {hasAccess && (
+        <p className="mt-3 pt-3 border-t border-border/40 text-xs text-muted-foreground/50 leading-relaxed">
+          {t('analyticsDisclaimer')}
+        </p>
+      )}
+
       {!hasAccess && (
         <div className="mt-4 pt-4 border-t border-border flex items-center justify-between">
           <p className="text-xs text-muted-foreground">
