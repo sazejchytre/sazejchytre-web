@@ -109,7 +109,6 @@ function PaymentForm({ locale }: PaymentFormProps) {
         <PaymentElement
           options={{
             layout: 'tabs',
-            fields: { billingDetails: { address: 'never' } },
           }}
         />
       </div>
