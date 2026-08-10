@@ -1,0 +1,8 @@
+# pnpm >= 10 blocks dependency lifecycle scripts unless explicitly allowed.
+# pnpm 11 reads this configuration from here rather than package.json.
+# Keep this list minimal and reviewed — every entry runs arbitrary code on install.
+onlyBuiltDependencies:
+  - '@tailwindcss/oxide'
+  - esbuild
+  - sharp
+  - unrs-resolver

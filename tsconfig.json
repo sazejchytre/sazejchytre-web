@@ -1,0 +1,54 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["dom", "dom.iterable", "ES2022"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    /* Strictness — every flag on. Do not relax these. */
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    /* noUnusedLocals / noUnusedParameters are deliberately NOT set here.
+       Unused-code enforcement lives in ESLint (@typescript-eslint/no-unused-vars,
+       set to "error"), which — unlike tsc — can exempt generated files. Payload
+       emits migrations with an unused `payload`/`req` in the signature, and tsc
+       has no per-path escape hatch, so enabling them here would mean either a
+       red CI on every generated migration or hand-editing generated code. */
+    "exactOptionalPropertyTypes": true,
+    "useUnknownInCatchVariables": true,
+    "forceConsistentCasingInFileNames": true,
+    "allowJs": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    /* Node's native type stripping runs the *.test.ts files directly, and ESM
+       resolution there requires the explicit `.ts` extension on relative
+       imports. Safe because this project never emits from tsc. */
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": false,
+    "noEmit": true,
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": ["./src/*"],
+      "@payload-config": ["./src/payload.config.ts"]
+    }
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    "next.config.ts",
+    ".next/dev/types/**/*.ts"
+  ],
+  "exclude": ["node_modules", ".next", "out", "build"]
+}
