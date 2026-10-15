@@ -35,7 +35,7 @@ jobs:
       R2_ACCESS_KEY_ID: ci
       R2_SECRET_ACCESS_KEY: ci
       R2_BUCKET: ci
-      R2_PUBLIC_BASE_URL: https://media.sazejchytre.cz
+      R2_PUBLIC_BASE_URL: https://cdn.sazejchytre.cz
       UPSTASH_REDIS_REST_URL: https://ci.upstash.invalid
       UPSTASH_REDIS_REST_TOKEN: ci
 
