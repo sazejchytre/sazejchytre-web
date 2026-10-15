@@ -1,11 +1,22 @@
-# pnpm >= 10 blocks dependency lifecycle scripts unless explicitly allowed.
-# pnpm 11 reads this configuration from here rather than package.json.
-# Keep this list minimal and reviewed — every entry runs arbitrary code on install.
-onlyBuiltDependencies:
-  - '@tailwindcss/oxide'
-  - esbuild
-  - sharp
-  - unrs-resolver
+# Dependency lifecycle scripts are blocked unless a package is approved here.
+# pnpm 11 reads this configuration from this file rather than from package.json,
+# and it wants an explicit per-package decision: a name left unset (or carrying
+# the placeholder pnpm writes on a fresh install) is treated as NOT approved and
+# fails the install with ERR_PNPM_IGNORED_BUILDS. `onlyBuiltDependencies` alone
+# is not enough on pnpm 11 — it does not approve esbuild or unrs-resolver.
+#
+# Keep this list minimal and reviewed — every `true` runs arbitrary code on
+# install.
+#
+#   @tailwindcss/oxide  native Tailwind 4 engine
+#   esbuild             native binary used by the TS/bundler toolchain
+#   sharp               native libvips bindings; image processing needs these
+#   unrs-resolver       native resolver used by the ESLint import plugin
+allowBuilds:
+  '@tailwindcss/oxide': true
+  esbuild: true
+  sharp: true
+  unrs-resolver: true
 
 # Pinned patched versions for transitive advisories that the direct dependency
 # tree cannot reach on its own. Each entry exists to clear a specific GHSA;
