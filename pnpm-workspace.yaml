@@ -6,3 +6,28 @@ onlyBuiltDependencies:
   - esbuild
   - sharp
   - unrs-resolver
+
+# Pinned patched versions for transitive advisories that the direct dependency
+# tree cannot reach on its own. Each entry exists to clear a specific GHSA;
+# drop an entry once the parent package ships a tree that already satisfies it.
+#
+#   fast-uri        GHSA-qw65-cvwx-89v3 + 4 more (SSRF / host confusion)
+#   js-yaml         GHSA-2883-xcg3-v3hh (CPU exhaustion on merge keys)
+#   undici          GHSA-w293-vg96-wgc3 (TLS verification bypass) + 9 more
+#   brace-expansion GHSA-6j4f-fj2g-mc7p, GHSA-qhr7-859c-m2p7 (ReDoS); both the
+#                   1.x and 5.x lines are present in the tree, so both are pinned
+#   source-map-js   GHSA-68fv-2mgg-jv7q (event-loop DoS)
+#   dompurify       GHSA-6688-9rhm-gjv2 + 4 more (sanitiser bypasses)
+#   fast-copy       GHSA-jggr-w7fw-pc2j (stack exhaustion)
+#   esbuild         GHSA-67mh-4wv8-2f99; scoped to the deprecated
+#                   @esbuild-kit/core-utils, which is the only pre-0.24.3 copy
+overrides:
+  fast-uri: ^3.1.8
+  js-yaml: ^4.3.2
+  undici: ^7.29.1
+  brace-expansion@1: ^1.1.21
+  brace-expansion@>=4: ^5.0.12
+  source-map-js: ^1.2.2
+  dompurify: ^3.4.17
+  fast-copy: ^3.1.0
+  '@esbuild-kit/core-utils>esbuild': ^0.25.12
