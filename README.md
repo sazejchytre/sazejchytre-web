@@ -61,6 +61,9 @@ crashes the boot with a list of what is wrong — see `src/lib/env.ts`.
 | `pnpm auth:migrate:dry`   | Print better-auth's SQL, change nothing      |
 | `pnpm seed`               | Upsert plans and CZK prices                  |
 | `pnpm test:db`            | Integration tests against Neon (not in CI)   |
+| `pnpm seed:tips`          | Sports, competitions and 15 historical tips  |
+| `pnpm seed:tips:purge`    | Delete every row marked `seed-step-3b`       |
+| `pnpm sweep:lockouts`     | Delete `auth_lockouts` past 90 days          |
 
 ## Layout
 
@@ -139,6 +142,88 @@ Rolling back the schema is deliberately awkward: the `down` of the
 `create_auth_schema` migration uses `DROP SCHEMA … RESTRICT`, so it fails
 rather than cascading away every customer account. Roll back better-auth
 first if that is genuinely what you want.
+
+## Tip immutability
+
+A published tip is **frozen**, enforced by **database triggers** as well as by
+Payload hooks. This is the only place in the codebase that uses a trigger, so
+it is worth knowing why, and what the cost is.
+
+### Why a trigger and not just a hook
+
+Everywhere else the thing to defend against is a bad request, and a request has
+to go through Payload — so a hook is enough. Here the thing to defend against
+is **our own server code**: a migration, a support script, a patch applied with
+`overrideAccess: true`, a well-meant fix that nudges an odds figure on a tip
+that happened to win.
+
+A hook cannot see any of that. The published ROI is computed from these rows
+and customers pay because of it, so "a developer could quietly improve the
+record" is a real threat rather than a theoretical one. A trigger sees
+everything that reaches Postgres.
+
+### What is frozen
+
+Once a tip leaves `DRAFT`:
+
+| Table            | May still change                               | Everything else |
+| ---------------- | ---------------------------------------------- | --------------- |
+| `tips`           | `status` (legal transitions only), `settledAt` | frozen          |
+| `tip_selections` | `outcome`, `closingOdds`, `settledAt`          | frozen          |
+
+Selections cannot be **added to** or **removed from** a published tip, a
+published tip cannot be **deleted**, and `SETTLED` / `VOIDED` are terminal — a
+settled tip can never return to `PUBLISHED` to be settled differently.
+
+`tip_audit_events` is append-only: no update, no delete, ever.
+
+Each trigger uses a **whitelist** of columns that may change, so a field added
+later is frozen by default rather than editable because nobody updated a
+blacklist.
+
+### The triggers
+
+Created by `src/migrations/20261015_201500_tip_immutability_triggers.ts`:
+
+| Trigger                                      | Table              | Fires on |
+| -------------------------------------------- | ------------------ | -------- |
+| `tips_immutable_after_publication`           | `tips`             | UPDATE   |
+| `tips_no_delete_after_publication`           | `tips`             | DELETE   |
+| `tip_selections_immutable_after_publication` | `tip_selections`   | UPDATE   |
+| `tip_selections_no_insert_after_publication` | `tip_selections`   | INSERT   |
+| `tip_selections_no_delete_after_publication` | `tip_selections`   | DELETE   |
+| `tip_audit_events_no_update`                 | `tip_audit_events` | UPDATE   |
+| `tip_audit_events_no_delete`                 | `tip_audit_events` | DELETE   |
+
+All raise `SQLSTATE 23000` (`integrity_constraint_violation`) with a message
+naming the row and a hint saying what to do instead.
+
+### The cost, accepted knowingly
+
+**Triggers are not in Payload's schema snapshot.** `pnpm migrate:create`
+neither knows about them nor manages them. Consequences:
+
+- If the tips tables are ever dropped and recreated, the triggers must be
+  **re-applied** — re-run that migration's `up`.
+- `pnpm migrate:create` will never notice a trigger that has gone missing.
+  `pnpm test:db` is what notices: it attacks the rules through raw SQL, and
+  those tests fail if a trigger is absent.
+
+That trade was made deliberately: single-source migrations are worth more
+almost everywhere, and less than tamper-evidence here.
+
+### Working around them legitimately
+
+Two places need to, and both are development-only:
+
+- `pnpm seed:tips` publishes **through** the triggers rather than around them —
+  the immutability trigger permits any update while the row is still `DRAFT`,
+  and the backdated publication is that `DRAFT → PUBLISHED` statement itself.
+- `pnpm seed:tips:purge` does disable the delete triggers, because refusing to
+  delete a published tip is exactly what they are for. It only touches rows
+  carrying the seed marker.
+
+Nothing in the application code disables a trigger.
 
 ## Conventions that are not negotiable
 

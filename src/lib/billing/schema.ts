@@ -2,7 +2,12 @@
  * Postgres schema overrides for the billing domain.
  *
  * Three things Payload's field types cannot express on their own are applied
- * here, through the adapter's `afterSchemaInit`. All of them end up in the
+ * here, through the adapter's `afterSchemaInit`.
+ *
+ * SCOPE NOTE: this file is named for the billing model, where the integer rule
+ * started, but the hook is the single `afterSchemaInit` for the whole schema.
+ * The tips columns are here too, for the same reason and under the same rule —
+ * a published ROI computed from `numeric` odds would not be reproducible. All of them end up in the
  * generated migration, so the schema stays single-source — nothing is
  * hand-patched into SQL after the fact.
  *
@@ -150,6 +155,30 @@ const INTEGER_COLUMNS: Record<
   auth_lockouts: {
     failures: { column: 'failures', notNull: true },
     lockSeconds: { column: 'lock_seconds', notNull: true },
+  },
+
+  /* --- Tips and the track record ---------------------------------------- */
+  // These matter for exactly the reason the money columns do: the published
+  // ROI is computed from them. `numeric` would let 2.1 into an odds column,
+  // and 2.1 has no exact binary representation — so a few hundred of them
+  // summed in a different order would give a different last digit, and the
+  // track record would stop being reproducible.
+  sports: {
+    sortOrder: { column: 'sort_order', notNull: true, default: 0 },
+  },
+  tips: {
+    stakeUnits: { column: 'stake_units', notNull: true, default: 1 },
+    // Nullable: confidence is optional and presentational.
+    confidence: { column: 'confidence', notNull: false },
+  },
+  tip_selections: {
+    // Hundredths. Nullable — many markets have no line.
+    line: { column: 'line', notNull: false },
+    // Thousandths. The two prices the claim is made at.
+    oddsAtPublication: { column: 'odds_at_publication', notNull: true },
+    minimumOdds: { column: 'minimum_odds', notNull: true },
+    // Thousandths, nullable until recorded at kick-off.
+    closingOdds: { column: 'closing_odds', notNull: false },
   },
 }
 

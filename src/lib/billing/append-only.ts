@@ -38,12 +38,16 @@ const ALWAYS_IGNORED = new Set(['id', 'updatedAt', 'createdAt'])
 /**
  * Compare two field values for "did the caller actually change this".
  *
+ * Exported because the tips model needs the same comparison for a different
+ * rule (locked after PUBLICATION rather than after creation). One comparison
+ * used by both is better than two that drift.
+ *
  * Dates need special handling: the stored document carries an ISO string while
  * an incoming payload may carry a `Date`, and a naive `!==` would read every
  * untouched date field as modified — which would make the admin panel unable
  * to save even a permitted change.
  */
-const isSameValue = (a: unknown, b: unknown): boolean => {
+export const isSameValue = (a: unknown, b: unknown): boolean => {
   if (a === b) {
     return true
   }
