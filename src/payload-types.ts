@@ -82,6 +82,12 @@ export interface Config {
     'consent-records': ConsentRecord;
     'webhook-events': WebhookEvent;
     'auth-lockouts': AuthLockout;
+    sports: Sport;
+    competitions: Competition;
+    'sporting-events': SportingEvent;
+    tips: Tip;
+    'tip-selections': TipSelection;
+    'tip-audit-events': TipAuditEvent;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -104,6 +110,12 @@ export interface Config {
     'consent-records': ConsentRecordsSelect<false> | ConsentRecordsSelect<true>;
     'webhook-events': WebhookEventsSelect<false> | WebhookEventsSelect<true>;
     'auth-lockouts': AuthLockoutsSelect<false> | AuthLockoutsSelect<true>;
+    sports: SportsSelect<false> | SportsSelect<true>;
+    competitions: CompetitionsSelect<false> | CompetitionsSelect<true>;
+    'sporting-events': SportingEventsSelect<false> | SportingEventsSelect<true>;
+    tips: TipsSelect<false> | TipsSelect<true>;
+    'tip-selections': TipSelectionsSelect<false> | TipSelectionsSelect<true>;
+    'tip-audit-events': TipAuditEventsSelect<false> | TipAuditEventsSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -758,6 +770,310 @@ export interface AuthLockout {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "sports".
+ */
+export interface Sport {
+  id: number;
+  /**
+   * Stable machine code, e.g. FOOTBALL. Referenced by seeds, the track record and the ingestion contract — never renamed.
+   */
+  code: string;
+  /**
+   * Czech display name.
+   */
+  name: string;
+  /**
+   * Whether new tips may be published for it. Never affects existing tips or the track record.
+   */
+  active: boolean;
+  sortOrder: number;
+  /**
+   * Set by the development seed so seeded rows can be purged. Null for real data.
+   */
+  seedMarker?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "competitions".
+ */
+export interface Competition {
+  id: number;
+  sport: number | Sport;
+  /**
+   * e.g. Chance Liga, Premier League.
+   */
+  name: string;
+  /**
+   * ISO 3166-1 alpha-2 of the competition, where it has one. Null for international tours.
+   */
+  country?: string | null;
+  /**
+   * Provider id map, e.g. { "sportmonks": "271", "oddsapi": "soccer_czech" }. Written by a sync later; by hand for now.
+   */
+  externalRefs?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Set by the development seed. Null for real data.
+   */
+  seedMarker?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "sporting-events".
+ */
+export interface SportingEvent {
+  id: number;
+  competition: number | Competition;
+  /**
+   * Home side, as displayed.
+   */
+  homeName: string;
+  /**
+   * Away side, as displayed.
+   */
+  awayName: string;
+  /**
+   * Scheduled start. The deadline a tip is measured against: a tip published after kick-off is not a prediction.
+   */
+  startsAt: string;
+  status: 'SCHEDULED' | 'LIVE' | 'FINISHED' | 'POSTPONED' | 'CANCELLED';
+  /**
+   * Shape depends on the sport, e.g. { "home": 2, "away": 1 } or { "sets": [[6,4],[7,5]] }. Null until FINISHED.
+   */
+  finalScore?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Provider id map. The partner application resolves tips against this — see docs/tip-ingestion-contract.md.
+   */
+  externalRefs?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Set by the development seed. Null for real data.
+   */
+  seedMarker?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Po publikaci je tip neměnný. Opravy se řeší publikací nového tipu.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "tips".
+ */
+export interface Tip {
+  id: number;
+  /**
+   * URL identifier. Frozen at publication — a changed slug breaks every link and citation to the tip.
+   */
+  slug: string;
+  sport: number | Sport;
+  /**
+   * Czech headline shown in listings.
+   */
+  title: string;
+  /**
+   * DRAFT → PUBLISHED → SETTLED or VOIDED. SETTLED and VOIDED are final.
+   */
+  status: 'DRAFT' | 'PUBLISHED' | 'SETTLED' | 'VOIDED';
+  /**
+   * Stamped by the server at publication, never accepted from the caller — "we said this before kick-off" is only a claim if we control the clock.
+   */
+  publishedAt?: string | null;
+  /**
+   * When the free tier may see it. Defaults to publishedAt + 24 h.
+   */
+  publicAt?: string | null;
+  /**
+   * The entitlement that unlocks this tip immediately. Everyone else sees it from publicAt.
+   */
+  requiredFeatureKey:
+    | 'TIPS_REALTIME'
+    | 'TIPS_ALL_SPORTS'
+    | 'FULL_RATIONALE'
+    | 'VALUE_RATING'
+    | 'PUSH_NOTIFICATIONS'
+    | 'ARCHIVE_EXPORT'
+    | 'API_ACCESS'
+    | 'EARLY_ACCESS';
+  /**
+   * Recommended stake in whole units, 1–10. A factor in every profit figure, so it is frozen at publication.
+   */
+  stakeUnits: number;
+  /**
+   * Analyst or model confidence, 1–100. Presentational — never an input to profit.
+   */
+  confidence?: number | null;
+  /**
+   * The reasoning. Frozen at publication: a rationale rewritten after the result is known is the clearest possible way to destroy the record.
+   */
+  rationale?: {
+    root: {
+      type: string;
+      children: {
+        type: any;
+        version: number;
+        [k: string]: unknown;
+      }[];
+      direction: ('ltr' | 'rtl') | null;
+      format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+      indent: number;
+      version: number;
+    };
+    [k: string]: unknown;
+  } | null;
+  /**
+   * Where the signal came from, for the "why trust this" section. e.g. [{ "kind": "MODEL", "detail": "xG v4, 61 %" }].
+   */
+  sourcesSummary?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Stamped when the last selection gets an outcome. One of the two fields that may change after publication.
+   */
+  settledAt?: string | null;
+  /**
+   * The partner application's own id, when the tip arrived that way. The idempotency key — see docs/tip-ingestion-contract.md.
+   */
+  ingestionExternalId?: string | null;
+  /**
+   * Set by the development seed. Null for real data.
+   */
+  seedMarker?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Po publikaci tipu lze měnit jen výsledek a zavírací kurz.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "tip-selections".
+ */
+export interface TipSelection {
+  id: number;
+  tip: number | Tip;
+  sportingEvent: number | SportingEvent;
+  /**
+   * Free text, not an enum — new markets appear constantly and an enum would make each one a migration. Known today: 1X2, DOUBLE_CHANCE, OVER_UNDER, ASIAN_HANDICAP, BOTH_TEAMS_TO_SCORE, CORRECT_SCORE, DRAW_NO_BET, HANDICAP, MONEYLINE, PLAYER_PROPS, TOTALS.
+   */
+  market: string;
+  /**
+   * The actual pick, e.g. HOME, OVER, AWAY_-1.5.
+   */
+  selection: string;
+  /**
+   * Handicap or total in HUNDREDTHS: −0.75 is −75, 2.5 is 250. Null for markets with no line.
+   */
+  line?: number | null;
+  /**
+   * Decimal odds in THOUSANDTHS at publication: 2.100 is 2100. Scale 1000. Frozen once the tip is published.
+   */
+  oddsAtPublication: number;
+  /**
+   * The price below which the tip is not worth taking, in thousandths. Must be at or below oddsAtPublication.
+   */
+  minimumOdds: number;
+  /**
+   * Price at kick-off, in thousandths. Filled at settlement; drives closing line value. One of the two fields that may change after publication.
+   */
+  closingOdds?: number | null;
+  /**
+   * HALF_WON and HALF_LOST are Asian-handicap quarter lines. A VOID leg drops out of an accumulator at 1.000; it does not void the tip.
+   */
+  outcome: 'PENDING' | 'WON' | 'LOST' | 'VOID' | 'HALF_WON' | 'HALF_LOST';
+  /**
+   * When this leg got its outcome.
+   */
+  settledAt?: string | null;
+  /**
+   * Set by the development seed. Null for real data.
+   */
+  seedMarker?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Neměnná historie. Zápis je možný jen přidáním, nikdy úpravou.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "tip-audit-events".
+ */
+export interface TipAuditEvent {
+  id: number;
+  tip: number | Tip;
+  type:
+    'CREATED' | 'PUBLISHED' | 'SELECTION_SETTLED' | 'SETTLED' | 'VOIDED' | 'CLOSING_ODDS_RECORDED' | 'EDIT_REJECTED';
+  /**
+   * When it happened, as reported by whatever caused it. `createdAt` is when we stored it.
+   */
+  occurredAt: string;
+  /**
+   * Who caused it — an admin email, or `system` for the settlement automation. Required: an unattributed change to the record is the one we would most want to trace.
+   */
+  actor: string;
+  /**
+   * Relevant values before the change.
+   */
+  before?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Relevant values after the change.
+   */
+  after?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Optional human explanation.
+   */
+  note?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv".
  */
 export interface PayloadKv {
@@ -839,6 +1155,30 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'auth-lockouts';
         value: number | AuthLockout;
+      } | null)
+    | ({
+        relationTo: 'sports';
+        value: number | Sport;
+      } | null)
+    | ({
+        relationTo: 'competitions';
+        value: number | Competition;
+      } | null)
+    | ({
+        relationTo: 'sporting-events';
+        value: number | SportingEvent;
+      } | null)
+    | ({
+        relationTo: 'tips';
+        value: number | Tip;
+      } | null)
+    | ({
+        relationTo: 'tip-selections';
+        value: number | TipSelection;
+      } | null)
+    | ({
+        relationTo: 'tip-audit-events';
+        value: number | TipAuditEvent;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -1146,6 +1486,104 @@ export interface AuthLockoutsSelect<T extends boolean = true> {
   lockedUntil?: T;
   ipCountry?: T;
   reason?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "sports_select".
+ */
+export interface SportsSelect<T extends boolean = true> {
+  code?: T;
+  name?: T;
+  active?: T;
+  sortOrder?: T;
+  seedMarker?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "competitions_select".
+ */
+export interface CompetitionsSelect<T extends boolean = true> {
+  sport?: T;
+  name?: T;
+  country?: T;
+  externalRefs?: T;
+  seedMarker?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "sporting-events_select".
+ */
+export interface SportingEventsSelect<T extends boolean = true> {
+  competition?: T;
+  homeName?: T;
+  awayName?: T;
+  startsAt?: T;
+  status?: T;
+  finalScore?: T;
+  externalRefs?: T;
+  seedMarker?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "tips_select".
+ */
+export interface TipsSelect<T extends boolean = true> {
+  slug?: T;
+  sport?: T;
+  title?: T;
+  status?: T;
+  publishedAt?: T;
+  publicAt?: T;
+  requiredFeatureKey?: T;
+  stakeUnits?: T;
+  confidence?: T;
+  rationale?: T;
+  sourcesSummary?: T;
+  settledAt?: T;
+  ingestionExternalId?: T;
+  seedMarker?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "tip-selections_select".
+ */
+export interface TipSelectionsSelect<T extends boolean = true> {
+  tip?: T;
+  sportingEvent?: T;
+  market?: T;
+  selection?: T;
+  line?: T;
+  oddsAtPublication?: T;
+  minimumOdds?: T;
+  closingOdds?: T;
+  outcome?: T;
+  settledAt?: T;
+  seedMarker?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "tip-audit-events_select".
+ */
+export interface TipAuditEventsSelect<T extends boolean = true> {
+  tip?: T;
+  type?: T;
+  occurredAt?: T;
+  actor?: T;
+  before?: T;
+  after?: T;
+  note?: T;
   updatedAt?: T;
   createdAt?: T;
 }

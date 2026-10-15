@@ -28,7 +28,10 @@
     "generate:importmap": "cross-env NODE_OPTIONS=--no-deprecation payload generate:importmap",
     "seed": "cross-env NODE_OPTIONS=--no-deprecation payload run src/seed/billing.ts",
     "auth:migrate": "cross-env NODE_OPTIONS=\"--no-deprecation --import tsx\" node --env-file-if-exists=.env src/scripts/auth-migrate.ts",
-    "auth:migrate:dry": "cross-env NODE_OPTIONS=\"--no-deprecation --import tsx\" node --env-file-if-exists=.env src/scripts/auth-migrate.ts --dry"
+    "auth:migrate:dry": "cross-env NODE_OPTIONS=\"--no-deprecation --import tsx\" node --env-file-if-exists=.env src/scripts/auth-migrate.ts --dry",
+    "sweep:lockouts": "cross-env NODE_OPTIONS=\"--no-deprecation --import tsx\" node --env-file-if-exists=.env src/scripts/sweep-lockouts.ts",
+    "seed:tips": "cross-env NODE_OPTIONS=--no-deprecation payload run src/scripts/seed-tips.ts",
+    "seed:tips:purge": "cross-env SEED_PURGE=1 NODE_OPTIONS=--no-deprecation payload run src/scripts/seed-tips.ts"
   },
   "dependencies": {
     "@payloadcms/db-postgres": "3.90.2",

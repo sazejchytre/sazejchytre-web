@@ -8,6 +8,12 @@ import { buildConfig } from 'payload'
 import sharp from 'sharp'
 
 import { AuthLockouts } from '@/collections/auth/AuthLockouts'
+import { Competitions } from '@/collections/tips/Competitions'
+import { SportingEvents } from '@/collections/tips/SportingEvents'
+import { Sports } from '@/collections/tips/Sports'
+import { TipAuditEvents } from '@/collections/tips/TipAuditEvents'
+import { TipSelections } from '@/collections/tips/TipSelections'
+import { Tips } from '@/collections/tips/Tips'
 import { BillingProviderRefs } from '@/collections/billing/BillingProviderRefs'
 import { ConsentRecords } from '@/collections/billing/ConsentRecords'
 import { CreditNotes } from '@/collections/billing/CreditNotes'
@@ -83,6 +89,15 @@ export default buildConfig({
     // Customer-auth support records. better-auth owns the `auth` schema; this
     // is our own durable history of lockouts, in `public`.
     AuthLockouts,
+
+    // Tips and the track record. Sports and events first so the admin panel
+    // lists them in the order they are filled in.
+    Sports,
+    Competitions,
+    SportingEvents,
+    Tips,
+    TipSelections,
+    TipAuditEvents,
   ],
 
   db: postgresAdapter({
