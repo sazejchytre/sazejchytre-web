@@ -38,6 +38,13 @@ jobs:
       R2_PUBLIC_BASE_URL: https://cdn.sazejchytre.cz
       UPSTASH_REDIS_REST_URL: https://ci.upstash.invalid
       UPSTASH_REDIS_REST_TOKEN: ci
+      # better-auth. The secret only has to satisfy the 32-character minimum;
+      # nothing in a build signs a real session.
+      BETTER_AUTH_SECRET: ci-build-only-value-not-a-real-secret-000000
+      BETTER_AUTH_URL: https://sazejchytre.cz
+      # Resend. No email is sent during a build.
+      RESEND_API_KEY: ci
+      RESEND_FROM_EMAIL: no-reply@sazejchytre.cz
 
     steps:
       - name: Checkout
