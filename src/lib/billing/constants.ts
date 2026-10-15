@@ -163,7 +163,7 @@ export type InvoiceStatus = (typeof INVOICE_STATUSES)[number]
  * require an enum migration before the first such document can be issued.
  */
 export const TAX_TREATMENTS = [
-  /** Operator is not VAT registered. taxMinor is 0, taxRatePercent is 0. */
+  /** Operator is not VAT registered. taxMinor is 0, taxRateBasisPoints is 0. */
   'NONE_NOT_VAT_REGISTERED',
   /** Czech VAT at the domestic rate. */
   'CZ_VAT_STANDARD',

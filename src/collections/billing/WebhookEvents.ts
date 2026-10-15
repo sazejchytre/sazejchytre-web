@@ -9,7 +9,7 @@ import { BILLING_PROVIDERS, toOptions } from '@/lib/billing/constants'
  * Payment providers guarantee at-least-once delivery, which means duplicates
  * are normal, not exceptional. Processing one twice would double-count a
  * payment, issue two invoices, or extend a period twice. The defence is a
- * UNIQUE index on `externalEventId` plus an atomic claim — see
+ * UNIQUE index on (provider, externalEventId) plus an atomic claim — see
  * `src/lib/billing/webhook-events.ts`.
  *
  * The unique index is the guarantee. Checking "have we seen this id" with a
@@ -17,12 +17,13 @@ import { BILLING_PROVIDERS, toOptions } from '@/lib/billing/constants'
  * deliveries both read "no" and both proceed. Only the database can arbitrate,
  * so the claim is written as a single conditional INSERT.
  *
- * NOTE ON THE KEY: the brief specifies `externalEventId` unique on its own,
- * and that is what is implemented. It is stricter than (provider,
- * externalEventId) and so is safe today; if a second provider is ever added
- * whose id space could collide with Stripe's `evt_…`, this becomes a
- * cross-provider false duplicate and the index should widen to the pair.
- * Flagged rather than pre-solved.
+ * THE KEY IS (provider, externalEventId), not `externalEventId` alone.
+ * An event id is only unique within the provider that issued it. Keying on the
+ * id by itself would mean a second provider whose id space overlaps Stripe's
+ * could produce a false duplicate — one provider's event would silently
+ * suppress another's, and the symptom would be a payment that never got
+ * processed rather than an error. Widening the key costs nothing and removes
+ * that class of bug before a second provider exists.
  *
  * No handler logic lives here. Step 4 adds handlers; this step only makes
  * processing-exactly-once possible.
@@ -51,7 +52,12 @@ export const WebhookEvents: CollectionConfig = {
     delete: isAdmin,
     admin: canAccessAdminPanel,
   },
-  indexes: [{ fields: ['provider', 'type'], unique: false }],
+  indexes: [
+    // THE idempotency key. An event id is unique per provider, so the pair is
+    // the correct grain. This index is what `claimWebhookEvent` conflicts on.
+    { fields: ['provider', 'externalEventId'], unique: true },
+    { fields: ['provider', 'type'], unique: false },
+  ],
   fields: [
     {
       name: 'provider',
@@ -63,11 +69,13 @@ export const WebhookEvents: CollectionConfig = {
       name: 'externalEventId',
       type: 'text',
       required: true,
-      unique: true,
+      // Not unique on its own: uniqueness is (provider, externalEventId), see
+      // `indexes` above. A single-column unique index here would be wrong as
+      // soon as a second provider exists.
       index: true,
       admin: {
         description:
-          "The provider's event id. UNIQUE — this is what makes processing idempotent.",
+          "The provider's event id. Unique together with `provider` — that pair is what makes processing idempotent.",
       },
     },
     {

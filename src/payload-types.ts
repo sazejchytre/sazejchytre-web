@@ -493,9 +493,9 @@ export interface Invoice {
   numberSequence: number;
   customer: number | Customer;
   /**
-   * The subscription being billed. Every invoice in this model originates from one.
+   * The subscription being billed, when there is one. Null for a one-off charge.
    */
-  subscription: number | Subscription;
+  subscription?: (number | null) | Subscription;
   /**
    * Date of issue (datum vystavení).
    */
@@ -528,9 +528,9 @@ export interface Invoice {
     | 'EU_REVERSE_CHARGE_B2B'
     | 'OUTSIDE_EU_NOT_SUBJECT';
   /**
-   * Whole-percent rate applied, frozen at issue. Integer column: a fractional rate would need basis points instead.
+   * Tax rate in BASIS POINTS, frozen at issue. 0 = 0%, 2100 = 21%, 1250 = 12.5%. Basis points rather than whole percent so a fractional rate is representable without a decimal column.
    */
-  taxRatePercent: number;
+  taxRateBasisPoints: number;
   /**
    * Object key of the rendered PDF in R2. Null until the PDF exists.
    */
@@ -691,7 +691,7 @@ export interface WebhookEvent {
   id: number;
   provider: 'STRIPE';
   /**
-   * The provider's event id. UNIQUE — this is what makes processing idempotent.
+   * The provider's event id. Unique together with `provider` — that pair is what makes processing idempotent.
    */
   externalEventId: string;
   /**
@@ -1008,7 +1008,7 @@ export interface InvoicesSelect<T extends boolean = true> {
   taxMinor?: T;
   totalMinor?: T;
   taxTreatment?: T;
-  taxRatePercent?: T;
+  taxRateBasisPoints?: T;
   pdfStorageKey?: T;
   status?: T;
   billingCountry?: T;

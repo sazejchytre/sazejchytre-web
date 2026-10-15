@@ -14,9 +14,13 @@
  * it, because the gap between the read and the write is where the race lives.
  *
  * So the claim is one conditional INSERT. The UNIQUE index on
- * `external_event_id` is the arbiter, and Postgres decides the winner:
+ * (provider, external_event_id) is the arbiter, and Postgres decides the
+ * winner:
  *
- *     INSERT ... ON CONFLICT (external_event_id) DO NOTHING RETURNING id
+ *     INSERT ... ON CONFLICT (provider, external_event_id) DO NOTHING RETURNING id
+ *
+ * The conflict target is the PAIR, because an event id is only unique within
+ * the provider that issued it.
  *
  * Exactly one caller gets a row back; every other caller gets nothing and
  * knows someone else owns the event. No advisory locks, no retry loop.
@@ -125,7 +129,7 @@ export const claimWebhookEvent = async ({
       now(),
       now()
     )
-    ON CONFLICT ("external_event_id") DO NOTHING
+    ON CONFLICT ("provider", "external_event_id") DO NOTHING
     RETURNING "id"
   `)
 
@@ -144,7 +148,8 @@ export const claimWebhookEvent = async ({
   const existing = await db.execute(sql`
     SELECT "id", "processed_at"
     FROM ${sql.identifier(TABLE)}
-    WHERE "external_event_id" = ${externalEventId}
+    WHERE "provider" = ${provider}::"enum_webhook_events_provider"
+      AND "external_event_id" = ${externalEventId}
     LIMIT 1
   `)
 
@@ -155,7 +160,7 @@ export const claimWebhookEvent = async ({
     // instant between the two statements, or a conflict on a different
     // constraint. Both are real faults, not a duplicate delivery.
     throw new Error(
-      `Webhook event ${externalEventId} could neither be claimed nor found. ` +
+      `Webhook event ${provider}/${externalEventId} could neither be claimed nor found. ` +
         'The insert conflicted but no owning row exists.',
     )
   }
