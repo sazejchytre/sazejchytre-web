@@ -146,6 +146,11 @@ const INTEGER_COLUMNS: Record<
     year: { column: 'year', notNull: true },
     lastNumber: { column: 'last_number', notNull: true, default: 0 },
   },
+  // Not billing, but the same rule: a count has no business being a decimal.
+  auth_lockouts: {
+    failures: { column: 'failures', notNull: true },
+    lockSeconds: { column: 'lock_seconds', notNull: true },
+  },
 }
 
 const assertTable = (

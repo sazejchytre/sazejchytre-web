@@ -26,9 +26,16 @@ service is informational: it does not accept bets and does not broker gambling.
 ```bash
 pnpm install
 cp .env.example .env     # then fill in every value
-pnpm migrate             # apply database migrations
+pnpm migrate             # 1. Payload migrations — also creates the `auth` schema
+pnpm auth:migrate        # 2. better-auth migrations — into the `auth` schema
+pnpm seed                # optional: the three plans and their CZK prices
 pnpm dev                 # http://localhost:3000
 ```
+
+**The order matters.** `pnpm migrate` creates the `auth` schema that
+`pnpm auth:migrate` writes into; run them the other way round and the second
+one refuses with an explanation rather than creating the schema itself. See
+[Database ownership](#database-ownership) below.
 
 Open <http://localhost:3000/admin> and create the first admin user.
 
@@ -37,19 +44,23 @@ crashes the boot with a list of what is wrong — see `src/lib/env.ts`.
 
 ## Scripts
 
-| Script                    | Purpose                                  |
-| ------------------------- | ---------------------------------------- |
-| `pnpm dev`                | Dev server                               |
-| `pnpm build`              | Production build (typechecks as it goes) |
-| `pnpm typecheck`          | `tsc --noEmit`                           |
-| `pnpm lint`               | ESLint                                   |
-| `pnpm test`               | Node test runner                         |
-| `pnpm format`             | Prettier, write                          |
-| `pnpm audit`              | Fails on high/critical advisories        |
-| `pnpm migrate:create`     | Generate a migration from config changes |
-| `pnpm migrate`            | Apply pending migrations                 |
-| `pnpm generate:types`     | Regenerate `src/payload-types.ts`        |
-| `pnpm generate:importmap` | Regenerate the admin import map          |
+| Script                    | Purpose                                      |
+| ------------------------- | -------------------------------------------- |
+| `pnpm dev`                | Dev server                                   |
+| `pnpm build`              | Production build (typechecks as it goes)     |
+| `pnpm typecheck`          | `tsc --noEmit`                               |
+| `pnpm lint`               | ESLint                                       |
+| `pnpm test`               | Node test runner                             |
+| `pnpm format`             | Prettier, write                              |
+| `pnpm audit`              | Fails on high/critical advisories            |
+| `pnpm migrate:create`     | Generate a migration from config changes     |
+| `pnpm migrate`            | Apply pending migrations                     |
+| `pnpm generate:types`     | Regenerate `src/payload-types.ts`            |
+| `pnpm generate:importmap` | Regenerate the admin import map              |
+| `pnpm auth:migrate`       | Apply better-auth migrations (`auth` schema) |
+| `pnpm auth:migrate:dry`   | Print better-auth's SQL, change nothing      |
+| `pnpm seed`               | Upsert plans and CZK prices                  |
+| `pnpm test:db`            | Integration tests against Neon (not in CI)   |
 
 ## Layout
 
@@ -70,6 +81,64 @@ src/
 ├── payload.config.ts
 └── proxy.ts                 Next 16 proxy (formerly middleware.ts)
 ```
+
+## Database ownership
+
+One Neon database, **two migration systems, two schemas**. Neither tool knows
+the other exists, so they are kept apart by namespace rather than by
+convention.
+
+| Schema   | Owner           | Managed by          | Contains                                                  |
+| -------- | --------------- | ------------------- | --------------------------------------------------------- |
+| `public` | **Payload**     | `pnpm migrate`      | admin users, media, and the whole billing domain          |
+| `auth`   | **better-auth** | `pnpm auth:migrate` | `user`, `session`, `account`, `verification`, `twoFactor` |
+
+### Why they must not share a schema
+
+Each tool decides what to do by comparing the live database against its own
+idea of the schema. Pointed at the same namespace, each would see the other's
+tables as drift:
+
+- Payload's `migrate:create` would offer to **drop** better-auth's tables,
+  because they are not in its config.
+- better-auth's introspection would report Payload's 22 tables as a schema
+  mismatch.
+
+Separate schemas make that impossible instead of merely unlikely. It is
+verified in both directions: after `pnpm auth:migrate`, `pnpm migrate:create`
+reports _"No schema changes detected"_, and no auth table exists in `public`.
+
+### Two different kinds of user
+
+Both schemas have something called a user, and they are not the same thing.
+
+- `public.users` — **admins**. Payload's own auth, for the `/admin` panel.
+- `auth.user` — **customers**. better-auth, for the public site.
+
+They have separate tables, separate session cookies and separate signing
+secrets (`PAYLOAD_SECRET` vs `BETTER_AUTH_SECRET`), so a compromise of one
+cannot forge a session in the other. The only link between the two worlds is
+`public.customers.auth_user_id`, set once when a customer verifies their email.
+
+### Why better-auth does not rely on `search_path`
+
+better-auth is configured with `schemaName: 'auth'`, which qualifies every
+statement it issues (`insert into "auth"."user" …`). The alternative — setting
+`search_path` on the connection — would not be safe here: Neon's pooled
+endpoint is pgBouncer in transaction mode, where a session-level
+`SET search_path` is not guaranteed to still apply to the next statement.
+
+### From scratch on an empty database
+
+```bash
+pnpm migrate        # 5 migrations: 22 tables in `public`, plus the `auth` schema
+pnpm auth:migrate   # 5 tables in `auth`
+```
+
+Rolling back the schema is deliberately awkward: the `down` of the
+`create_auth_schema` migration uses `DROP SCHEMA … RESTRICT`, so it fails
+rather than cascading away every customer account. Roll back better-auth
+first if that is genuinely what you want.
 
 ## Conventions that are not negotiable
 

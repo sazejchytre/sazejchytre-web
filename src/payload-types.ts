@@ -81,6 +81,7 @@ export interface Config {
     'invoice-number-counters': InvoiceNumberCounter;
     'consent-records': ConsentRecord;
     'webhook-events': WebhookEvent;
+    'auth-lockouts': AuthLockout;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -102,6 +103,7 @@ export interface Config {
     'invoice-number-counters': InvoiceNumberCountersSelect<false> | InvoiceNumberCountersSelect<true>;
     'consent-records': ConsentRecordsSelect<false> | ConsentRecordsSelect<true>;
     'webhook-events': WebhookEventsSelect<false> | WebhookEventsSelect<true>;
+    'auth-lockouts': AuthLockoutsSelect<false> | AuthLockoutsSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -723,6 +725,38 @@ export interface WebhookEvent {
   createdAt: string;
 }
 /**
+ * Historie dočasných uzamčení účtu. Vynucení běží v Redisu; tohle je jen záznam pro podporu.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "auth-lockouts".
+ */
+export interface AuthLockout {
+  id: number;
+  /**
+   * Adresa, na kterou se útočník nebo uživatel pokoušel přihlásit. Může jít i o adresu bez účtu.
+   */
+  identifier: string;
+  /**
+   * Počet neúspěšných pokusů v řadě, který uzamčení spustil.
+   */
+  failures: number;
+  /**
+   * Délka uzamčení v sekundách.
+   */
+  lockSeconds: number;
+  /**
+   * Do kdy uzamčení platilo.
+   */
+  lockedUntil: string;
+  /**
+   * Země pokusu podle edge. Celou IP adresu neukládáme ani tady.
+   */
+  ipCountry?: string | null;
+  reason: 'SIGN_IN_FAILURES' | 'TOTP_FAILURES';
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv".
  */
@@ -801,6 +835,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'webhook-events';
         value: number | WebhookEvent;
+      } | null)
+    | ({
+        relationTo: 'auth-lockouts';
+        value: number | AuthLockout;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -1094,6 +1132,20 @@ export interface WebhookEventsSelect<T extends boolean = true> {
   processedAt?: T;
   processingError?: T;
   rawPayload?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "auth-lockouts_select".
+ */
+export interface AuthLockoutsSelect<T extends boolean = true> {
+  identifier?: T;
+  failures?: T;
+  lockSeconds?: T;
+  lockedUntil?: T;
+  ipCountry?: T;
+  reason?: T;
   updatedAt?: T;
   createdAt?: T;
 }
