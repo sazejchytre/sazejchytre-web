@@ -7,8 +7,21 @@ import { s3Storage } from '@payloadcms/storage-s3'
 import { buildConfig } from 'payload'
 import sharp from 'sharp'
 
+import { BillingProviderRefs } from '@/collections/billing/BillingProviderRefs'
+import { ConsentRecords } from '@/collections/billing/ConsentRecords'
+import { CreditNotes } from '@/collections/billing/CreditNotes'
+import { Customers } from '@/collections/billing/Customers'
+import { EntitlementGrants } from '@/collections/billing/EntitlementGrants'
+import { InvoiceNumberCounters } from '@/collections/billing/InvoiceNumberCounters'
+import { Invoices } from '@/collections/billing/Invoices'
+import { Plans } from '@/collections/billing/Plans'
+import { Prices } from '@/collections/billing/Prices'
+import { SubscriptionEvents } from '@/collections/billing/SubscriptionEvents'
+import { Subscriptions } from '@/collections/billing/Subscriptions'
+import { WebhookEvents } from '@/collections/billing/WebhookEvents'
 import { Media } from '@/collections/Media'
 import { Users } from '@/collections/Users'
+import { applyBillingSchemaOverrides } from '@/lib/billing/schema'
 import { env, isDevelopment } from '@/lib/env'
 import { publicEnv } from '@/lib/env.public'
 import { MAX_UPLOAD_BYTES } from '@/lib/uploads/image-signature'
@@ -47,7 +60,25 @@ export default buildConfig({
     },
   },
 
-  collections: [Users, Media],
+  collections: [
+    Users,
+    Media,
+
+    // Billing domain. Order is presentational only; relationships are resolved
+    // by slug, so it does not encode dependencies.
+    Plans,
+    Prices,
+    Customers,
+    BillingProviderRefs,
+    Subscriptions,
+    SubscriptionEvents,
+    EntitlementGrants,
+    Invoices,
+    CreditNotes,
+    InvoiceNumberCounters,
+    ConsentRecords,
+    WebhookEvents,
+  ],
 
   db: postgresAdapter({
     pool: {
@@ -57,6 +88,16 @@ export default buildConfig({
     // schema on its own.
     push: false,
     migrationDir: path.resolve(dirname, 'migrations'),
+    /**
+     * Forces money columns to `integer` and adds the partial unique index that
+     * allows only one active price per plan + currency + interval.
+     *
+     * Payload maps `type: 'number'` to `numeric`, an arbitrary-precision
+     * DECIMAL type. Without this hook the database would itself accept
+     * fractional money, no matter what the application validated. Runs before
+     * migration generation, so both changes ship in the migration.
+     */
+    afterSchemaInit: [applyBillingSchemaOverrides],
   }),
 
   editor: lexicalEditor(),

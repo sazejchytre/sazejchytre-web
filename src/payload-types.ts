@@ -69,6 +69,18 @@ export interface Config {
   collections: {
     users: User;
     media: Media;
+    plans: Plan;
+    prices: Price;
+    customers: Customer;
+    'billing-provider-refs': BillingProviderRef;
+    subscriptions: Subscription;
+    'subscription-events': SubscriptionEvent;
+    'entitlement-grants': EntitlementGrant;
+    invoices: Invoice;
+    'credit-notes': CreditNote;
+    'invoice-number-counters': InvoiceNumberCounter;
+    'consent-records': ConsentRecord;
+    'webhook-events': WebhookEvent;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -78,6 +90,18 @@ export interface Config {
   collectionsSelect: {
     users: UsersSelect<false> | UsersSelect<true>;
     media: MediaSelect<false> | MediaSelect<true>;
+    plans: PlansSelect<false> | PlansSelect<true>;
+    prices: PricesSelect<false> | PricesSelect<true>;
+    customers: CustomersSelect<false> | CustomersSelect<true>;
+    'billing-provider-refs': BillingProviderRefsSelect<false> | BillingProviderRefsSelect<true>;
+    subscriptions: SubscriptionsSelect<false> | SubscriptionsSelect<true>;
+    'subscription-events': SubscriptionEventsSelect<false> | SubscriptionEventsSelect<true>;
+    'entitlement-grants': EntitlementGrantsSelect<false> | EntitlementGrantsSelect<true>;
+    invoices: InvoicesSelect<false> | InvoicesSelect<true>;
+    'credit-notes': CreditNotesSelect<false> | CreditNotesSelect<true>;
+    'invoice-number-counters': InvoiceNumberCountersSelect<false> | InvoiceNumberCountersSelect<true>;
+    'consent-records': ConsentRecordsSelect<false> | ConsentRecordsSelect<true>;
+    'webhook-events': WebhookEventsSelect<false> | WebhookEventsSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -171,6 +195,535 @@ export interface Media {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "plans".
+ */
+export interface Plan {
+  id: number;
+  /**
+   * Stable machine code. Referenced by seeds, reports and support tooling — never renamed.
+   */
+  code: 'START' | 'PRO' | 'INSIDER';
+  /**
+   * Customer-facing name.
+   */
+  name: string;
+  /**
+   * Short customer-facing summary of the tier.
+   */
+  description?: string | null;
+  /**
+   * Display order, ascending. Forced to an integer column by the schema override in payload.config.ts.
+   */
+  sortOrder: number;
+  /**
+   * Whether the plan may be sold. Deactivating never affects existing subscriptions.
+   */
+  active: boolean;
+  /**
+   * Feature keys this tier unlocks. This is what resolveEntitlements reads.
+   */
+  features: (
+    | 'TIPS_REALTIME'
+    | 'TIPS_ALL_SPORTS'
+    | 'FULL_RATIONALE'
+    | 'VALUE_RATING'
+    | 'PUSH_NOTIFICATIONS'
+    | 'ARCHIVE_EXPORT'
+    | 'API_ACCESS'
+    | 'EARLY_ACCESS'
+  )[];
+  /**
+   * Optional product id at the billing provider. Reconciliation convenience only — never an input to entitlement.
+   */
+  providerProductId?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "prices".
+ */
+export interface Price {
+  id: number;
+  /**
+   * The tier this price sells.
+   */
+  plan: number | Plan;
+  /**
+   * Currency of amountMinor. Writable today: CZK.
+   */
+  currency: 'CZK' | 'EUR';
+  /**
+   * Billing cadence this price is charged at.
+   */
+  interval: 'MONTH' | 'YEAR';
+  /**
+   * Price in MINOR units of `currency` (haléře for CZK). Integer only — 349 CZK is 34900.
+   */
+  amountMinor: number;
+  /**
+   * Only one active price per plan + currency + interval. Deactivate the old one first.
+   */
+  active: boolean;
+  /**
+   * When this price became the offered one. Kept for audit; it does not drive selection.
+   */
+  validFrom: string;
+  /**
+   * The billing provider's price id, once created there. Null until then.
+   */
+  providerPriceId?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "customers".
+ */
+export interface Customer {
+  id: number;
+  /**
+   * Billing email. Normalised to lower case so the unique index is meaningful.
+   */
+  email: string;
+  /**
+   * Name as it should appear on an invoice.
+   */
+  name: string;
+  /**
+   * ISO 3166-1 alpha-2, upper case. Free text rather than an enum so adding a market needs no migration.
+   */
+  billingCountry: string;
+  /**
+   * Language for invoices and transactional email.
+   */
+  preferredLocale: 'cs' | 'sk' | 'en';
+  /**
+   * Settlement currency, locked on the first subscription. Null before that. Never edit by hand: a live subscription cannot change currency.
+   */
+  currency?: ('CZK' | 'EUR') | null;
+  /**
+   * Populated by step 3 from better-auth. Null for customers who have no account yet.
+   */
+  authUserId?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "billing-provider-refs".
+ */
+export interface BillingProviderRef {
+  id: number;
+  customer: number | Customer;
+  /**
+   * Which external system `externalId` belongs to. An enum from the start so a second provider is a data change.
+   */
+  provider: 'STRIPE';
+  /**
+   * The provider's own customer id (e.g. a Stripe `cus_…`). Opaque to us.
+   */
+  externalId: string;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "subscriptions".
+ */
+export interface Subscription {
+  id: number;
+  customer: number | Customer;
+  /**
+   * The tier. Its current `features` decide entitlement; the price does not come from here.
+   */
+  plan: number | Plan;
+  /**
+   * Snapshot. Locked to the customer on their first subscription and never changed.
+   */
+  currency: 'CZK' | 'EUR';
+  /**
+   * Snapshot of the cadence agreed at purchase.
+   */
+  interval: 'MONTH' | 'YEAR';
+  /**
+   * SNAPSHOT of the amount in minor units at purchase time. Deliberately not a relation to Price — a list-price change must never reprice an existing subscriber.
+   */
+  priceMinor: number;
+  /**
+   * A cancellation scheduled for period end stays ACTIVE until then — see cancelAtPeriodEnd.
+   */
+  status: 'INCOMPLETE' | 'ACTIVE' | 'PAST_DUE' | 'CANCELED' | 'EXPIRED';
+  /**
+   * Start of the period currently paid for.
+   */
+  currentPeriodStart: string;
+  /**
+   * End of the period currently paid for. Access stops here even if the status has not been reconciled yet.
+   */
+  currentPeriodEnd: string;
+  /**
+   * Set when the customer cancels but has paid through the period. Status stays ACTIVE until currentPeriodEnd.
+   */
+  cancelAtPeriodEnd: boolean;
+  /**
+   * When cancellation was requested, not when access ends.
+   */
+  canceledAt?: string | null;
+  /**
+   * When access actually ended.
+   */
+  endedAt?: string | null;
+  /**
+   * Which external system bills this subscription.
+   */
+  provider: 'STRIPE';
+  /**
+   * The provider's subscription id. Unique per provider — see the compound index.
+   */
+  providerSubscriptionId: string;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "subscription-events".
+ */
+export interface SubscriptionEvent {
+  id: number;
+  subscription: number | Subscription;
+  type:
+    | 'CREATED'
+    | 'ACTIVATED'
+    | 'RENEWED'
+    | 'PAYMENT_FAILED'
+    | 'PAYMENT_RECOVERED'
+    | 'CANCELLATION_SCHEDULED'
+    | 'CANCELLATION_REVOKED'
+    | 'CANCELED'
+    | 'EXPIRED'
+    | 'PLAN_CHANGED'
+    | 'PROVIDER_SYNC';
+  /**
+   * When the event happened, as reported by its source — not when we stored it. `createdAt` is the latter.
+   */
+  occurredAt: string;
+  /**
+   * Verbatim detail of the event. Stored as received so a later dispute can be read against the original.
+   */
+  payload?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * The provider event id that caused this, when there was one. Lets a replay be recognised rather than double-counted.
+   */
+  sourceEventId?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "entitlement-grants".
+ */
+export interface EntitlementGrant {
+  id: number;
+  customer: number | Customer;
+  /**
+   * Grant a single feature. Mutually exclusive with `plan`.
+   */
+  featureKey?:
+    | (
+        | 'TIPS_REALTIME'
+        | 'TIPS_ALL_SPORTS'
+        | 'FULL_RATIONALE'
+        | 'VALUE_RATING'
+        | 'PUSH_NOTIFICATIONS'
+        | 'ARCHIVE_EXPORT'
+        | 'API_ACCESS'
+        | 'EARLY_ACCESS'
+      )
+    | null;
+  /**
+   * Grant everything in a plan's current feature list. Mutually exclusive with `featureKey`.
+   */
+  plan?: (number | null) | Plan;
+  /**
+   * The admin accountable for this grant. Required — a comped account with no name attached is how free access quietly spreads.
+   */
+  grantedBy: number | User;
+  /**
+   * Why this was granted, in enough detail to be audited months later.
+   */
+  reason: string;
+  startsAt: string;
+  /**
+   * Null means open-ended. Prefer an end date.
+   */
+  endsAt?: string | null;
+  /**
+   * Set to withdraw the grant. Revocation wins over the window, immediately.
+   */
+  revokedAt?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "invoices".
+ */
+export interface Invoice {
+  id: number;
+  /**
+   * Human-readable, strictly sequential per year (e.g. FA2026-000001). Allocated only after payment is confirmed.
+   */
+  number: string;
+  /**
+   * Year component of `number`, for gap queries.
+   */
+  numberYear: number;
+  /**
+   * Sequence component of `number`, for gap queries.
+   */
+  numberSequence: number;
+  customer: number | Customer;
+  /**
+   * The subscription being billed. Every invoice in this model originates from one.
+   */
+  subscription: number | Subscription;
+  /**
+   * Date of issue (datum vystavení).
+   */
+  issuedAt: string;
+  /**
+   * Date of taxable supply (datum uskutečnění plnění). Separate from issuedAt because the two legitimately differ and the tax period follows this one.
+   */
+  taxableSupplyDate: string;
+  currency: 'CZK' | 'EUR';
+  /**
+   * Net amount in minor units. Integer only.
+   */
+  subtotalMinor: number;
+  /**
+   * Tax amount in minor units. Always 0 while the operator is not VAT registered.
+   */
+  taxMinor: number;
+  /**
+   * subtotalMinor + taxMinor, in minor units. Integer only.
+   */
+  totalMinor: number;
+  /**
+   * Frozen at issue. The other members exist so registering for VAT later needs no enum migration.
+   */
+  taxTreatment:
+    | 'NONE_NOT_VAT_REGISTERED'
+    | 'CZ_VAT_STANDARD'
+    | 'CZ_VAT_REDUCED'
+    | 'EU_OSS_B2C'
+    | 'EU_REVERSE_CHARGE_B2B'
+    | 'OUTSIDE_EU_NOT_SUBJECT';
+  /**
+   * Whole-percent rate applied, frozen at issue. Integer column: a fractional rate would need basis points instead.
+   */
+  taxRatePercent: number;
+  /**
+   * Object key of the rendered PDF in R2. Null until the PDF exists.
+   */
+  pdfStorageKey?: string | null;
+  /**
+   * The only mutable field. CREDITED means a credit note corrects this invoice in full.
+   */
+  status: 'ISSUED' | 'CREDITED';
+  /**
+   * Signal 1 of 3: the country the customer declared, as at payment time. Never recalculated.
+   */
+  billingCountry?: string | null;
+  /**
+   * Signal 2 of 3: country inferred from the payer IP at payment time. Nullable.
+   */
+  ipCountry?: string | null;
+  /**
+   * Signal 3 of 3: issuing country of the payment instrument. Nullable.
+   */
+  cardCountry?: string | null;
+  /**
+   * The operator's identity as printed on this invoice. Copied, not joined.
+   */
+  operatorSnapshot: {
+    legalName: string;
+    address: string;
+    /**
+     * IČO.
+     */
+    businessId: string;
+    /**
+     * DIČ. Null while the operator is not VAT registered.
+     */
+    taxId?: string | null;
+    /**
+     * Whether the operator was VAT registered when this invoice was issued.
+     */
+    vatRegistered: boolean;
+    email?: string | null;
+  };
+  /**
+   * The customer's identity as printed on this invoice. Copied, not joined — a later address change must not alter an issued document.
+   */
+  customerSnapshot: {
+    name: string;
+    email: string;
+    address?: string | null;
+    /**
+     * ISO 3166-1 alpha-2 at issue time.
+     */
+    country: string;
+    businessId?: string | null;
+    taxId?: string | null;
+  };
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "credit-notes".
+ */
+export interface CreditNote {
+  id: number;
+  /**
+   * Own strictly sequential series, separate from invoices (e.g. OD2026-000001).
+   */
+  number: string;
+  numberYear: number;
+  numberSequence: number;
+  /**
+   * The invoice this corrects.
+   */
+  invoice: number | Invoice;
+  /**
+   * Must match the invoice's currency. Carried explicitly so no row depends on a join to know its own currency.
+   */
+  currency: 'CZK' | 'EUR';
+  /**
+   * Credited amount in minor units. May be less than the invoice total for a partial refund.
+   */
+  amountMinor: number;
+  /**
+   * Why this was credited. Appears on the document and in reporting.
+   */
+  reason: string;
+  issuedAt: string;
+  /**
+   * Copied from the invoice so cross-border totals can net credits without a join.
+   */
+  billingCountry?: string | null;
+  /**
+   * Object key of the rendered PDF in R2.
+   */
+  pdfStorageKey?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Internal numbering state. Advanced atomically by allocateDocumentNumber — do not edit by hand.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "invoice-number-counters".
+ */
+export interface InvoiceNumberCounter {
+  id: number;
+  series: 'INVOICE' | 'CREDIT_NOTE';
+  /**
+   * Calendar year. Each year restarts at 1.
+   */
+  year: number;
+  /**
+   * Highest sequence issued for this series and year. The next document takes lastNumber + 1.
+   */
+  lastNumber: number;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "consent-records".
+ */
+export interface ConsentRecord {
+  id: number;
+  /**
+   * Nullable: consent at checkout can precede the customer record. Backfilled once the account exists.
+   */
+  customer?: (number | null) | Customer;
+  type: 'TERMS' | 'PRIVACY' | 'DIGITAL_CONTENT_WAIVER' | 'MARKETING';
+  /**
+   * Version identifier of the document shown, for correlation. The authority is consentTextSnapshot.
+   */
+  documentVersion: string;
+  /**
+   * The exact text displayed to this person, verbatim. Never a reference, never regenerated.
+   */
+  consentTextSnapshot: string;
+  grantedAt: string;
+  /**
+   * Source address at the moment of consent. Nullable — absent evidence is better than invented evidence.
+   */
+  ipAddress?: string | null;
+  /**
+   * Client user agent at the moment of consent.
+   */
+  userAgent?: string | null;
+  /**
+   * The only mutable field. Records that consent was later withdrawn, without erasing that it was given.
+   */
+  withdrawnAt?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "webhook-events".
+ */
+export interface WebhookEvent {
+  id: number;
+  provider: 'STRIPE';
+  /**
+   * The provider's event id. UNIQUE — this is what makes processing idempotent.
+   */
+  externalEventId: string;
+  /**
+   * Provider event type, free text rather than an enum: providers add event types without warning and an unknown one must still be storable.
+   */
+  type: string;
+  receivedAt: string;
+  /**
+   * Null while unprocessed or in flight. Set once handling succeeded.
+   */
+  processedAt?: string | null;
+  /**
+   * Last failure, if any. A row with an error and no processedAt is what a retry sweep looks for.
+   */
+  processingError?: string | null;
+  /**
+   * The event exactly as received. Kept so a handler bug can be replayed against the original after it is fixed.
+   */
+  rawPayload:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv".
  */
 export interface PayloadKv {
@@ -200,6 +753,54 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'media';
         value: number | Media;
+      } | null)
+    | ({
+        relationTo: 'plans';
+        value: number | Plan;
+      } | null)
+    | ({
+        relationTo: 'prices';
+        value: number | Price;
+      } | null)
+    | ({
+        relationTo: 'customers';
+        value: number | Customer;
+      } | null)
+    | ({
+        relationTo: 'billing-provider-refs';
+        value: number | BillingProviderRef;
+      } | null)
+    | ({
+        relationTo: 'subscriptions';
+        value: number | Subscription;
+      } | null)
+    | ({
+        relationTo: 'subscription-events';
+        value: number | SubscriptionEvent;
+      } | null)
+    | ({
+        relationTo: 'entitlement-grants';
+        value: number | EntitlementGrant;
+      } | null)
+    | ({
+        relationTo: 'invoices';
+        value: number | Invoice;
+      } | null)
+    | ({
+        relationTo: 'credit-notes';
+        value: number | CreditNote;
+      } | null)
+    | ({
+        relationTo: 'invoice-number-counters';
+        value: number | InvoiceNumberCounter;
+      } | null)
+    | ({
+        relationTo: 'consent-records';
+        value: number | ConsentRecord;
+      } | null)
+    | ({
+        relationTo: 'webhook-events';
+        value: number | WebhookEvent;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -284,6 +885,217 @@ export interface MediaSelect<T extends boolean = true> {
   filesize?: T;
   width?: T;
   height?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "plans_select".
+ */
+export interface PlansSelect<T extends boolean = true> {
+  code?: T;
+  name?: T;
+  description?: T;
+  sortOrder?: T;
+  active?: T;
+  features?: T;
+  providerProductId?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "prices_select".
+ */
+export interface PricesSelect<T extends boolean = true> {
+  plan?: T;
+  currency?: T;
+  interval?: T;
+  amountMinor?: T;
+  active?: T;
+  validFrom?: T;
+  providerPriceId?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "customers_select".
+ */
+export interface CustomersSelect<T extends boolean = true> {
+  email?: T;
+  name?: T;
+  billingCountry?: T;
+  preferredLocale?: T;
+  currency?: T;
+  authUserId?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "billing-provider-refs_select".
+ */
+export interface BillingProviderRefsSelect<T extends boolean = true> {
+  customer?: T;
+  provider?: T;
+  externalId?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "subscriptions_select".
+ */
+export interface SubscriptionsSelect<T extends boolean = true> {
+  customer?: T;
+  plan?: T;
+  currency?: T;
+  interval?: T;
+  priceMinor?: T;
+  status?: T;
+  currentPeriodStart?: T;
+  currentPeriodEnd?: T;
+  cancelAtPeriodEnd?: T;
+  canceledAt?: T;
+  endedAt?: T;
+  provider?: T;
+  providerSubscriptionId?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "subscription-events_select".
+ */
+export interface SubscriptionEventsSelect<T extends boolean = true> {
+  subscription?: T;
+  type?: T;
+  occurredAt?: T;
+  payload?: T;
+  sourceEventId?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "entitlement-grants_select".
+ */
+export interface EntitlementGrantsSelect<T extends boolean = true> {
+  customer?: T;
+  featureKey?: T;
+  plan?: T;
+  grantedBy?: T;
+  reason?: T;
+  startsAt?: T;
+  endsAt?: T;
+  revokedAt?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "invoices_select".
+ */
+export interface InvoicesSelect<T extends boolean = true> {
+  number?: T;
+  numberYear?: T;
+  numberSequence?: T;
+  customer?: T;
+  subscription?: T;
+  issuedAt?: T;
+  taxableSupplyDate?: T;
+  currency?: T;
+  subtotalMinor?: T;
+  taxMinor?: T;
+  totalMinor?: T;
+  taxTreatment?: T;
+  taxRatePercent?: T;
+  pdfStorageKey?: T;
+  status?: T;
+  billingCountry?: T;
+  ipCountry?: T;
+  cardCountry?: T;
+  operatorSnapshot?:
+    | T
+    | {
+        legalName?: T;
+        address?: T;
+        businessId?: T;
+        taxId?: T;
+        vatRegistered?: T;
+        email?: T;
+      };
+  customerSnapshot?:
+    | T
+    | {
+        name?: T;
+        email?: T;
+        address?: T;
+        country?: T;
+        businessId?: T;
+        taxId?: T;
+      };
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "credit-notes_select".
+ */
+export interface CreditNotesSelect<T extends boolean = true> {
+  number?: T;
+  numberYear?: T;
+  numberSequence?: T;
+  invoice?: T;
+  currency?: T;
+  amountMinor?: T;
+  reason?: T;
+  issuedAt?: T;
+  billingCountry?: T;
+  pdfStorageKey?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "invoice-number-counters_select".
+ */
+export interface InvoiceNumberCountersSelect<T extends boolean = true> {
+  series?: T;
+  year?: T;
+  lastNumber?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "consent-records_select".
+ */
+export interface ConsentRecordsSelect<T extends boolean = true> {
+  customer?: T;
+  type?: T;
+  documentVersion?: T;
+  consentTextSnapshot?: T;
+  grantedAt?: T;
+  ipAddress?: T;
+  userAgent?: T;
+  withdrawnAt?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "webhook-events_select".
+ */
+export interface WebhookEventsSelect<T extends boolean = true> {
+  provider?: T;
+  externalEventId?: T;
+  type?: T;
+  receivedAt?: T;
+  processedAt?: T;
+  processingError?: T;
+  rawPayload?: T;
+  updatedAt?: T;
+  createdAt?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema

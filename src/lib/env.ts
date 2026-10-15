@@ -89,6 +89,53 @@ const serverEnvSchema = z.object({
   UPSTASH_REDIS_REST_URL: z.url({ error: 'must be an absolute URL' }),
   UPSTASH_REDIS_REST_TOKEN: secret(1),
 
+  /* --- Billing ------------------------------------------------------------ */
+  /**
+   * Countries we are set up to sell into, as a comma-separated list of ISO
+   * 3166-1 alpha-2 codes.
+   *
+   * This has a default, unlike every secret above, because it is configuration
+   * rather than a credential: there is a correct, safe value for the launch
+   * market, and failing the boot over an unset list would buy nothing. The
+   * default fails *closed* — it admits one country rather than all of them.
+   *
+   * Widening it is a deliberate act with tax consequences: each new country
+   * brings a VAT regime and, past the EU distance-selling threshold, a filing
+   * obligation. See `euRevenueTotalMinor`.
+   */
+  SUPPORTED_BILLING_COUNTRIES: z
+    .string()
+    .default('CZ')
+    .transform((value, ctx) => {
+      const codes = value
+        .split(',')
+        .map((code) => code.trim().toUpperCase())
+        .filter((code) => code.length > 0)
+
+      if (codes.length === 0) {
+        ctx.addIssue({
+          code: 'custom',
+          message:
+            'must list at least one ISO 3166-1 alpha-2 country code, e.g. "CZ"',
+        })
+
+        return z.NEVER
+      }
+
+      const malformed = codes.filter((code) => !/^[A-Z]{2}$/.test(code))
+
+      if (malformed.length > 0) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `contains values that are not ISO 3166-1 alpha-2 codes: ${malformed.join(', ')}`,
+        })
+
+        return z.NEVER
+      }
+
+      return Object.freeze([...new Set(codes)]) as readonly string[]
+    }),
+
   /* --- NOT WIRED YET ------------------------------------------------------
    * Add these to the schema in the step that actually consumes them, so a
    * deploy never demands a secret the code cannot use.

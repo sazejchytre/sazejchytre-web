@@ -14,6 +14,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "node --test \"src/**/*.test.ts\"",
+    "test:db": "cross-env NODE_OPTIONS=\"--no-deprecation --import tsx\" node --env-file-if-exists=.env --test \"src/**/*.db-test.ts\"",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
@@ -24,7 +25,8 @@
     "migrate:create": "cross-env NODE_OPTIONS=--no-deprecation payload migrate:create",
     "migrate:status": "cross-env NODE_OPTIONS=--no-deprecation payload migrate:status",
     "generate:types": "cross-env NODE_OPTIONS=--no-deprecation payload generate:types",
-    "generate:importmap": "cross-env NODE_OPTIONS=--no-deprecation payload generate:importmap"
+    "generate:importmap": "cross-env NODE_OPTIONS=--no-deprecation payload generate:importmap",
+    "seed": "cross-env NODE_OPTIONS=--no-deprecation payload run src/seed/billing.ts"
   },
   "dependencies": {
     "@payloadcms/db-postgres": "3.90.2",
@@ -51,6 +53,7 @@
     "eslint-config-prettier": "^10.1.8",
     "prettier": "^3.9.6",
     "tailwindcss": "^4.3.3",
+    "tsx": "4.22.4",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.67.0"
   },
