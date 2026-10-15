@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+# A newer push to the same ref makes the in-flight run pointless.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: typecheck · lint · test · build · audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      # Build-time only. src/lib/env.ts validates every variable at module load
+      # and throws when one is missing, so `next build` cannot run without a
+      # complete environment.
+      #
+      # These are structurally valid but deliberately non-functional: nothing in
+      # the build connects to a database or to R2. Never put a real secret here
+      # — workflow env is visible to anyone who can read the repository.
+      NODE_ENV: production
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci?sslmode=disable
+      PAYLOAD_SECRET: ci-build-only-value-not-a-real-secret-000000
+      NEXT_PUBLIC_SERVER_URL: https://sazejchytre.cz
+      R2_ACCOUNT_ID: ci
+      R2_ACCESS_KEY_ID: ci
+      R2_SECRET_ACCESS_KEY: ci
+      R2_BUCKET: ci
+      R2_PUBLIC_BASE_URL: https://media.sazejchytre.cz
+      UPSTASH_REDIS_REST_URL: https://ci.upstash.invalid
+      UPSTASH_REDIS_REST_TOKEN: ci
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        # Version comes from the `packageManager` field in package.json.
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        # --frozen-lockfile makes an out-of-date pnpm-lock.yaml a CI failure
+        # rather than something CI silently repairs.
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Audit dependencies
+        # Fails on high or critical advisories.
+        #
+        # When this trips, fix it — upgrade the dependency, or add a
+        # `pnpm.overrides` entry pinning the patched transitive version. Do not
+        # add `|| true` and do not lower --audit-level; a muted audit step is
+        # indistinguishable from no audit step at all.
+        run: pnpm audit --audit-level high

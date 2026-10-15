@@ -1,0 +1,20 @@
+# Normalise line endings to LF everywhere, including in the working tree on
+# Windows. Prettier is configured with `endOfLine: "lf"`, so letting Git check
+# files out as CRLF would make `pnpm format:check` fail on Windows machines
+# while passing in CI — the worst kind of inconsistency.
+* text=auto eol=lf
+
+# Generated; keep diffs collapsed in review.
+pnpm-lock.yaml linguist-generated=true -diff
+src/payload-types.ts linguist-generated=true -diff
+src/app/(payload)/admin/importMap.js linguist-generated=true -diff
+
+# Binary assets — never diff or convert.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.avif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
