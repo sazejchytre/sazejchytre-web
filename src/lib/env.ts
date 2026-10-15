@@ -89,6 +89,45 @@ const serverEnvSchema = z.object({
   UPSTASH_REDIS_REST_URL: z.url({ error: 'must be an absolute URL' }),
   UPSTASH_REDIS_REST_TOKEN: secret(1),
 
+  /* --- Customer authentication (better-auth) ------------------------------ */
+  /**
+   * Signs better-auth session cookies and tokens.
+   *
+   * No default, like every other secret here: a predictable signing key means
+   * forgeable sessions, and a placeholder that "works" in production is worse
+   * than a failed boot. Rotating it invalidates every customer session.
+   *
+   * Distinct from PAYLOAD_SECRET on purpose. Payload's auth is for admins and
+   * better-auth's is for customers; sharing one key would mean a compromise of
+   * either system hands over both.
+   */
+  BETTER_AUTH_SECRET: secret(32),
+
+  /**
+   * Canonical origin better-auth builds links and cookie scopes from.
+   *
+   * Must match the origin the customer actually browses, or verification and
+   * reset links land on the wrong host and cookies are rejected.
+   */
+  BETTER_AUTH_URL: z
+    .url({ error: 'must be an absolute URL, e.g. https://sazejchytre.cz' })
+    .refine((value) => !value.endsWith('/'), {
+      error: 'must not have a trailing slash',
+    }),
+
+  /* --- Transactional email (Resend) --------------------------------------- */
+  /** API key for Resend. Sends verification, reset and security notices. */
+  RESEND_API_KEY: secret(1),
+  /**
+   * Envelope sender. Must be on a domain verified in Resend, or every send is
+   * rejected at the API rather than silently dropped.
+   */
+  RESEND_FROM_EMAIL: z
+    .string()
+    .refine((value) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value.trim()), {
+      error: 'must be a bare email address, e.g. no-reply@sazejchytre.cz',
+    }),
+
   /* --- Billing ------------------------------------------------------------ */
   /**
    * Countries we are set up to sell into, as a comma-separated list of ISO

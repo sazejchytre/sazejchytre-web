@@ -169,11 +169,11 @@ export const euRevenueTotalMinor = (
  *     from: the operator's registration status, the customer's country, and
  *     whether the customer supplied a validated VAT id (B2B reverse charge).
  *  3. Tax computed on the invoice at issue time and frozen into
- *     `subtotalMinor` / `taxMinor` / `totalMinor` / `taxRatePercent`. Invoices
- *     are immutable, so this is computed once and never recomputed — a later
- *     rate change must not alter an issued document.
- *  4. `taxRatePercent` becomes insufficient the moment a fractional rate is
- *     needed; it is an integer column. Switch to basis points then.
+ *     `subtotalMinor` / `taxMinor` / `totalMinor` / `taxRateBasisPoints`.
+ *     Invoices are immutable, so this is computed once and never recomputed —
+ *     a later rate change must not alter an issued document.
+ *  4. The rate is stored in BASIS POINTS (2100 = 21%), so a fractional rate
+ *     such as 12.5% is representable without a decimal column.
  *
  * None of that belongs in this file: this one only reports the position that
  * tells you when to start.

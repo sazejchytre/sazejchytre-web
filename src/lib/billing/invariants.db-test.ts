@@ -264,10 +264,39 @@ describe('webhook idempotency under concurrency', () => {
     // And only one row exists.
     const count = rows(
       await db().execute(
-        sql`SELECT count(*)::int AS n FROM "webhook_events" WHERE "external_event_id" = ${externalEventId}`,
+        sql`SELECT count(*)::int AS n FROM "webhook_events"
+            WHERE "provider" = 'STRIPE'::"enum_webhook_events_provider"
+              AND "external_event_id" = ${externalEventId}`,
       ),
     )[0]
     assert.equal(Number(count?.n), 1)
+  })
+
+  it('keys on (provider, externalEventId), not the id alone', async () => {
+    // The uniqueness grain. With only one provider configured today this
+    // cannot be exercised by inserting a second provider's row through
+    // `claimWebhookEvent`, so the index definition itself is asserted: a
+    // single-column unique index on external_event_id must NOT exist, or a
+    // second provider reusing an id would be silently swallowed as a
+    // duplicate and its event never processed.
+    const indexes = rows(
+      await db().execute(
+        sql`SELECT indexname, indexdef FROM pg_indexes
+            WHERE schemaname = 'public' AND tablename = 'webhook_events'
+              AND indexdef LIKE '%UNIQUE%'`,
+      ),
+    )
+
+    const defs = indexes.map((r) => String(r.indexdef))
+
+    assert.ok(
+      defs.some((d) => /\(provider, external_event_id\)/.test(d)),
+      `expected a unique index on the pair, got: ${JSON.stringify(defs)}`,
+    )
+    assert.ok(
+      !defs.some((d) => /\(external_event_id\)/.test(d)),
+      `external_event_id must not be unique on its own, got: ${JSON.stringify(defs)}`,
+    )
   })
 
   it('ten concurrent claims still yield exactly one winner', async () => {
@@ -584,7 +613,7 @@ describe('invoices are immutable', () => {
         taxMinor: 0,
         totalMinor: 34_900,
         taxTreatment: 'NONE_NOT_VAT_REGISTERED',
-        taxRatePercent: 0,
+        taxRateBasisPoints: 0,
         status: 'ISSUED',
         billingCountry: 'CZ',
         ipCountry: 'CZ',
@@ -638,7 +667,7 @@ describe('invoices are immutable', () => {
             taxMinor: 0,
             totalMinor: 40_000,
             taxTreatment: 'NONE_NOT_VAT_REGISTERED',
-            taxRatePercent: 0,
+            taxRateBasisPoints: 0,
             status: 'ISSUED',
             operatorSnapshot: {
               legalName: 'X',
@@ -688,7 +717,7 @@ describe('invoices are immutable', () => {
             taxMinor: 4_900,
             totalMinor: 34_900,
             taxTreatment: 'NONE_NOT_VAT_REGISTERED',
-            taxRatePercent: 21,
+            taxRateBasisPoints: 2100,
             status: 'ISSUED',
             operatorSnapshot: {
               legalName: 'X',

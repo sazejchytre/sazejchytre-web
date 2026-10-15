@@ -81,6 +81,7 @@ export interface Config {
     'invoice-number-counters': InvoiceNumberCounter;
     'consent-records': ConsentRecord;
     'webhook-events': WebhookEvent;
+    'auth-lockouts': AuthLockout;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -102,6 +103,7 @@ export interface Config {
     'invoice-number-counters': InvoiceNumberCountersSelect<false> | InvoiceNumberCountersSelect<true>;
     'consent-records': ConsentRecordsSelect<false> | ConsentRecordsSelect<true>;
     'webhook-events': WebhookEventsSelect<false> | WebhookEventsSelect<true>;
+    'auth-lockouts': AuthLockoutsSelect<false> | AuthLockoutsSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -493,9 +495,9 @@ export interface Invoice {
   numberSequence: number;
   customer: number | Customer;
   /**
-   * The subscription being billed. Every invoice in this model originates from one.
+   * The subscription being billed, when there is one. Null for a one-off charge.
    */
-  subscription: number | Subscription;
+  subscription?: (number | null) | Subscription;
   /**
    * Date of issue (datum vystavení).
    */
@@ -528,9 +530,9 @@ export interface Invoice {
     | 'EU_REVERSE_CHARGE_B2B'
     | 'OUTSIDE_EU_NOT_SUBJECT';
   /**
-   * Whole-percent rate applied, frozen at issue. Integer column: a fractional rate would need basis points instead.
+   * Tax rate in BASIS POINTS, frozen at issue. 0 = 0%, 2100 = 21%, 1250 = 12.5%. Basis points rather than whole percent so a fractional rate is representable without a decimal column.
    */
-  taxRatePercent: number;
+  taxRateBasisPoints: number;
   /**
    * Object key of the rendered PDF in R2. Null until the PDF exists.
    */
@@ -691,7 +693,7 @@ export interface WebhookEvent {
   id: number;
   provider: 'STRIPE';
   /**
-   * The provider's event id. UNIQUE — this is what makes processing idempotent.
+   * The provider's event id. Unique together with `provider` — that pair is what makes processing idempotent.
    */
   externalEventId: string;
   /**
@@ -719,6 +721,38 @@ export interface WebhookEvent {
     | number
     | boolean
     | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Historie dočasných uzamčení účtu. Vynucení běží v Redisu; tohle je jen záznam pro podporu.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "auth-lockouts".
+ */
+export interface AuthLockout {
+  id: number;
+  /**
+   * Adresa, na kterou se útočník nebo uživatel pokoušel přihlásit. Může jít i o adresu bez účtu.
+   */
+  identifier: string;
+  /**
+   * Počet neúspěšných pokusů v řadě, který uzamčení spustil.
+   */
+  failures: number;
+  /**
+   * Délka uzamčení v sekundách.
+   */
+  lockSeconds: number;
+  /**
+   * Do kdy uzamčení platilo.
+   */
+  lockedUntil: string;
+  /**
+   * Země pokusu podle edge. Celou IP adresu neukládáme ani tady.
+   */
+  ipCountry?: string | null;
+  reason: 'SIGN_IN_FAILURES' | 'TOTP_FAILURES';
   updatedAt: string;
   createdAt: string;
 }
@@ -801,6 +835,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'webhook-events';
         value: number | WebhookEvent;
+      } | null)
+    | ({
+        relationTo: 'auth-lockouts';
+        value: number | AuthLockout;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -1008,7 +1046,7 @@ export interface InvoicesSelect<T extends boolean = true> {
   taxMinor?: T;
   totalMinor?: T;
   taxTreatment?: T;
-  taxRatePercent?: T;
+  taxRateBasisPoints?: T;
   pdfStorageKey?: T;
   status?: T;
   billingCountry?: T;
@@ -1094,6 +1132,20 @@ export interface WebhookEventsSelect<T extends boolean = true> {
   processedAt?: T;
   processingError?: T;
   rawPayload?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "auth-lockouts_select".
+ */
+export interface AuthLockoutsSelect<T extends boolean = true> {
+  identifier?: T;
+  failures?: T;
+  lockSeconds?: T;
+  lockedUntil?: T;
+  ipCountry?: T;
+  reason?: T;
   updatedAt?: T;
   createdAt?: T;
 }

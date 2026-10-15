@@ -1,10 +1,10 @@
 /**
  * Postgres schema overrides for the billing domain.
  *
- * Two things Payload's field types cannot express on their own are applied
- * here, through the adapter's `afterSchemaInit`. Both end up in the generated
- * migration, so the schema stays single-source — nothing is hand-patched into
- * SQL after the fact.
+ * Three things Payload's field types cannot express on their own are applied
+ * here, through the adapter's `afterSchemaInit`. All of them end up in the
+ * generated migration, so the schema stays single-source — nothing is
+ * hand-patched into SQL after the fact.
  *
  * ──────────────────────────────────────────────────────────────────────────
  * 1. MONEY IS AN INTEGER COLUMN
@@ -27,7 +27,8 @@
  * surfaces it as a string or a BigInt, neither of which Payload's number field
  * round-trips cleanly.
  *
- * Non-money integers (`sortOrder`, the year/sequence pair, `taxRatePercent`)
+ * Non-money integers (`sortOrder`, the year/sequence pair,
+ * `taxRateBasisPoints`)
  * are converted too: they are counts, and a decimal column for a count invites
  * the same class of bug.
  *
@@ -49,6 +50,25 @@
  * writes, against a direct psql session, and against any future code path that
  * does not go through the Payload hook. The hook in `Prices.ts` only turns the
  * resulting error into a readable sentence.
+ *
+ * ──────────────────────────────────────────────────────────────────────────
+ * 3. CHECK CONSTRAINTS FOR THE ARITHMETIC AND SHAPE INVARIANTS
+ *
+ * These were hook-only until now. A hook protects whatever goes through
+ * Payload; it does nothing about a migration, a support script, a `psql`
+ * session or a future service that writes the table directly. For invariants
+ * that are pure functions of one row, a CHECK says the same thing to everyone
+ * who can reach the database.
+ *
+ * The hooks are KEPT alongside them. The division of labour is:
+ *   - the CHECK is the guarantee,
+ *   - the hook is the error message. A raw constraint violation tells the
+ *     caller "23514 invoices_totals_add_up_check"; the hook tells them which
+ *     two numbers disagree and by how much.
+ *
+ * Only row-local invariants are here. Immutability, append-only and the
+ * currency lock all need to compare against another row or a previous version,
+ * which a CHECK cannot do — those stay hooks and are still documented as such.
  */
 // Imported through Payload's drizzle proxy rather than from `drizzle-orm`
 // directly. drizzle-orm is a transitive dependency, so a direct import is not
@@ -58,7 +78,11 @@
 // the schema they are patched into.
 import type { PostgresAdapterArgs } from '@payloadcms/db-postgres'
 import { sql } from '@payloadcms/db-postgres/drizzle'
-import { integer, uniqueIndex } from '@payloadcms/db-postgres/drizzle/pg-core'
+import {
+  check,
+  integer,
+  uniqueIndex,
+} from '@payloadcms/db-postgres/drizzle/pg-core'
 
 /**
  * The adapter's hook type, reached through `PostgresAdapterArgs`.
@@ -107,7 +131,11 @@ const INTEGER_COLUMNS: Record<
     subtotalMinor: { column: 'subtotal_minor', notNull: true },
     taxMinor: { column: 'tax_minor', notNull: true, default: 0 },
     totalMinor: { column: 'total_minor', notNull: true },
-    taxRatePercent: { column: 'tax_rate_percent', notNull: true, default: 0 },
+    taxRateBasisPoints: {
+      column: 'tax_rate_basis_points',
+      notNull: true,
+      default: 0,
+    },
   },
   credit_notes: {
     numberYear: { column: 'number_year', notNull: true },
@@ -117,6 +145,11 @@ const INTEGER_COLUMNS: Record<
   invoice_number_counters: {
     year: { column: 'year', notNull: true },
     lastNumber: { column: 'last_number', notNull: true, default: 0 },
+  },
+  // Not billing, but the same rule: a count has no business being a decimal.
+  auth_lockouts: {
+    failures: { column: 'failures', notNull: true },
+    lockSeconds: { column: 'lock_seconds', notNull: true },
   },
 }
 
@@ -185,6 +218,69 @@ export const applyBillingSchemaOverrides: SchemaHook = (hookArgs) => {
         // Partial: superseded prices keep their (plan, currency, interval)
         // triple, so only live rows are constrained.
         .where(sql`${table.active} = true`),
+    }),
+  })
+
+  /* --- 3. row-local invariants as CHECK constraints ---------------------- */
+
+  // Invoice arithmetic. An invoice whose parts do not sum to its total is a
+  // document that contradicts itself, and it is the kind of error that is only
+  // noticed by an accountant months later.
+  extendTable({
+    table: assertTable(schema, 'invoices'),
+    extraConfig: (table) => ({
+      invoiceTotalsAddUp: check(
+        'invoices_totals_add_up',
+        sql`${table.subtotalMinor} + ${table.taxMinor} = ${table.totalMinor}`,
+      ),
+      // The operator is not VAT registered, so a non-zero tax under this
+      // treatment would be an invoice claiming to charge VAT that cannot
+      // legally be charged.
+      invoiceNoVatWhenNotRegistered: check(
+        'invoices_no_vat_when_not_registered',
+        sql`${table.taxTreatment} <> 'NONE_NOT_VAT_REGISTERED'
+            OR (${table.taxMinor} = 0 AND ${table.taxRateBasisPoints} = 0)`,
+      ),
+    }),
+  })
+
+  // A grant must name exactly one target. `<>` on two IS NULL tests is XOR:
+  // true only when precisely one side is null. Neither grants nothing; both
+  // makes it ambiguous which applies.
+  extendTable({
+    table: assertTable(schema, 'entitlement_grants'),
+    extraConfig: (table) => ({
+      grantExactlyOneTarget: check(
+        'entitlement_grants_exactly_one_target',
+        sql`(${table.featureKey} IS NULL) <> (${table.plan} IS NULL)`,
+      ),
+      // Window sanity. NULL ends_at means open-ended and is allowed; a CHECK
+      // evaluating to NULL passes, which is the behaviour we want here.
+      grantWindowOrdered: check(
+        'entitlement_grants_window_ordered',
+        sql`${table.endsAt} IS NULL OR ${table.endsAt} >= ${table.startsAt}`,
+      ),
+    }),
+  })
+
+  // The same window rule wherever a start/end pair exists.
+  extendTable({
+    table: assertTable(schema, 'subscriptions'),
+    extraConfig: (table) => ({
+      subscriptionPeriodOrdered: check(
+        'subscriptions_period_ordered',
+        sql`${table.currentPeriodEnd} >= ${table.currentPeriodStart}`,
+      ),
+    }),
+  })
+
+  extendTable({
+    table: assertTable(schema, 'consent_records'),
+    extraConfig: (table) => ({
+      consentWithdrawalOrdered: check(
+        'consent_records_withdrawal_ordered',
+        sql`${table.withdrawnAt} IS NULL OR ${table.withdrawnAt} >= ${table.grantedAt}`,
+      ),
     }),
   })
 

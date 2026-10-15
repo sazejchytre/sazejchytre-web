@@ -99,9 +99,9 @@ const enforceTaxTreatmentConsistency: CollectionBeforeValidateHook = ({
     return data
   }
 
-  if (merged.taxMinor !== 0 || merged.taxRatePercent !== 0) {
+  if (merged.taxMinor !== 0 || merged.taxRateBasisPoints !== 0) {
     throw new APIError(
-      'taxTreatment NONE_NOT_VAT_REGISTERED requires taxMinor = 0 and taxRatePercent = 0. ' +
+      'taxTreatment NONE_NOT_VAT_REGISTERED requires taxMinor = 0 and taxRateBasisPoints = 0. ' +
         'The operator is not VAT registered and cannot charge VAT.',
       400,
     )
@@ -184,11 +184,15 @@ export const Invoices: CollectionConfig = {
       name: 'subscription',
       type: 'relationship',
       relationTo: 'subscriptions',
-      required: true,
+      // Nullable: a one-off charge (a single analysis, a manual correction)
+      // has no subscription behind it. Every caller must handle null rather
+      // than assert it away — an invoice with no subscription is a valid
+      // document, not a broken one.
+      required: false,
       hasMany: false,
       admin: {
         description:
-          'The subscription being billed. Every invoice in this model originates from one.',
+          'The subscription being billed, when there is one. Null for a one-off charge.',
       },
     },
     {
@@ -261,20 +265,21 @@ export const Invoices: CollectionConfig = {
       },
     },
     {
-      name: 'taxRatePercent',
+      name: 'taxRateBasisPoints',
       type: 'number',
       required: true,
       defaultValue: 0,
       admin: {
         description:
-          'Whole-percent rate applied, frozen at issue. Integer column: a fractional rate would need basis points instead.',
+          'Tax rate in BASIS POINTS, frozen at issue. 0 = 0%, 2100 = 21%, 1250 = 12.5%. ' +
+          'Basis points rather than whole percent so a fractional rate is representable without a decimal column.',
       },
       validate: (value: unknown) =>
         Number.isInteger(value) &&
         (value as number) >= 0 &&
-        (value as number) <= 100
+        (value as number) <= 10_000
           ? true
-          : 'taxRatePercent must be an integer between 0 and 100.',
+          : 'taxRateBasisPoints must be an integer between 0 and 10000 (0% to 100%).',
     },
     {
       name: 'pdfStorageKey',

@@ -7,6 +7,7 @@ import { s3Storage } from '@payloadcms/storage-s3'
 import { buildConfig } from 'payload'
 import sharp from 'sharp'
 
+import { AuthLockouts } from '@/collections/auth/AuthLockouts'
 import { BillingProviderRefs } from '@/collections/billing/BillingProviderRefs'
 import { ConsentRecords } from '@/collections/billing/ConsentRecords'
 import { CreditNotes } from '@/collections/billing/CreditNotes'
@@ -78,6 +79,10 @@ export default buildConfig({
     InvoiceNumberCounters,
     ConsentRecords,
     WebhookEvents,
+
+    // Customer-auth support records. better-auth owns the `auth` schema; this
+    // is our own durable history of lockouts, in `public`.
+    AuthLockouts,
   ],
 
   db: postgresAdapter({
