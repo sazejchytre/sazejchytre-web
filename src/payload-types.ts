@@ -78,6 +78,7 @@ export interface Config {
     'entitlement-grants': EntitlementGrant;
     invoices: Invoice;
     'credit-notes': CreditNote;
+    disputes: Dispute;
     'invoice-number-counters': InvoiceNumberCounter;
     'consent-records': ConsentRecord;
     'webhook-events': WebhookEvent;
@@ -106,6 +107,7 @@ export interface Config {
     'entitlement-grants': EntitlementGrantsSelect<false> | EntitlementGrantsSelect<true>;
     invoices: InvoicesSelect<false> | InvoicesSelect<true>;
     'credit-notes': CreditNotesSelect<false> | CreditNotesSelect<true>;
+    disputes: DisputesSelect<false> | DisputesSelect<true>;
     'invoice-number-counters': InvoiceNumberCountersSelect<false> | InvoiceNumberCountersSelect<true>;
     'consent-records': ConsentRecordsSelect<false> | ConsentRecordsSelect<true>;
     'webhook-events': WebhookEventsSelect<false> | WebhookEventsSelect<true>;
@@ -396,6 +398,10 @@ export interface Subscription {
    * The provider's subscription id. Unique per provider — see the compound index.
    */
   providerSubscriptionId: string;
+  /**
+   * Provider-side time the fields above were last known true. Webhooks arrive out of order; an event older than this is recorded but not applied. See src/lib/billing/ordering.ts.
+   */
+  providerUpdatedAt?: string | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -417,7 +423,10 @@ export interface SubscriptionEvent {
     | 'CANCELED'
     | 'EXPIRED'
     | 'PLAN_CHANGED'
-    | 'PROVIDER_SYNC';
+    | 'PROVIDER_SYNC'
+    | 'REFUNDED'
+    | 'DISPUTE_OPENED'
+    | 'DISPUTE_RESOLVED';
   /**
    * When the event happened, as reported by its source — not when we stored it. `createdAt` is the latter.
    */
@@ -550,6 +559,10 @@ export interface Invoice {
    */
   pdfStorageKey?: string | null;
   /**
+   * The provider charge or payment-intent id that settled this invoice. The only way a later refund or chargeback can be traced back to the document it reverses — a dispute webhook names a charge, not an invoice.
+   */
+  providerPaymentId?: string | null;
+  /**
    * The only mutable field. CREDITED means a credit note corrects this invoice in full.
    */
   status: 'ISSUED' | 'CREDITED';
@@ -632,6 +645,10 @@ export interface CreditNote {
   reason: string;
   issuedAt: string;
   /**
+   * The provider refund this records, when it came from one. Unique, which is what makes the refund webhook idempotent by itself rather than only through the event claim: a replay cannot produce a second credit note. Null for a credit note issued by hand.
+   */
+  providerRefundId?: string | null;
+  /**
    * Copied from the invoice so cross-border totals can net credits without a join.
    */
   billingCountry?: string | null;
@@ -639,6 +656,70 @@ export interface CreditNote {
    * Object key of the rendered PDF in R2.
    */
   pdfStorageKey?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Chargebacks. An OPEN or UNDER_REVIEW dispute suspends the customer’s access immediately.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "disputes".
+ */
+export interface Dispute {
+  id: number;
+  /**
+   * Whose access this suspends. Required: a dispute we cannot attribute is one we cannot act on.
+   */
+  customer: number | Customer;
+  /**
+   * The subscription the disputed charge belongs to, when it can be identified.
+   */
+  subscription?: (number | null) | Subscription;
+  /**
+   * The invoice the disputed charge paid, when it can be identified. Never modified by the dispute.
+   */
+  invoice?: (number | null) | Invoice;
+  /**
+   * OPEN and UNDER_REVIEW suspend access. WON restores it; LOST leaves it withdrawn.
+   */
+  status: 'OPEN' | 'UNDER_REVIEW' | 'WON' | 'LOST';
+  /**
+   * The issuer's stated reason, as the provider reported it. Kept verbatim because it decides what evidence is worth submitting.
+   */
+  reason: string;
+  /**
+   * Amount under dispute, in minor units of `currency`. Integer — see src/lib/billing/schema.ts.
+   */
+  amountMinor: number;
+  /**
+   * Carried on the row, like every other monetary record here. No implicit currency.
+   */
+  currency: 'CZK' | 'EUR';
+  /**
+   * When the issuer opened the dispute, as reported by the provider — not when we stored it.
+   */
+  openedAt: string;
+  /**
+   * The provider’s deadline for submitting evidence. Past this, the dispute is lost by default.
+   */
+  evidenceDueAt?: string | null;
+  /**
+   * When the dispute closed. Access is restored from this instant if the outcome was WON.
+   */
+  resolvedAt?: string | null;
+  provider: 'STRIPE';
+  /**
+   * The provider’s dispute id. Unique per provider — see the compound index.
+   */
+  providerDisputeId: string;
+  /**
+   * The charge being clawed back. The link back to the payment and, through it, to the invoice.
+   */
+  providerChargeId: string;
+  /**
+   * What we submitted and why. Free text, editable — this is the working record, not the audit trail.
+   */
+  notes?: string | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -1141,6 +1222,10 @@ export interface PayloadLockedDocument {
         value: number | CreditNote;
       } | null)
     | ({
+        relationTo: 'disputes';
+        value: number | Dispute;
+      } | null)
+    | ({
         relationTo: 'invoice-number-counters';
         value: number | InvoiceNumberCounter;
       } | null)
@@ -1337,6 +1422,7 @@ export interface SubscriptionsSelect<T extends boolean = true> {
   endedAt?: T;
   provider?: T;
   providerSubscriptionId?: T;
+  providerUpdatedAt?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -1388,6 +1474,7 @@ export interface InvoicesSelect<T extends boolean = true> {
   taxTreatment?: T;
   taxRateBasisPoints?: T;
   pdfStorageKey?: T;
+  providerPaymentId?: T;
   status?: T;
   billingCountry?: T;
   ipCountry?: T;
@@ -1428,8 +1515,31 @@ export interface CreditNotesSelect<T extends boolean = true> {
   amountMinor?: T;
   reason?: T;
   issuedAt?: T;
+  providerRefundId?: T;
   billingCountry?: T;
   pdfStorageKey?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "disputes_select".
+ */
+export interface DisputesSelect<T extends boolean = true> {
+  customer?: T;
+  subscription?: T;
+  invoice?: T;
+  status?: T;
+  reason?: T;
+  amountMinor?: T;
+  currency?: T;
+  openedAt?: T;
+  evidenceDueAt?: T;
+  resolvedAt?: T;
+  provider?: T;
+  providerDisputeId?: T;
+  providerChargeId?: T;
+  notes?: T;
   updatedAt?: T;
   createdAt?: T;
 }

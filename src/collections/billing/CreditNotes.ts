@@ -125,6 +125,15 @@ export const CreditNotes: CollectionConfig = {
       index: true,
     },
     {
+      name: 'providerRefundId',
+      type: 'text',
+      unique: true,
+      admin: {
+        description:
+          'The provider refund this records, when it came from one. Unique, which is what makes the refund webhook idempotent by itself rather than only through the event claim: a replay cannot produce a second credit note. Null for a credit note issued by hand.',
+      },
+    },
+    {
       name: 'billingCountry',
       type: 'text',
       maxLength: 2,

@@ -17,6 +17,7 @@ import { Tips } from '@/collections/tips/Tips'
 import { BillingProviderRefs } from '@/collections/billing/BillingProviderRefs'
 import { ConsentRecords } from '@/collections/billing/ConsentRecords'
 import { CreditNotes } from '@/collections/billing/CreditNotes'
+import { Disputes } from '@/collections/billing/Disputes'
 import { Customers } from '@/collections/billing/Customers'
 import { EntitlementGrants } from '@/collections/billing/EntitlementGrants'
 import { InvoiceNumberCounters } from '@/collections/billing/InvoiceNumberCounters'
@@ -82,6 +83,7 @@ export default buildConfig({
     EntitlementGrants,
     Invoices,
     CreditNotes,
+    Disputes,
     InvoiceNumberCounters,
     ConsentRecords,
     WebhookEvents,

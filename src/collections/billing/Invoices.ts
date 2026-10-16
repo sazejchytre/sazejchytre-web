@@ -290,6 +290,15 @@ export const Invoices: CollectionConfig = {
       },
     },
     {
+      name: 'providerPaymentId',
+      type: 'text',
+      index: true,
+      admin: {
+        description:
+          'The provider charge or payment-intent id that settled this invoice. The only way a later refund or chargeback can be traced back to the document it reverses — a dispute webhook names a charge, not an invoice.',
+      },
+    },
+    {
       name: 'status',
       type: 'select',
       options: toOptions(INVOICE_STATUSES),

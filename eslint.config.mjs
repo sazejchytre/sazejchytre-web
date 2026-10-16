@@ -71,6 +71,11 @@ export default tseslint.config(
       'src/collections/**/*.ts',
       'src/app/**/route.ts',
       'next.config.ts',
+      // Integration suites (`*.db-test.ts`, `*.stripe-test.ts`). The rule
+      // exists to keep secrets out of client bundles; these are never
+      // bundled, and reading the validated `env` is better than reaching
+      // around it to raw `process.env`.
+      'src/**/*-test.ts',
     ],
     rules: {
       'no-restricted-imports': 'off',

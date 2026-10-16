@@ -66,6 +66,65 @@ const oddsValidator =
     return true
   }
 
+/**
+ * Warn — loudly but harmlessly — about a market we do not recognise.
+ *
+ * `market` is free text on purpose: new markets appear constantly and an enum
+ * would turn "we can price a new market" into a migration that has to ship
+ * before the first tip can use it.
+ *
+ * The cost of free text is a typo. `OVER_UNDR` stores happily and then splits
+ * the per-market reporting in two, with no error anywhere — the worst kind of
+ * defect, because nothing looks wrong until somebody wonders why the numbers
+ * do not add up.
+ *
+ * So an unrecognised value is LOGGED, with the offending string and the row it
+ * came from, and the write proceeds. Blocking would reintroduce the enum's
+ * problem by the back door: a genuinely new market would be unpublishable
+ * until somebody edited this list.
+ */
+const warnOnUnknownMarket: CollectionAfterChangeHook = ({
+  doc,
+  operation,
+  previousDoc,
+  req,
+}) => {
+  if (operation !== 'create' && operation !== 'update') {
+    return doc
+  }
+
+  const market = typeof doc.market === 'string' ? doc.market : null
+
+  if (!market || (KNOWN_MARKETS as readonly string[]).includes(market)) {
+    return doc
+  }
+
+  // On update, only complain when the value actually changed — otherwise every
+  // settlement of a tip on an unknown market re-logs the same warning.
+  if (operation === 'update' && previousDoc?.market === market) {
+    return doc
+  }
+
+  req.payload.logger.warn(
+    {
+      scope: 'tips',
+      event: 'selection.unknown_market',
+      market,
+      selectionId: doc.id,
+      tipId:
+        typeof doc.tip === 'object' && doc.tip !== null
+          ? (doc.tip as { id: unknown }).id
+          : doc.tip,
+      knownMarkets: KNOWN_MARKETS,
+    },
+    `Unknown market "${market}" on tip selection ${String(doc.id)}. ` +
+      'Stored as given. If this is a real new market, add it to KNOWN_MARKETS; ' +
+      'if it is a typo, it will silently split the per-market reporting.',
+  )
+
+  return doc
+}
+
 /** The minimum price must be takeable at the published price. */
 const enforceMinimumOdds: CollectionBeforeValidateHook = ({
   data,
@@ -340,7 +399,7 @@ export const TipSelections: CollectionConfig = {
       blockSelectionAddedToPublishedTip,
       enforceMinimumOdds,
     ],
-    afterChange: [maybeSettleParentTip],
+    afterChange: [maybeSettleParentTip, warnOnUnknownMarket],
     beforeDelete: [blockSelectionRemovedFromPublishedTip],
   },
   labels: { singular: 'Sázka', plural: 'Sázky' },

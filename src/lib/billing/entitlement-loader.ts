@@ -15,11 +15,17 @@ import type { Payload, PayloadRequest } from 'payload'
 
 import type {
   CustomerEntitlementState,
+  EntitlementSuspensionSnapshot,
   GrantEntitlementSnapshot,
   SubscriptionEntitlementSnapshot,
 } from '../entitlements.ts'
 import { resolveEntitlements } from '../entitlements.ts'
-import type { FeatureKey, SubscriptionStatus } from './constants.ts'
+import {
+  SUSPENDING_DISPUTE_STATUSES,
+  type DisputeStatus,
+  type FeatureKey,
+  type SubscriptionStatus,
+} from './constants.ts'
 
 /** A relationship arrives either as an id or as a populated document. */
 const planFeaturesOf = (plan: unknown): readonly FeatureKey[] => {
@@ -53,7 +59,7 @@ export const loadCustomerEntitlementState = async ({
   // thing from an absent key, and Payload's options type only allows absence.
   const reqOption = req ? { req } : {}
 
-  const [subscriptions, grants] = await Promise.all([
+  const [subscriptions, grants, disputes] = await Promise.all([
     payload.find({
       collection: 'subscriptions',
       // depth 1 populates `plan`, which carries the feature list.
@@ -67,6 +73,18 @@ export const loadCustomerEntitlementState = async ({
     payload.find({
       collection: 'entitlement-grants',
       depth: 1,
+      limit: 0,
+      pagination: false,
+      overrideAccess: true,
+      ...reqOption,
+      where: { customer: { equals: customerId } },
+    }),
+    // Chargebacks. Loaded unfiltered for the same reason as the other two:
+    // which statuses suspend access is a rule, and a rule expressed in SQL
+    // here as well as in code is a rule with two versions.
+    payload.find({
+      collection: 'disputes',
+      depth: 0,
       limit: 0,
       pagination: false,
       overrideAccess: true,
@@ -94,7 +112,28 @@ export const loadCustomerEntitlementState = async ({
     revokedAt: doc.revokedAt ?? null,
   }))
 
-  return { subscriptions: subscriptionSnapshots, grants: grantSnapshots }
+  const suspensionSnapshots: EntitlementSuspensionSnapshot[] = disputes.docs
+    .filter((doc) =>
+      SUSPENDING_DISPUTE_STATUSES.includes(doc.status as DisputeStatus),
+    )
+    .map((doc) => ({
+      reason: `dispute:${doc.providerDisputeId}:${doc.reason}`,
+      // From when the issuer opened it, not from when we heard about it. A
+      // dispute webhook can arrive hours late, and access should not have
+      // been granted in between.
+      startsAt: doc.openedAt,
+      // Still open, so open-ended. A resolved dispute is filtered out above
+      // rather than given an end date: WON restores access and LOST leaves it
+      // withdrawn through the subscription's own status, which is the
+      // provider's decision to make, not this suspension's.
+      endsAt: null,
+    }))
+
+  return {
+    subscriptions: subscriptionSnapshots,
+    grants: grantSnapshots,
+    suspensions: suspensionSnapshots,
+  }
 }
 
 export type GetCustomerEntitlementsArgs = LoadEntitlementStateArgs & {

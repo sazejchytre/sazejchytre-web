@@ -65,6 +65,25 @@ crashes the boot with a list of what is wrong — see `src/lib/env.ts`.
 | `pnpm seed:tips:purge`    | Delete every row marked `seed-step-3b`       |
 | `pnpm sweep:lockouts`     | Delete `auth_lockouts` past 90 days          |
 
+Payment-layer scripts:
+
+| Script                         | Purpose                                                   |
+| ------------------------------ | --------------------------------------------------------- |
+| `pnpm sync:prices`             | Dry run: what would change in Stripe products and prices  |
+| `pnpm sync:prices:apply`       | Push `Plans` and `Prices` into Stripe                     |
+| `pnpm reconcile:subscriptions` | Report where our subscriptions differ from the provider's |
+| `pnpm test:stripe`             | Run the port contract against the real Stripe test API    |
+
+`pnpm test:stripe` needs a **test** key in `.env` and prices already synced; it
+refuses outright to run against a live key, because it charges cards and issues
+refunds. It is deliberately not part of `pnpm test` (no network or credentials
+there) or `pnpm test:db` (which must not depend on a third party being up).
+
+`sync:prices` refuses to run against a live key unless `CONFIRM_LIVE=1` is
+set, and refuses to change the amount of a price that already has
+subscriptions attached. `reconcile:subscriptions` never writes — see
+[Payments](#payments).
+
 ## Layout
 
 ```
@@ -142,6 +161,101 @@ Rolling back the schema is deliberately awkward: the `down` of the
 `create_auth_schema` migration uses `DROP SCHEMA … RESTRICT`, so it fails
 rather than cascading away every customer account. Roll back better-auth
 first if that is genuinely what you want.
+
+## Payments
+
+Nothing outside `src/lib/billing/` imports a payment SDK. Everything goes
+through a provider-agnostic port, and a second provider is one adapter file
+plus one line in the registry.
+
+| File                           | Responsibility                                          |
+| ------------------------------ | ------------------------------------------------------- |
+| `billing/port.ts`              | The interface. Our domain types only, no provider types |
+| `billing/registry.ts`          | Resolves the active adapter from `BILLING_PROVIDER`     |
+| `billing/fake-adapter.ts`      | In-memory provider, for tests and local work            |
+| `billing/port-contract.ts`     | The contract, as a suite any adapter can be run against |
+| `billing/lifecycle.ts`         | Upgrade/downgrade/cancellation policy                   |
+| `billing/ordering.ts`          | Whether an event is new enough to act on                |
+| `billing/redact.ts`            | Making payment data safe to log                         |
+| `billing/stripe/translate.ts`  | Stripe objects → our types. Pure                        |
+| `billing/stripe/status.ts`     | The status mapping table                                |
+| `billing/stripe/webhook.ts`    | What we do when Stripe tells us something               |
+| `app/webhooks/stripe/route.ts` | Verify, claim, handle, acknowledge                      |
+
+### Every operation returns a result
+
+A declined card is an ordinary outcome of asking for money, not an
+exceptional one, so it comes back as a typed `BillingFailure` with a Czech
+message. Exceptions are reserved for two things a caller cannot handle:
+`BillingConfigurationError` (we are misconfigured) and
+`BillingProviderUnreachableError` (the provider is down). Telling a customer
+their card was declined when Stripe is simply unreachable is a lie that costs
+the sale and generates a support ticket.
+
+### An event type is not a receipt
+
+`invoice.paid` does not mean an invoice was paid; it means an object changed
+and the object carries the real state. Every handler that could grant
+anything re-reads the object's own `status` / `payment_status` /
+`amount_remaining` / `refunded` field first. Events are redelivered, replayed
+from the dashboard and sent for objects that were later voided — trusting the
+event name is how a subscription service serves paid content to somebody whose
+payment never completed.
+
+### Out-of-order events
+
+Stripe makes no ordering guarantee. Every subscription row carries
+`providerUpdatedAt`: the provider-side instant its contents were last known
+true. An event older than that is recorded and **not applied**. A second guard
+refuses to move a subscription out of `CANCELED` or `EXPIRED` whatever the
+timestamp says, because Stripe never un-cancels and cancellation commonly
+shares a second with a final `updated` event.
+
+### Stripe API version
+
+Pinned in `billing/stripe/client.ts`, never left to the account default — a
+dashboard setting someone else can change must not reshape every object we
+parse. Two things moved in `2026-09-30.endive` and fail **silently** if read
+from the old place:
+
+- `subscription.current_period_{start,end}` → on each subscription **item**
+- `invoice.subscription` → `invoice.parent.subscription_details.subscription`
+- `invoice.payment_intent` → `invoice.payments[].payment` (and the Payment
+  Element secret is `invoice.confirmation_secret.client_secret`)
+
+The pinned literal is typed as the SDK's own latest-version type, so bumping
+the `stripe` package without revisiting that file is a type error.
+
+### Disputes
+
+A chargeback is a `disputes` row in our own admin, not just a line in Stripe's
+dashboard — it has a hard evidence deadline and somebody here has to act on
+it. An `OPEN` or `UNDER_REVIEW` dispute suspends **all** of that customer's
+entitlements immediately, overriding subscriptions and manual grants alike.
+The subscription itself stays `ACTIVE` throughout, which is exactly why the
+suspension cannot be inferred from it.
+
+`charge.dispute.closed` resolves the row, so a dispute decided in our favour
+restores access without anybody remembering to do it. A dispute we lose leaves
+access withdrawn through the subscription's own status.
+
+### Refunds
+
+A refund writes a `credit_notes` row against the invoice. **The invoice is
+never modified** — only its `status` marker moves to `CREDITED`. An issued
+invoice has been sent and may already be in somebody's accounting, and in
+Czech VAT terms a correction is a separate document, not an edit.
+`credit_notes.provider_refund_id` is unique, so a redelivered refund event
+cannot produce a second credit note.
+
+### Logging
+
+Never a card number, a client secret, a webhook secret or a raw event
+payload. `redactForLog` is pattern-based rather than key-based, so a secret
+interpolated into a message or a URL is caught too. Card-number detection
+uses a Luhn check, because a 13-digit epoch-millisecond timestamp is exactly
+as long as a Visa PAN and redacting every one of them would destroy the
+timestamps that make out-of-order handling debuggable.
 
 ## Tip immutability
 
@@ -248,5 +362,21 @@ Nothing in the application code disables a trigger.
   ship until they are replaced and `OPERATOR_DETAILS_CONFIRMED` is `true`.
 - Responsible-gambling disclaimer wording is pending legal review.
 - Upstash Redis is validated at boot but not consumed.
+- **No checkout UI.** The Stripe adapter returns a client secret for the
+  Payment Element; the page that confirms it is step 5.
+- **No invoice issuing or PDF.** `invoices` rows are modelled and immutable,
+  but nothing creates one from a paid Stripe invoice yet (step 5b). Until it
+  does, a refund or chargeback can only be tied back to a document if
+  `invoices.providerPaymentId` has been filled in, and the webhook handler
+  reports `NO_LOCAL_INVOICE_FOR_CHARGE` / `DISPUTE_NOT_ATTRIBUTABLE` rather
+  than guessing.
+- **The product/price sync and the Stripe adapter have never run against the
+  Stripe API.** No test keys were available when they were written, so they
+  are typechecked against the pinned API version's type definitions and
+  covered by contract and fixture tests, but not yet exercised live. Run
+  `pnpm sync:prices` (dry) first.
+- Dispute **evidence** is still submitted in the Stripe dashboard. We record
+  the deadline and the reason and restore access automatically when a dispute
+  is won, but nothing here uploads evidence.
 - `next/image` `remotePatterns` for the R2 domain is not configured yet — add
   it in the step that first renders a remote image.

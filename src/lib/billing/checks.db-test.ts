@@ -27,6 +27,10 @@ import config from '@/payload.config'
 
 const RUN = `chk-${Date.now()}`
 /** A year no real document will ever use, so the real series stay untouched. */
+/**
+ * One year per test file — these run in parallel and teardown deletes by
+ * year. See the note in refunds.db-test.ts for what sharing one costs.
+ */
 const TEST_YEAR = 2098
 
 let payload: Payload

@@ -4,6 +4,7 @@ import { describe, it } from 'node:test'
 import type { FeatureKey } from './billing/constants.ts'
 import type {
   CustomerEntitlementState,
+  EntitlementSuspensionSnapshot,
   GrantEntitlementSnapshot,
   SubscriptionEntitlementSnapshot,
 } from './entitlements.ts'
@@ -11,6 +12,8 @@ import {
   hasFeature,
   isGrantActiveAt,
   isSubscriptionActiveAt,
+  isSuspendedAt,
+  isSuspensionActiveAt,
   resolveEntitlements,
 } from './entitlements.ts'
 
@@ -331,5 +334,103 @@ describe('predicate helpers', () => {
 
     assert.equal(hasFeature(customer, 'FULL_RATIONALE', NOW), true)
     assert.equal(hasFeature(customer, 'API_ACCESS', NOW), false)
+  })
+})
+
+/* -------------------------------------------------------------------------- */
+/* Suspensions (chargebacks)                                                  */
+/* -------------------------------------------------------------------------- */
+
+const suspension = (parts: Partial<EntitlementSuspensionSnapshot> = {}) => ({
+  reason: 'dispute:dp_1:fraudulent',
+  startsAt: d('2026-06-01T00:00:00.000Z'),
+  endsAt: null,
+  ...parts,
+})
+
+describe('resolveEntitlements — suspensions', () => {
+  it('withholds everything while a suspension is in force', () => {
+    // A chargeback means the money is being taken back. Serving paid content
+    // through the weeks a dispute takes to resolve is the specific loss this
+    // prevents.
+    const customer = state({
+      subscriptions: [subscription()],
+      grants: [grant()],
+      suspensions: [suspension()],
+    })
+
+    assert.deepEqual(sorted(resolveEntitlements(customer, NOW)), [])
+  })
+
+  it('out-votes a manual grant', () => {
+    // A veto, not one more input to the union. Support topping somebody up
+    // must not accidentally undo a chargeback suspension.
+    const customer = state({
+      subscriptions: [],
+      grants: [grant()],
+      suspensions: [suspension()],
+    })
+
+    assert.equal(resolveEntitlements(customer, NOW).size, 0)
+  })
+
+  it('restores everything once the suspension has ended', () => {
+    const customer = state({
+      subscriptions: [subscription()],
+      suspensions: [suspension({ endsAt: d('2026-06-10T00:00:00.000Z') })],
+    })
+
+    assert.ok(resolveEntitlements(customer, NOW).size > 0)
+  })
+
+  it('grants normally before a suspension starts', () => {
+    const customer = state({
+      subscriptions: [subscription()],
+      suspensions: [suspension({ startsAt: d('2026-07-01T00:00:00.000Z') })],
+    })
+
+    assert.ok(resolveEntitlements(customer, NOW).size > 0)
+  })
+
+  it('treats an absent suspensions list as none', () => {
+    // Every snapshot written before suspensions existed must keep working.
+    const customer = state({ subscriptions: [subscription()] })
+
+    assert.ok(resolveEntitlements(customer, NOW).size > 0)
+    assert.equal(isSuspendedAt(customer, NOW), false)
+  })
+})
+
+describe('isSuspensionActiveAt', () => {
+  it('starts inclusively', () => {
+    const at = d('2026-06-01T00:00:00.000Z')
+
+    assert.equal(isSuspensionActiveAt(suspension({ startsAt: at }), at), true)
+  })
+
+  it('ends exclusively', () => {
+    // A dispute resolved in our favour at 14:00 restores access at 14:00. A
+    // subscription period ends inclusively; a suspension is the opposite,
+    // because one is something paid for and the other is a withdrawal.
+    const endsAt = d('2026-06-10T14:00:00.000Z')
+
+    assert.equal(isSuspensionActiveAt(suspension({ endsAt }), endsAt), false)
+    assert.equal(
+      isSuspensionActiveAt(
+        suspension({ endsAt }),
+        new Date(endsAt.getTime() - 1),
+      ),
+      true,
+    )
+  })
+
+  it('stays in force indefinitely with no end', () => {
+    assert.equal(
+      isSuspensionActiveAt(
+        suspension({ endsAt: null }),
+        d('2099-01-01T00:00:00.000Z'),
+      ),
+      true,
+    )
   })
 })

@@ -15,6 +15,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test \"src/**/*.test.ts\"",
     "test:db": "cross-env NODE_OPTIONS=\"--no-deprecation --import tsx\" node --env-file-if-exists=.env --test \"src/**/*.db-test.ts\"",
+    "test:stripe": "cross-env NODE_OPTIONS=\"--no-deprecation --import tsx\" node --env-file-if-exists=.env --test \"src/**/*.stripe-test.ts\"",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
@@ -27,6 +28,9 @@
     "generate:types": "cross-env NODE_OPTIONS=--no-deprecation payload generate:types",
     "generate:importmap": "cross-env NODE_OPTIONS=--no-deprecation payload generate:importmap",
     "seed": "cross-env NODE_OPTIONS=--no-deprecation payload run src/seed/billing.ts",
+    "sync:prices": "cross-env NODE_OPTIONS=--no-deprecation payload run src/scripts/sync-stripe-prices.ts",
+    "sync:prices:apply": "cross-env APPLY=1 NODE_OPTIONS=--no-deprecation payload run src/scripts/sync-stripe-prices.ts",
+    "reconcile:subscriptions": "cross-env NODE_OPTIONS=--no-deprecation payload run src/scripts/reconcile-subscriptions.ts",
     "auth:migrate": "cross-env NODE_OPTIONS=\"--no-deprecation --import tsx\" node --env-file-if-exists=.env src/scripts/auth-migrate.ts",
     "auth:migrate:dry": "cross-env NODE_OPTIONS=\"--no-deprecation --import tsx\" node --env-file-if-exists=.env src/scripts/auth-migrate.ts --dry",
     "sweep:lockouts": "cross-env NODE_OPTIONS=\"--no-deprecation --import tsx\" node --env-file-if-exists=.env src/scripts/sweep-lockouts.ts",
@@ -48,6 +52,7 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "sharp": "^0.35.5",
+    "stripe": "23.0.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {

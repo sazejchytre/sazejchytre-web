@@ -51,9 +51,36 @@ export type GrantEntitlementSnapshot = {
   revokedAt: TimeInput | null
 }
 
+/**
+ * A reason to withhold everything, regardless of subscriptions and grants.
+ *
+ * Exists for chargebacks. When a customer disputes a payment, the money is
+ * being taken back from us by their bank, and the usual sequence is that the
+ * subscription still looks perfectly ACTIVE while that happens — the dispute
+ * is a fact about a charge, not about the subscription. Waiting for the
+ * subscription status to catch up means serving paid content to somebody who
+ * has already reversed the payment, for however long the dispute takes to
+ * resolve, which is weeks.
+ *
+ * So a suspension overrides, rather than joining, the additive logic below.
+ */
+export type EntitlementSuspensionSnapshot = {
+  /** Recorded for the audit trail; not used in the decision. */
+  reason: string
+  startsAt: TimeInput
+  /** `null` while still in force. */
+  endsAt: TimeInput | null
+}
+
 export type CustomerEntitlementState = {
   subscriptions: readonly SubscriptionEntitlementSnapshot[]
   grants: readonly GrantEntitlementSnapshot[]
+  /**
+   * Optional so that every existing caller and test still compiles. Absent
+   * means "none", which is the honest reading of a snapshot taken before
+   * suspensions existed.
+   */
+  suspensions?: readonly EntitlementSuspensionSnapshot[]
 }
 
 /**
@@ -112,6 +139,38 @@ export const isSubscriptionActiveAt = (
   return nowTime <= end
 }
 
+/**
+ * Is this suspension in force at `now`?
+ *
+ * Starts inclusively and, unlike a subscription period, ends EXCLUSIVELY: a
+ * dispute resolved in our favour at 14:00 should restore access at 14:00, not
+ * leave the customer locked out for one more millisecond.
+ */
+export const isSuspensionActiveAt = (
+  suspension: EntitlementSuspensionSnapshot,
+  now: Date,
+): boolean => {
+  const nowTime = now.getTime()
+  const start = toTime(suspension.startsAt)
+
+  if (start === null || nowTime < start) {
+    return false
+  }
+
+  const end = toTime(suspension.endsAt)
+
+  return end === null || nowTime < end
+}
+
+/** Is anything withholding this customer's access outright? */
+export const isSuspendedAt = (
+  customer: CustomerEntitlementState,
+  now: Date,
+): boolean =>
+  (customer.suspensions ?? []).some((suspension) =>
+    isSuspensionActiveAt(suspension, now),
+  )
+
 /** Is this manual grant in force at `now`? */
 export const isGrantActiveAt = (
   grant: GrantEntitlementSnapshot,
@@ -154,6 +213,13 @@ export const resolveEntitlements = (
   customer: CustomerEntitlementState,
   now: Date,
 ): Set<FeatureKey> => {
+  // Checked first and short-circuiting: a suspension is not one more input to
+  // the union, it is a veto. Folding it in alongside subscriptions and grants
+  // would mean a manual grant could out-vote a chargeback.
+  if (isSuspendedAt(customer, now)) {
+    return new Set<FeatureKey>()
+  }
+
   const features = new Set<FeatureKey>()
 
   for (const subscription of customer.subscriptions) {

@@ -311,6 +311,14 @@ export const Subscriptions: CollectionConfig = {
           "The provider's subscription id. Unique per provider — see the compound index.",
       },
     },
+    {
+      name: 'providerUpdatedAt',
+      type: 'date',
+      admin: {
+        description:
+          'Provider-side time the fields above were last known true. Webhooks arrive out of order; an event older than this is recorded but not applied. See src/lib/billing/ordering.ts.',
+      },
+    },
   ],
   hooks: {
     beforeValidate: [enforceCurrencyLock],

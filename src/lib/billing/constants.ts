@@ -106,8 +106,45 @@ export const SUBSCRIPTION_EVENT_TYPES = [
   'EXPIRED',
   'PLAN_CHANGED',
   'PROVIDER_SYNC',
+  /** Money sent back. The matching credit note carries the amounts. */
+  'REFUNDED',
+  /**
+   * A chargeback was opened. Suspends entitlements immediately — see
+   * `EntitlementSuspensionSnapshot`.
+   */
+  'DISPUTE_OPENED',
+  /** The chargeback closed, won or lost. */
+  'DISPUTE_RESOLVED',
 ] as const
 export type SubscriptionEventType = (typeof SUBSCRIPTION_EVENT_TYPES)[number]
+
+/* -------------------------------------------------------------------------- */
+/* Disputes (chargebacks)                                                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Where a chargeback stands.
+ *
+ * Our own vocabulary, as always — Stripe has a longer list that distinguishes
+ * stages of evidence submission we do not act on differently.
+ */
+export const DISPUTE_STATUSES = [
+  /** Opened and not yet decided. Access is suspended. */
+  'OPEN',
+  /** Evidence submitted, waiting on the issuer. Access stays suspended. */
+  'UNDER_REVIEW',
+  /** Decided in our favour. The money stays; access is restored. */
+  'WON',
+  /** Decided against us. The money is gone; access stays withdrawn. */
+  'LOST',
+] as const
+export type DisputeStatus = (typeof DISPUTE_STATUSES)[number]
+
+/** Dispute states that are still open, and therefore still suspending. */
+export const SUSPENDING_DISPUTE_STATUSES: readonly DisputeStatus[] = [
+  'OPEN',
+  'UNDER_REVIEW',
+] as const
 
 /* -------------------------------------------------------------------------- */
 /* Entitlements                                                               */

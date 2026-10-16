@@ -24,7 +24,8 @@
  */
 import { z } from 'zod'
 
-import { formatEnvIssues } from './env-format'
+import { BILLING_PROVIDERS } from './billing/constants.ts'
+import { formatEnvIssues } from './env-format.ts'
 
 /* -------------------------------------------------------------------------- */
 /* Runtime guard                                                              */
@@ -128,7 +129,65 @@ const serverEnvSchema = z.object({
       error: 'must be a bare email address, e.g. no-reply@sazejchytre.cz',
     }),
 
+  /* --- Stripe (payments) -------------------------------------------------- */
+  /**
+   * Secret API key. No default, like every secret here.
+   *
+   * The `sk_` prefix is checked but `sk_live_` is NOT rejected: production has
+   * to be able to hold a live key. Telling test from live is a *runtime*
+   * decision, made by `isLiveStripeKey` — a schema that refused live keys
+   * would simply be wrong the day this goes live, and a schema that ignored
+   * the distinction would let a reconciliation script run against real
+   * customers by accident.
+   */
+  STRIPE_SECRET_KEY: secret(10).refine((value) => value.startsWith('sk_'), {
+    error: 'must be a Stripe secret key (sk_test_… or sk_live_…)',
+  }),
+
+  /** Publishable key, used by the Payment Element in step 5. Not a secret. */
+  STRIPE_PUBLISHABLE_KEY: z
+    .string()
+    .min(10)
+    .refine((value) => value.startsWith('pk_'), {
+      error: 'must be a Stripe publishable key (pk_test_… or pk_live_…)',
+    }),
+
+  /**
+   * Signing secret for the webhook endpoint.
+   *
+   * Per-endpoint, not per-account: a secret from the dashboard will not verify
+   * events forwarded by `stripe listen`, and vice versa. Getting these two
+   * confused produces "signature verification failed" on every event, which
+   * looks like a code fault and is not one.
+   */
+  STRIPE_WEBHOOK_SECRET: secret(10).refine(
+    (value) => value.startsWith('whsec_'),
+    { error: 'must be a Stripe webhook signing secret (whsec_…)' },
+  ),
+
+  /* --- Vercel Cron -------------------------------------------------------- */
+  /**
+   * Shared secret Vercel Cron presents as `Authorization: Bearer …`.
+   *
+   * Vercel injects this into the request for scheduled invocations. Without
+   * it, a cron route is a public endpoint anybody can call — which for a
+   * retention sweep means anybody can delete our audit history.
+   */
+  CRON_SECRET: secret(32),
+
   /* --- Billing ------------------------------------------------------------ */
+  /**
+   * Which payment provider is live.
+   *
+   * Defaulted rather than required, like the country list and unlike every
+   * secret above: it is configuration with one correct value today, and there
+   * is nothing dangerous about the default. The point of having it at all is
+   * that the registry resolves the adapter from config instead of from a
+   * hard-coded import, so a second provider is an adapter file and a config
+   * change rather than a hunt through call sites.
+   */
+  BILLING_PROVIDER: z.enum(BILLING_PROVIDERS).default('STRIPE'),
+
   /**
    * Countries we are set up to sell into, as a comma-separated list of ISO
    * 3166-1 alpha-2 codes.
@@ -179,11 +238,10 @@ const serverEnvSchema = z.object({
    * Add these to the schema in the step that actually consumes them, so a
    * deploy never demands a secret the code cannot use.
    *
-   *   STRIPE_SECRET_KEY
-   *   STRIPE_WEBHOOK_SECRET
-   *   STRIPE_PRICE_ID_MONTHLY
-   *   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY   <- goes in env.public.ts
-   *   RESEND_API_KEY
+   * Stripe and Resend have both landed and are declared above; there is no
+   * STRIPE_PRICE_ID_MONTHLY because price ids live in the `prices` table and
+   * are reconciled into Stripe by `pnpm sync:prices`, not configured by hand.
+   *
    *   TURNSTILE_SECRET_KEY
    *   NEXT_PUBLIC_TURNSTILE_SITE_KEY       <- goes in env.public.ts
    *   ECOMAIL_API_KEY

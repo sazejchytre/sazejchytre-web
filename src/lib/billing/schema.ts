@@ -147,6 +147,9 @@ const INTEGER_COLUMNS: Record<
     numberSequence: { column: 'number_sequence', notNull: true },
     amountMinor: { column: 'amount_minor', notNull: true },
   },
+  disputes: {
+    amountMinor: { column: 'amount_minor', notNull: true },
+  },
   invoice_number_counters: {
     year: { column: 'year', notNull: true },
     lastNumber: { column: 'last_number', notNull: true, default: 0 },
