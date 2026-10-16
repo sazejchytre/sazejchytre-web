@@ -22,12 +22,35 @@ const publicEnvSchema = z.object({
     .refine((value) => !value.endsWith('/'), {
       error: 'must not have a trailing slash',
     }),
+
+  /**
+   * Stripe publishable key, for the Payment Element in the browser.
+   *
+   * World-readable by design — that is what a publishable key is for. It can
+   * create payment attempts but cannot read or move money, which is why it is
+   * the only Stripe key allowed anywhere near a client bundle. Its secret
+   * counterpart lives in `env.ts` and must never appear here.
+   *
+   * Duplicated with the server-side `STRIPE_PUBLISHABLE_KEY` rather than
+   * derived from it, because Next only inlines `NEXT_PUBLIC_*` names into the
+   * browser bundle. The two must hold the same value; `assertStripeKeysAgree`
+   * checks that on the server, where both are visible.
+   */
+  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: z
+    .string()
+    .min(10)
+    .refine((value) => value.startsWith('pk_'), {
+      error: 'must be a Stripe publishable key (pk_test_… or pk_live_…)',
+    }),
 })
 
 export type PublicEnv = z.infer<typeof publicEnvSchema>
 
 const parsed = publicEnvSchema.safeParse({
   NEXT_PUBLIC_SERVER_URL: process.env.NEXT_PUBLIC_SERVER_URL,
+  // Static property access, not a lookup — see the note at the top of the file.
+  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY:
+    process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY,
 })
 
 if (!parsed.success) {

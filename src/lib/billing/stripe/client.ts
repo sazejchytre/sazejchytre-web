@@ -36,6 +36,7 @@
 import Stripe from 'stripe'
 
 import { env } from '../../env.ts'
+import { publicEnv } from '../../env.public.ts'
 import { BillingConfigurationError } from '../port.ts'
 
 /**
@@ -67,6 +68,31 @@ export const isLiveStripeKey = (key: string): boolean =>
 /** True when the configured secret key is a live-mode key. */
 export const isLiveMode = (): boolean => isLiveStripeKey(env.STRIPE_SECRET_KEY)
 
+/**
+ * The publishable key is declared twice. Prove the two agree.
+ *
+ * `STRIPE_PUBLISHABLE_KEY` is server-side; `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`
+ * is inlined into the browser bundle, because Next only inlines that prefix.
+ * Nothing stops them drifting, and the failure is nasty: the browser would
+ * create payment attempts against one Stripe account while the server
+ * reconciles another, so every payment would look lost. Cheaper to refuse to
+ * boot.
+ *
+ * Checked here rather than in the schemas because this is the only place both
+ * are visible: the public schema must never import server secrets.
+ */
+export const assertStripeKeysAgree = (): void => {
+  if (
+    env.STRIPE_PUBLISHABLE_KEY !== publicEnv.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+  ) {
+    throw new BillingConfigurationError(
+      'STRIPE_PUBLISHABLE_KEY and NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY differ. ' +
+        'They must hold the same key, or the browser and the server will be ' +
+        'talking to different Stripe accounts.',
+    )
+  }
+}
+
 let client: Stripe | null = null
 
 /**
@@ -90,6 +116,8 @@ export const getStripeClient = (): Stripe => {
       'STRIPE_SECRET_KEY is not a secret or restricted key.',
     )
   }
+
+  assertStripeKeysAgree()
 
   client = new Stripe(key, {
     apiVersion: STRIPE_API_VERSION,

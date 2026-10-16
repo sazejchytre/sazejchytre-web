@@ -68,6 +68,25 @@ const nextConfig: NextConfig = {
   // step, which is where a lint failure should surface anyway.)
   typescript: { ignoreBuildErrors: false },
 
+  /**
+   * The invoice font has to travel with the deployment.
+   *
+   * `src/lib/invoicing/pdf.ts` resolves DejaVuSans.ttf at runtime, which the
+   * bundler cannot see — output file tracing follows imports, not
+   * `require.resolve` of a binary asset. Without this the PDF renderer throws
+   * ENOENT in production and only in production, which is the worst place to
+   * find out.
+   *
+   * Listed for the webhook route (which issues documents and renders their
+   * PDFs) and the retry cron (which renders any that failed).
+   */
+  outputFileTracingIncludes: {
+    '/webhooks/stripe': ['./node_modules/dejavu-fonts-ttf/ttf/DejaVuSans.ttf'],
+    '/api/cron/retry-document-delivery': [
+      './node_modules/dejavu-fonts-ttf/ttf/DejaVuSans.ttf',
+    ],
+  },
+
   async headers() {
     return [
       {

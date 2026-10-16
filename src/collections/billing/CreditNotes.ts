@@ -1,8 +1,16 @@
 import type { CollectionConfig } from 'payload'
 
 import { canAccessAdminPanel, denyAll, isAdmin } from '@/lib/access'
-import { blockDeletes, lockFieldsAfterCreate } from '@/lib/billing/append-only'
-import { CURRENCIES, toOptions } from '@/lib/billing/constants'
+import {
+  blockDeletes,
+  lockFieldsAfterCreate,
+  lockOnceSet,
+} from '@/lib/billing/append-only'
+import {
+  CURRENCIES,
+  DOCUMENT_DELIVERY_STATES,
+  toOptions,
+} from '@/lib/billing/constants'
 import { isValidMinorAmount } from '@/lib/billing/money'
 
 /**
@@ -39,9 +47,12 @@ export const CreditNotes: CollectionConfig = {
   access: {
     create: isAdmin,
     read: isAdmin,
-    // Nothing on a credit note may change once issued; it is a tax document
-    // in its own right. Denied outright rather than field-locked.
-    update: denyAll,
+    // Its CONTENT may never change — it is a tax document in its own right.
+    // Relaxed from denyAll only so the rendered PDF and the delivery outcome
+    // can be recorded after creation, which cannot happen at creation because
+    // the PDF needs the allocated number. The hooks below allow exactly those
+    // fields and exactly one write each.
+    update: isAdmin,
     delete: denyAll,
     admin: canAccessAdminPanel,
   },
@@ -144,13 +155,59 @@ export const CreditNotes: CollectionConfig = {
       },
     },
     {
+      name: 'deliveryState',
+      type: 'select',
+      options: toOptions(DOCUMENT_DELIVERY_STATES),
+      required: true,
+      defaultValue: 'PENDING',
+      index: true,
+      admin: {
+        description:
+          'How far this document has got towards the customer. Separate from its existence: an issued document stays issued whatever happens to the email.',
+      },
+    },
+    {
+      name: 'deliveredAt',
+      type: 'date',
+      admin: {
+        description: 'When the email was accepted by the provider. Write-once.',
+      },
+    },
+    {
+      name: 'deliveryAttempts',
+      type: 'number',
+      required: true,
+      defaultValue: 0,
+      admin: {
+        description:
+          'How many times delivery has been tried. Integer — see src/lib/billing/schema.ts.',
+      },
+    },
+    {
+      name: 'deliveryError',
+      type: 'text',
+      admin: {
+        description:
+          'Why the last attempt failed, for the retry sweep. Never carries the message body or the attachment.',
+      },
+    },
+    {
       name: 'pdfStorageKey',
       type: 'text',
       admin: { description: 'Object key of the rendered PDF in R2.' },
     },
   ],
   hooks: {
-    beforeValidate: [lockFieldsAfterCreate('A credit note', [])],
+    beforeValidate: [
+      lockFieldsAfterCreate('A credit note', [
+        'pdfStorageKey',
+        'deliveryState',
+        'deliveredAt',
+        'deliveryAttempts',
+        'deliveryError',
+      ]),
+      lockOnceSet('A credit note', ['pdfStorageKey', 'deliveredAt']),
+    ],
     beforeDelete: [blockDeletes('A credit note')],
   },
   labels: { singular: 'Credit note', plural: 'Credit notes' },

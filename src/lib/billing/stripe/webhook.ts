@@ -968,6 +968,10 @@ export const issueCreditNoteForRefund = async ({
       reason,
       issuedAt: now.toISOString(),
       providerRefundId,
+      // Issued now; the PDF and the email follow and may fail without
+      // unissuing the document.
+      deliveryState: 'PENDING',
+      deliveryAttempts: 0,
       ...(billingCountry ? { billingCountry } : {}),
     },
   })

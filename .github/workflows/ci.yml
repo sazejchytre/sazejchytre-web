@@ -51,6 +51,8 @@ jobs:
       # environment that builds, this one included.
       STRIPE_SECRET_KEY: sk_test_ci_build_only_not_a_real_key_000000
       STRIPE_PUBLISHABLE_KEY: pk_test_ci_build_only_not_a_real_key_000000
+      # Must equal STRIPE_PUBLISHABLE_KEY above; the boot check compares them.
+      NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: pk_test_ci_build_only_not_a_real_key_000000
       STRIPE_WEBHOOK_SECRET: whsec_ci_build_only_not_a_real_secret_0000
       # Vercel Cron shared secret. Minimum 32 characters.
       CRON_SECRET: ci-build-only-value-not-a-real-secret-000000

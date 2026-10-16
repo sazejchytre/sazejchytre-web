@@ -133,6 +133,12 @@ const INTEGER_COLUMNS: Record<
   invoices: {
     numberYear: { column: 'number_year', notNull: true },
     numberSequence: { column: 'number_sequence', notNull: true },
+    // A count, not a measurement.
+    deliveryAttempts: {
+      column: 'delivery_attempts',
+      notNull: true,
+      default: 0,
+    },
     subtotalMinor: { column: 'subtotal_minor', notNull: true },
     taxMinor: { column: 'tax_minor', notNull: true, default: 0 },
     totalMinor: { column: 'total_minor', notNull: true },
@@ -146,6 +152,11 @@ const INTEGER_COLUMNS: Record<
     numberYear: { column: 'number_year', notNull: true },
     numberSequence: { column: 'number_sequence', notNull: true },
     amountMinor: { column: 'amount_minor', notNull: true },
+    deliveryAttempts: {
+      column: 'delivery_attempts',
+      notNull: true,
+      default: 0,
+    },
   },
   disputes: {
     amountMinor: { column: 'amount_minor', notNull: true },

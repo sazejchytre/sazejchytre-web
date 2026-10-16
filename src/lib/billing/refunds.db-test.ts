@@ -150,6 +150,8 @@ const makeWorld = async (suffix: string) => {
     overrideAccess: true,
     depth: 0,
     data: {
+      deliveryState: 'PENDING',
+      deliveryAttempts: 0,
       number: number.number,
       numberYear: number.year,
       numberSequence: number.sequence,
@@ -166,6 +168,18 @@ const makeWorld = async (suffix: string) => {
       status: 'ISSUED',
       billingCountry: 'CZ',
       providerPaymentId: `pi_${RUN}_${suffix}`,
+      serviceSnapshot: {
+        planName: 'Test Plan',
+        description: 'Predplatne analyz — testovaci fixture',
+        periodStart: new Date('2026-06-01T00:00:00.000Z').toISOString(),
+        periodEnd: new Date('2026-07-01T00:00:00.000Z').toISOString(),
+      },
+      paymentSnapshot: {
+        method: 'CARD',
+        paidAt: new Date('2026-06-01T00:00:00.000Z').toISOString(),
+        cardBrand: 'visa',
+        cardLast4: '4242',
+      },
       operatorSnapshot: {
         // Fixture values, not operator identity: src/lib/legal/operator.ts is
         // still placeholders by design and must not be guessed at here.

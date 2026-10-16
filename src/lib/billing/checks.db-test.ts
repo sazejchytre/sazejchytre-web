@@ -341,6 +341,8 @@ describe('invoices.subscription is nullable', () => {
     const doc = await payload.create({
       collection: 'invoices',
       data: {
+        deliveryState: 'PENDING',
+        deliveryAttempts: 0,
         number: allocated.number,
         numberYear: allocated.year,
         numberSequence: allocated.sequence,
@@ -354,6 +356,18 @@ describe('invoices.subscription is nullable', () => {
         taxTreatment: 'NONE_NOT_VAT_REGISTERED',
         taxRateBasisPoints: 0,
         status: 'ISSUED',
+        serviceSnapshot: {
+          planName: 'Test Plan',
+          description: 'Predplatne analyz — testovaci fixture',
+          periodStart: new Date('2026-06-01T00:00:00.000Z').toISOString(),
+          periodEnd: new Date('2026-07-01T00:00:00.000Z').toISOString(),
+        },
+        paymentSnapshot: {
+          method: 'CARD',
+          paidAt: new Date('2026-06-01T00:00:00.000Z').toISOString(),
+          cardBrand: 'visa',
+          cardLast4: '4242',
+        },
         operatorSnapshot: {
           legalName: 'Op',
           address: 'Praha',

@@ -149,6 +149,64 @@ export const lockFieldsAfterCreate = (
   }
 }
 
+/**
+ * Fields that may be filled in once and never changed afterwards.
+ *
+ * ──────────────────────────────────────────────────────────────────────────
+ * WHY THIS IS NOT JUST "MUTABLE"
+ *
+ * An invoice's rendered PDF and its delivery outcome cannot be known at the
+ * instant the document is created: the PDF needs the allocated number, and the
+ * email needs the PDF. So those fields have to be writable after creation.
+ *
+ * But they must not be writable TWICE. "The PDF is generated once and never
+ * regenerated" is a property of the document, not a convention: a reissued or
+ * corrected document is a new document, so a second PDF under the same number
+ * would mean two different files could both claim to be invoice FA2026-000001
+ * — and only one of them is the one the customer received.
+ *
+ * Null → value is allowed. Value → different value never is. Writing the same
+ * value again is permitted, so a retry that re-reports success is harmless.
+ *
+ * Register this AFTER `lockFieldsAfterCreate`, listing the same fields in its
+ * `mutableFields`: the first hook decides which fields may move at all, this
+ * one decides how often.
+ */
+export const lockOnceSet = (
+  what: string,
+  writeOnceFields: readonly string[],
+): CollectionBeforeValidateHook => {
+  const guarded = new Set(writeOnceFields)
+
+  return ({ data, operation, originalDoc }) => {
+    if (operation !== 'update' || !originalDoc) {
+      return data
+    }
+
+    const offending = Object.keys(data ?? {}).filter((field) => {
+      if (!guarded.has(field)) return false
+
+      const previous = (originalDoc as Record<string, unknown>)[field]
+
+      // Nothing there yet: this is the one permitted write.
+      if (previous === null || previous === undefined) return false
+
+      return !isSameValue((data as Record<string, unknown>)[field], previous)
+    })
+
+    if (offending.length > 0) {
+      throw new APIError(
+        `${what} has already recorded: ${offending.join(', ')}. ` +
+          'These are written once and never changed. A corrected document is a ' +
+          'new document, not an edit to this one.',
+        403,
+      )
+    }
+
+    return data
+  }
+}
+
 /** Reject every delete, whatever the caller's permissions say. */
 export const blockDeletes = (what: string): CollectionBeforeDeleteHook => {
   return () => {
