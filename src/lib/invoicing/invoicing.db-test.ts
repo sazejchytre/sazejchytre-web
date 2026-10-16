@@ -121,6 +121,11 @@ after(async () => {
   await db().execute(
     sql`DELETE FROM "customers" WHERE "email" LIKE ${`${RUN}%`}`,
   )
+
+  // Close the pg pool. An open pool is a live handle, so without this the
+  // process sits there after every test has passed and the runner never
+  // prints its summary — which looks exactly like a hang.
+  await payload.destroy()
 })
 
 /* -------------------------------------------------------------------------- */

@@ -157,6 +157,14 @@ after(async () => {
       }),
     )
   }
+
+  // Close the database pool.
+  //
+  // The suite reads prices through Payload, which opens a pg pool. An open
+  // pool is a live handle, so without this the process sits there after every
+  // test has passed and the runner never prints its summary — which looks
+  // exactly like a hang and makes the exit code useless in CI.
+  await payload.destroy()
 })
 
 /* -------------------------------------------------------------------------- */

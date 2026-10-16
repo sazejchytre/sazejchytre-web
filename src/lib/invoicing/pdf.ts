@@ -50,8 +50,23 @@ import type { Currency } from '../billing/constants.ts'
  */
 let fontCache: Buffer | null = null
 
+/**
+ * The font package's own path parts, assembled at runtime.
+ *
+ * Deliberately NOT a literal. Turbopack statically analyses
+ * `require.resolve('...')` and tries to bundle the target as a module, which
+ * fails outright for a `.ttf` — "Unknown module type". Assembling the
+ * specifier makes it opaque to that analysis, so the font stays a plain file
+ * read, and `outputFileTracingIncludes` in next.config.ts is what puts the
+ * file in the deployment.
+ *
+ * The two have to stay in step: if this path changes, that config must too,
+ * or the renderer throws ENOENT in production and only in production.
+ */
+const FONT_SPECIFIER = ['dejavu-fonts-ttf', 'ttf', 'DejaVuSans.ttf'].join('/')
+
 export const invoiceFontPath = (): string =>
-  createRequire(import.meta.url).resolve('dejavu-fonts-ttf/ttf/DejaVuSans.ttf')
+  createRequire(import.meta.url).resolve(FONT_SPECIFIER)
 
 const loadFont = async (): Promise<Buffer> => {
   if (fontCache) return fontCache
