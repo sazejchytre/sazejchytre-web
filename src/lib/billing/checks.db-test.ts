@@ -209,6 +209,17 @@ const rawInvoice = async (
     customer_snapshot_name: `'C'`,
     customer_snapshot_email: `'c@example.test'`,
     customer_snapshot_country: `'CZ'`,
+    // Added in step 5b and NOT NULL, so every insert path has to supply them
+    // — including this one, which bypasses Payload to test the database's
+    // own CHECK constraints.
+    service_snapshot_plan_name: `'Start'`,
+    service_snapshot_description: `'Předplatné'`,
+    service_snapshot_period_start: 'now()',
+    service_snapshot_period_end: 'now()',
+    payment_snapshot_method: `'CARD'`,
+    payment_snapshot_paid_at: 'now()',
+    delivery_state: `'PENDING'::"enum_invoices_delivery_state"`,
+    delivery_attempts: '0',
     updated_at: 'now()',
     created_at: 'now()',
     ...overrides,
