@@ -236,7 +236,17 @@ const COLUMNS: readonly (keyof AccountingDocumentRow)[] = [
  * an export in Excel must not be running anything.
  */
 const csvField = (value: unknown): string => {
-  const text = value === null || value === undefined ? '' : String(value)
+  if (value === null || value === undefined) return '""'
+
+  // A NUMBER is never a formula and must not be neutralised. Credit note
+  // totals are negative by design, so guarding them would export every refund
+  // as the text `'-79900` — which Excel reads as a label rather than an
+  // amount, silently dropping refunds out of any sum the accountant takes.
+  if (typeof value === 'number') {
+    return `"${String(value)}"`
+  }
+
+  const text = String(value)
   const guarded = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text
 
   return `"${guarded.replace(/"/g, '""')}"`

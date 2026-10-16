@@ -42,7 +42,6 @@
 import type { Payload, PayloadRequest } from 'payload'
 import { APIError } from 'payload'
 
-import type { Currency } from '../billing/constants.ts'
 import { allocateDocumentNumber } from '../billing/document-number.ts'
 import {
   OPERATOR,

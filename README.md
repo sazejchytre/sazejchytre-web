@@ -272,6 +272,98 @@ uses a Luhn check, because a 13-digit epoch-millisecond timestamp is exactly
 as long as a Visa PAN and redacting every one of them would destroy the
 timestamps that make out-of-order handling debuggable.
 
+## Invoicing
+
+Documents are issued from confirmed payments, rendered to PDF, stored
+privately, and emailed. Nothing is issued speculatively and nothing is issued
+from an event type alone.
+
+| File                             | Responsibility                                         |
+| -------------------------------- | ------------------------------------------------------ |
+| `invoicing/confirmed-payment.ts` | What "the money arrived" looks like, provider-agnostic |
+| `invoicing/stripe-payment.ts`    | The one place that establishes that from Stripe        |
+| `invoicing/issue.ts`             | Allocating a number and writing the snapshots          |
+| `invoicing/pdf.ts`               | Rendering, with the font embedded                      |
+| `invoicing/storage.ts`           | Private R2 prefix, never the public CDN binding        |
+| `invoicing/credit-note.ts`       | Corrections, with the over-credit guard                |
+| `invoicing/delivery.ts`          | PDF then email, with retryable state                   |
+| `invoicing/export.ts`            | The accountant's shape, and CSV                        |
+| `invoicing/retention.ts`         | Erasure that keeps the statutory record                |
+
+### One confirmed payment, one invoice
+
+`invoices.providerPaymentId` is **unique**, and that index — not the
+application's read-before-write — is what guarantees it. Two concurrent
+webhook deliveries genuinely both pass the read; the
+[concurrency test](../src/lib/invoicing/invoicing.db-test.ts) provokes exactly
+that. Two invoices for one payment would mean two sequence numbers burnt, two
+documents emailed, and a VAT return that double-counts the revenue.
+
+### Order: row, then PDF, then email
+
+A document exists the moment it is issued. The PDF and the email follow and
+may fail without unissuing anything — `deliveryState` records how far it got
+and an hourly cron retries. The alternative, rolling back on a send failure,
+would either burn a number for nothing or make an email provider's
+availability a precondition for Czech accounting law.
+
+`pdfStorageKey` and `deliveredAt` are **write-once** (`lockOnceSet`): null →
+value is allowed, value → different value never is. A corrected document is a
+new document, so a second PDF under one number must be impossible rather than
+merely discouraged.
+
+### Documents are never public
+
+They go under a private prefix that `cdn.sazejchytre.cz` does not map to, and
+reach the customer only through `/ucet/doklady/<id>`, which checks the document
+belongs to the requester — document ids are sequential, so without that check
+the route is an enumeration of other people's invoices.
+
+This is a separate prefix and a separate code path rather than a flag, because
+**the CDN cache does not purge on delete**. A document served publicly even
+once is cached at the edge, and deleting the object in R2 does not evict it;
+the leak outlives the fix and no deploy takes it back.
+
+### No VAT, and the document says so
+
+The operator is not VAT registered. Every invoice carries
+`taxTreatment: NONE_NOT_VAT_REGISTERED`, `taxMinor: 0`,
+`taxRateBasisPoints: 0`, an explicit `DPH 0 %` line and the sentence
+_Dodavatel není plátcem DPH._ An invoice with no VAT line and no explanation
+reads like one that forgot the VAT; the sentence is what makes the absence
+lawful rather than suspicious.
+
+### Over-crediting is refused twice
+
+Credit notes against one invoice may not sum past its total — that would
+assert a refund larger than the payment and understate revenue by the
+difference. `issueCreditNote` checks and throws `OverCreditError` with the
+numbers in it; a **database trigger** holds the invariant, because the
+application's sum-then-insert has a window two concurrent refunds can both
+pass. This is the second trigger in the codebase, after tip immutability, and
+exists for the same reason.
+
+### Retention
+
+Invoices and credit notes are **never deleted**, including on account closure.
+`anonymiseCustomer` anonymises the live `customers` row and removes the
+sign-in account; the invoice **snapshots are deliberately untouched**.
+
+That is not a loophole — GDPR Art. 17(3)(b) exempts processing required by a
+legal obligation, and Czech accounting law obliges the operator to retain
+accounting documents. Rewriting the snapshots would leave the operator holding
+invoices that no longer say who they were issued to, which is the exact
+record-keeping failure the retention obligation exists to prevent.
+
+### Accounting export
+
+`pnpm export:accounting` writes a CSV for a date range (`FROM`, `TO`, `OUT`).
+Credit notes appear as **negative** totals so a sum over the period is the
+period's revenue. Amounts stay integer minor units; every field is quoted and
+formula-injection-guarded, because the reader opens it in Excel. See
+[docs/accounting-integration.md](docs/accounting-integration.md) for the
+designed-but-unbuilt Fakturoid mapping.
+
 ## Tip immutability
 
 A published tip is **frozen**, enforced by **database triggers** as well as by
@@ -379,12 +471,10 @@ Nothing in the application code disables a trigger.
 - Upstash Redis is validated at boot but not consumed.
 - **No checkout UI.** The Stripe adapter returns a client secret for the
   Payment Element; the page that confirms it is step 5.
-- **No invoice issuing or PDF.** `invoices` rows are modelled and immutable,
-  but nothing creates one from a paid Stripe invoice yet (step 5b). Until it
-  does, a refund or chargeback can only be tied back to a document if
-  `invoices.providerPaymentId` has been filled in, and the webhook handler
-  reports `NO_LOCAL_INVOICE_FOR_CHARGE` / `DISPUTE_NOT_ATTRIBUTABLE` rather
-  than guessing.
+- **No checkout page**, so in practice nothing issues an invoice yet: the
+  first real payment arrives in step 5. The issuing path is wired to
+  `invoice.paid` and covered by tests, but it has never run against a live
+  Stripe payment.
 - **The product/price sync and the Stripe adapter have never run against the
   Stripe API.** No test keys were available when they were written, so they
   are typechecked against the pinned API version's type definitions and
