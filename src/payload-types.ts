@@ -559,9 +559,25 @@ export interface Invoice {
    */
   pdfStorageKey?: string | null;
   /**
-   * The provider charge or payment-intent id that settled this invoice. The only way a later refund or chargeback can be traced back to the document it reverses — a dispute webhook names a charge, not an invoice.
+   * The provider charge or payment-intent id that settled this invoice. Unique: one payment, one invoice. Also the only way a later refund or chargeback can be traced back to the document it reverses — a dispute webhook names a charge, not an invoice.
    */
   providerPaymentId?: string | null;
+  /**
+   * How far this document has got towards the customer. Separate from its existence: an issued document stays issued whatever happens to the email.
+   */
+  deliveryState: 'PENDING' | 'SENT' | 'FAILED';
+  /**
+   * When the email was accepted by the provider. Write-once.
+   */
+  deliveredAt?: string | null;
+  /**
+   * How many times delivery has been tried. Integer — see src/lib/billing/schema.ts.
+   */
+  deliveryAttempts: number;
+  /**
+   * Why the last attempt failed, for the retry sweep. Never carries the message body or the attachment.
+   */
+  deliveryError?: string | null;
   /**
    * The only mutable field. CREDITED means a credit note corrects this invoice in full.
    */
@@ -578,6 +594,48 @@ export interface Invoice {
    * Signal 3 of 3: issuing country of the payment instrument. Nullable.
    */
   cardCountry?: string | null;
+  /**
+   * What was sold, as it read at the moment of sale. Copied, not joined — a plan renamed or repriced later must not change a document already sent.
+   */
+  serviceSnapshot: {
+    /**
+     * Plan name at the moment of sale.
+     */
+    planName: string;
+    /**
+     * The supplied service in plain Czech, as printed on the document.
+     */
+    description: string;
+    /**
+     * First day of the period this invoice covers.
+     */
+    periodStart: string;
+    /**
+     * Last day of the period this invoice covers.
+     */
+    periodEnd: string;
+  };
+  /**
+   * How it was paid. An invoice exists here only because a payment was confirmed, so the document can state that it is already settled.
+   */
+  paymentSnapshot: {
+    /**
+     * Our vocabulary: CARD or OTHER.
+     */
+    method: string;
+    /**
+     * When the provider says the money arrived — not when we found out.
+     */
+    paidAt: string;
+    /**
+     * e.g. visa. Null for a non-card payment.
+     */
+    cardBrand?: string | null;
+    /**
+     * LAST FOUR DIGITS ONLY. There is deliberately nowhere here to put a card number.
+     */
+    cardLast4?: string | null;
+  };
   /**
    * The operator's identity as printed on this invoice. Copied, not joined.
    */
@@ -652,6 +710,22 @@ export interface CreditNote {
    * Copied from the invoice so cross-border totals can net credits without a join.
    */
   billingCountry?: string | null;
+  /**
+   * How far this document has got towards the customer. Separate from its existence: an issued document stays issued whatever happens to the email.
+   */
+  deliveryState: 'PENDING' | 'SENT' | 'FAILED';
+  /**
+   * When the email was accepted by the provider. Write-once.
+   */
+  deliveredAt?: string | null;
+  /**
+   * How many times delivery has been tried. Integer — see src/lib/billing/schema.ts.
+   */
+  deliveryAttempts: number;
+  /**
+   * Why the last attempt failed, for the retry sweep. Never carries the message body or the attachment.
+   */
+  deliveryError?: string | null;
   /**
    * Object key of the rendered PDF in R2.
    */
@@ -1475,10 +1549,30 @@ export interface InvoicesSelect<T extends boolean = true> {
   taxRateBasisPoints?: T;
   pdfStorageKey?: T;
   providerPaymentId?: T;
+  deliveryState?: T;
+  deliveredAt?: T;
+  deliveryAttempts?: T;
+  deliveryError?: T;
   status?: T;
   billingCountry?: T;
   ipCountry?: T;
   cardCountry?: T;
+  serviceSnapshot?:
+    | T
+    | {
+        planName?: T;
+        description?: T;
+        periodStart?: T;
+        periodEnd?: T;
+      };
+  paymentSnapshot?:
+    | T
+    | {
+        method?: T;
+        paidAt?: T;
+        cardBrand?: T;
+        cardLast4?: T;
+      };
   operatorSnapshot?:
     | T
     | {
@@ -1517,6 +1611,10 @@ export interface CreditNotesSelect<T extends boolean = true> {
   issuedAt?: T;
   providerRefundId?: T;
   billingCountry?: T;
+  deliveryState?: T;
+  deliveredAt?: T;
+  deliveryAttempts?: T;
+  deliveryError?: T;
   pdfStorageKey?: T;
   updatedAt?: T;
   createdAt?: T;

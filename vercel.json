@@ -4,6 +4,10 @@
     {
       "path": "/api/cron/sweep-lockouts",
       "schedule": "17 3 * * *"
+    },
+    {
+      "path": "/api/cron/retry-document-delivery",
+      "schedule": "23 * * * *"
     }
   ]
 }

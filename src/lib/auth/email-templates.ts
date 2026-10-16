@@ -90,7 +90,14 @@ type Wrapped = {
 }
 
 /** One layout for all of them, so the emails look like they come from us. */
-const wrap = ({
+/**
+ * The shared HTML shell and operator footer.
+ *
+ * Exported so the invoicing emails use the same body and the same footer
+ * rules — including `assertOperatorConfigured()` refusing in production —
+ * rather than growing a second shell that drifts from this one.
+ */
+export const wrap = ({
   heading,
   paragraphs,
   action,

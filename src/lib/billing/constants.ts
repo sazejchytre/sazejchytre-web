@@ -222,6 +222,23 @@ export type TaxTreatment = (typeof TAX_TREATMENTS)[number]
  * series. They must never share a counter: a gap in either series is a
  * bookkeeping defect.
  */
+/**
+ * How far a document has got towards the customer.
+ *
+ * Separate from the document's existence on purpose. An issued invoice is a
+ * statutory record the moment it is issued; whether the email left the
+ * building is a different fact with a different lifecycle, and a delivery
+ * failure must never unissue a document.
+ */
+export const DOCUMENT_DELIVERY_STATES = [
+  /** Issued, not yet sent. The resting state until the mail goes out. */
+  'PENDING',
+  'SENT',
+  /** Tried and refused. Retryable; `deliveryError` says why. */
+  'FAILED',
+] as const
+export type DocumentDeliveryState = (typeof DOCUMENT_DELIVERY_STATES)[number]
+
 export const DOCUMENT_SERIES = ['INVOICE', 'CREDIT_NOTE'] as const
 export type DocumentSeries = (typeof DOCUMENT_SERIES)[number]
 

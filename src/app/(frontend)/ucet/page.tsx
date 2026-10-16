@@ -53,6 +53,10 @@ export default async function UcetPage() {
       ) : null}
 
       <p>
+        <Link href="/ucet/doklady">Doklady a faktury</Link>
+      </p>
+
+      <p>
         <strong>Zákaznický záznam:</strong>{' '}
         {customer
           ? `#${customer.id} (${customer.billingCountry})`

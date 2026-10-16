@@ -8,6 +8,8 @@ import * as migration_20261015_192644_step_3_lockout_integers from './20261015_1
 import * as migration_20261015_201043_step_3b_tips_model from './20261015_201043_step_3b_tips_model';
 import * as migration_20261015_201500_tip_immutability_triggers from './20261015_201500_tip_immutability_triggers';
 import * as migration_20261015_220849_step_4_billing from './20261015_220849_step_4_billing';
+import * as migration_20261016_083730_step_5b_invoicing from './20261016_083730_step_5b_invoicing';
+import * as migration_20261016_084500_credit_note_total_trigger from './20261016_084500_credit_note_total_trigger';
 
 export const migrations = [
   {
@@ -58,6 +60,16 @@ export const migrations = [
   {
     up: migration_20261015_220849_step_4_billing.up,
     down: migration_20261015_220849_step_4_billing.down,
-    name: '20261015_220849_step_4_billing'
+    name: '20261015_220849_step_4_billing',
+  },
+  {
+    up: migration_20261016_083730_step_5b_invoicing.up,
+    down: migration_20261016_083730_step_5b_invoicing.down,
+    name: '20261016_083730_step_5b_invoicing'
+  },
+  {
+    up: migration_20261016_084500_credit_note_total_trigger.up,
+    down: migration_20261016_084500_credit_note_total_trigger.down,
+    name: '20261016_084500_credit_note_total_trigger',
   },
 ];

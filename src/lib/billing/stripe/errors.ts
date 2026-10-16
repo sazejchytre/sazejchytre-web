@@ -217,9 +217,20 @@ export const translateStripeError = (
               ? 'REFUND_EXCEEDS_CHARGE'
               : 'INVALID_REQUEST'
 
+      // The PARAM is carried, not just the code. `resource_missing` alone
+      // does not say which object was missing, and on a nested request — a
+      // subscription schedule's phases, say — that is the entire diagnosis.
+      // Losing it turns a one-line fix into a reproduction hunt.
+      const providerCode = code
+        ? param
+          ? `${code}:${param}`
+          : code
+        : param
+          ? `invalid_param_${param}`
+          : undefined
+
       return billingFail(mapped, CUSTOMER_MESSAGES[mapped], {
-        ...(code ? { providerCode: code } : {}),
-        ...(!code && param ? { providerCode: `invalid_param_${param}` } : {}),
+        ...(providerCode ? { providerCode } : {}),
       })
     }
 

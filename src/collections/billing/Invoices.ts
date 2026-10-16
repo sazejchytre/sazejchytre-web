@@ -2,9 +2,14 @@ import type { CollectionBeforeValidateHook, CollectionConfig } from 'payload'
 import { APIError } from 'payload'
 
 import { canAccessAdminPanel, denyAll, isAdmin } from '@/lib/access'
-import { blockDeletes, lockFieldsAfterCreate } from '@/lib/billing/append-only'
+import {
+  blockDeletes,
+  lockFieldsAfterCreate,
+  lockOnceSet,
+} from '@/lib/billing/append-only'
 import {
   CURRENCIES,
+  DOCUMENT_DELIVERY_STATES,
   INVOICE_STATUSES,
   TAX_TREATMENTS,
   toOptions,
@@ -292,10 +297,54 @@ export const Invoices: CollectionConfig = {
     {
       name: 'providerPaymentId',
       type: 'text',
+      // UNIQUE, and that is what makes issuing idempotent.
+      //
+      // One confirmed payment is one invoice. The application checks for an
+      // existing invoice first, but two concurrent webhook deliveries can both
+      // pass that check; this index is what actually stops the second one.
+      // Two invoices for one payment means two sequence numbers burnt, two
+      // documents sent and a VAT return that double-counts revenue.
+      unique: true,
+      admin: {
+        description:
+          'The provider charge or payment-intent id that settled this invoice. Unique: one payment, one invoice. Also the only way a later refund or chargeback can be traced back to the document it reverses — a dispute webhook names a charge, not an invoice.',
+      },
+    },
+    {
+      name: 'deliveryState',
+      type: 'select',
+      options: toOptions(DOCUMENT_DELIVERY_STATES),
+      required: true,
+      defaultValue: 'PENDING',
       index: true,
       admin: {
         description:
-          'The provider charge or payment-intent id that settled this invoice. The only way a later refund or chargeback can be traced back to the document it reverses — a dispute webhook names a charge, not an invoice.',
+          'How far this document has got towards the customer. Separate from its existence: an issued document stays issued whatever happens to the email.',
+      },
+    },
+    {
+      name: 'deliveredAt',
+      type: 'date',
+      admin: {
+        description: 'When the email was accepted by the provider. Write-once.',
+      },
+    },
+    {
+      name: 'deliveryAttempts',
+      type: 'number',
+      required: true,
+      defaultValue: 0,
+      admin: {
+        description:
+          'How many times delivery has been tried. Integer — see src/lib/billing/schema.ts.',
+      },
+    },
+    {
+      name: 'deliveryError',
+      type: 'text',
+      admin: {
+        description:
+          'Why the last attempt failed, for the retry sweep. Never carries the message body or the attachment.',
       },
     },
     {
@@ -342,6 +391,84 @@ export const Invoices: CollectionConfig = {
     },
 
     /* ---------------- Identity snapshots ------------------------------- */
+    {
+      name: 'serviceSnapshot',
+      type: 'group',
+      admin: {
+        description:
+          'What was sold, as it read at the moment of sale. Copied, not joined — a plan renamed or repriced later must not change a document already sent.',
+      },
+      fields: [
+        {
+          name: 'planName',
+          type: 'text',
+          required: true,
+          admin: { description: 'Plan name at the moment of sale.' },
+        },
+        {
+          name: 'description',
+          type: 'text',
+          required: true,
+          admin: {
+            description:
+              'The supplied service in plain Czech, as printed on the document.',
+          },
+        },
+        {
+          name: 'periodStart',
+          type: 'date',
+          required: true,
+          admin: {
+            description: 'First day of the period this invoice covers.',
+          },
+        },
+        {
+          name: 'periodEnd',
+          type: 'date',
+          required: true,
+          admin: { description: 'Last day of the period this invoice covers.' },
+        },
+      ],
+    },
+    {
+      name: 'paymentSnapshot',
+      type: 'group',
+      admin: {
+        description:
+          'How it was paid. An invoice exists here only because a payment was confirmed, so the document can state that it is already settled.',
+      },
+      fields: [
+        {
+          name: 'method',
+          type: 'text',
+          required: true,
+          admin: { description: 'Our vocabulary: CARD or OTHER.' },
+        },
+        {
+          name: 'paidAt',
+          type: 'date',
+          required: true,
+          admin: {
+            description:
+              'When the provider says the money arrived — not when we found out.',
+          },
+        },
+        {
+          name: 'cardBrand',
+          type: 'text',
+          admin: { description: 'e.g. visa. Null for a non-card payment.' },
+        },
+        {
+          name: 'cardLast4',
+          type: 'text',
+          maxLength: 4,
+          admin: {
+            description:
+              'LAST FOUR DIGITS ONLY. There is deliberately nowhere here to put a card number.',
+          },
+        },
+      ],
+    },
     {
       name: 'operatorSnapshot',
       type: 'group',
@@ -406,7 +533,21 @@ export const Invoices: CollectionConfig = {
     // is reported as immutability rather than as whichever content rule the
     // new values happened to break.
     beforeValidate: [
-      lockFieldsAfterCreate('An issued invoice', ['status']),
+      lockFieldsAfterCreate('An issued invoice', [
+        'status',
+        // The artefact and its delivery are not knowable at creation: the PDF
+        // needs the allocated number, and the email needs the PDF. Which
+        // fields may move is decided here; how often is decided by
+        // `lockOnceSet` below.
+        'pdfStorageKey',
+        'deliveryState',
+        'deliveredAt',
+        'deliveryAttempts',
+        'deliveryError',
+      ]),
+      // Written once, never rewritten. A second PDF under the same number
+      // would mean two files could both claim to be this invoice.
+      lockOnceSet('An issued invoice', ['pdfStorageKey', 'deliveredAt']),
       enforceTotals,
       enforceTaxTreatmentConsistency,
     ],

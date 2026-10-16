@@ -531,8 +531,11 @@ export const createStripeBillingPort = (
           const failure = translateStripeError(error, 'SUBSCRIPTION')
 
           // Only for the propagation case. Anything else is a real rejection
-          // and retrying it would just fail again more slowly.
-          if (failure.providerCode !== 'resource_missing') throw error
+          // and retrying it would just fail again more slowly. Prefix match
+          // because the code now carries the failing parameter after it.
+          if (!failure.providerCode?.startsWith('resource_missing')) {
+            throw error
+          }
 
           await applyPhases()
         }
