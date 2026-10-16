@@ -226,6 +226,21 @@ from the old place:
 The pinned literal is typed as the SDK's own latest-version type, so bumping
 the `stripe` package without revisiting that file is a type error.
 
+**Two versions are in play and they are allowed to disagree.** The pin in
+`client.ts` governs OUTBOUND calls only. INBOUND webhook payloads are rendered
+at the version of the webhook _endpoint_, or the _account_ default if the
+endpoint pins none — neither of which lives in this repository. So the shape we
+send is not necessarily the shape we receive, and `event.api_version` (logged
+on every event) is what says how to read a payload.
+
+If an inbound payload predates `2025-03-31.basil`, the period fields are in
+their old place and `translateSubscription` refuses with
+`UNREADABLE_PERIOD_FIELDS`, which the route logs at **error** level naming both
+versions. That is deliberately distinct from a `NOT_OURS_*` refusal, which just
+means the subscription is in a currency or interval we do not sell — correct,
+and not a fault. Pin the webhook endpoint's `api_version` to avoid relying on
+the account default at all.
+
 ### Disputes
 
 A chargeback is a `disputes` row in our own admin, not just a line in Stripe's

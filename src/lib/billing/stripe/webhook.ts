@@ -74,7 +74,11 @@ import {
 } from '../ordering.ts'
 import { redactForLog } from '../redact.ts'
 import { mapStripeSubscriptionStatus } from './status.ts'
-import { toProviderSubscription } from './translate.ts'
+import { isUnreadableReason, translateSubscription } from './translate.ts'
+import {
+  FIELD_RELOCATION_VERSION,
+  isPreRelocationVersion,
+} from './api-version.ts'
 
 const PROVIDER = 'STRIPE' as const
 
@@ -97,12 +101,28 @@ export type StripeEventOutcome = {
   reason?: string
   /** What changed, for logs and tests. */
   changes: readonly string[]
+  /** Structured specifics behind `reason`. See `HandlerResult.detail`. */
+  detail?: Record<string, unknown>
+  /**
+   * True when the refusal was "we could not read this payload" rather than
+   * "this is not ours". The route logs the two at different levels, because
+   * only one of them is a fault.
+   */
+  unreadable?: boolean
 }
 
 type HandlerResult = {
   applied: boolean
   reason?: string
   changes?: readonly string[]
+  /**
+   * Structured specifics for the log line.
+   *
+   * A reason string says WHAT was refused; this says enough to act on it
+   * without a second round trip to find out. Safe to log by construction —
+   * statuses, versions, currencies and counts only.
+   */
+  detail?: Record<string, unknown>
 }
 
 const nothing = (reason: string): HandlerResult => ({ applied: false, reason })
@@ -138,8 +158,26 @@ export const subscriptionIdOfInvoice = (
  * The payment ids that settled an invoice.
  *
  * MOVED: this was `invoice.payment_intent`. Now an invoice can have several
- * payments, each naming either a payment intent or a bare charge, so this
- * returns every id we might later match a refund or a chargeback against.
+ * payments, each naming either a payment intent or a bare charge.
+ *
+ * ──────────────────────────────────────────────────────────────────────────
+ * `invoice.payments` IS EXPANDABLE, SO A WEBHOOK PAYLOAD DOES NOT HAVE IT
+ *
+ * Verified against a real `invoice.paid` event: the list is absent entirely
+ * unless the request asked for `expand: ['payments']`. On an event payload
+ * this function therefore returns `[]` — not because the invoice had no
+ * payments, but because nobody expanded them.
+ *
+ * That makes it useless for resolving a webhook invoice to its payment, and
+ * it is deliberately NOT used for that. The payment-intent and charge
+ * handlers match on ids taken from their OWN payload
+ * (`intent.id`, `intent.latest_charge`, `charge.id`, `charge.payment_intent`)
+ * against our `invoices.providerPaymentId` column, which needs no expansion.
+ *
+ * It is kept for step 5b, which has to populate `providerPaymentId` when it
+ * starts issuing invoices — and which will have to retrieve the invoice with
+ * `expand: ['payments']` to do it, or take the id from the payment event
+ * instead. An empty result here means "not expanded", not "not paid".
  */
 export const paymentIdsOfInvoice = (invoice: Stripe.Invoice): string[] => {
   const ids: string[] = []
@@ -410,14 +448,33 @@ const handleSubscriptionChange = async (
   const subscription = ctx.event.data.object as Stripe.Subscription
 
   const sequence = sequenceFromEventCreated(ctx.event.created)
-  const incoming = toProviderSubscription(subscription, sequence)
+  const translated = translateSubscription(subscription, sequence)
 
-  if (!incoming) {
-    // An untranslatable subscription — unknown currency, an interval we do not
-    // sell, more than one item. Storing half of it would corrupt the row that
-    // decides access, so record the event and leave our data alone.
-    return nothing('UNTRANSLATABLE_SUBSCRIPTION')
+  if (!translated.ok) {
+    // Two very different situations, and they get two different reasons.
+    //
+    // A `NOT_OURS_*` refusal is correct: somebody triggered a USD fixture, or
+    // another integration shares this account. An `UNREADABLE_*` refusal means
+    // we could not parse the payload at all, which is almost always that the
+    // webhook endpoint or the account is rendering events at an API version
+    // older than the one this code reads — and that breaks EVERY
+    // subscription, not just this one.
+    //
+    // They shared a single reason string once. That cost a round trip to
+    // diagnose, so the version is now reported alongside it.
+    return {
+      applied: false,
+      reason: translated.reason,
+      detail: {
+        ...translated.detail,
+        eventApiVersion: ctx.event.api_version ?? null,
+        codeReadsVersion: FIELD_RELOCATION_VERSION + ' or newer',
+        payloadPredatesFieldMove: isPreRelocationVersion(ctx.event.api_version),
+      },
+    }
   }
+
+  const incoming = translated.value
 
   const row = await findSubscriptionRow(ctx, subscription.id)
 
@@ -1201,6 +1258,9 @@ export const handleStripeEvent = async ({
   }
   const result = await handler(ctx)
 
+  const unreadable =
+    result.reason !== undefined && isUnreadableReason(result.reason)
+
   return {
     eventId: event.id,
     eventType: event.type,
@@ -1208,6 +1268,8 @@ export const handleStripeEvent = async ({
     applied: result.applied,
     ...(result.reason ? { reason: result.reason } : {}),
     changes: result.changes ?? [],
+    ...(result.detail ? { detail: result.detail } : {}),
+    ...(unreadable ? { unreadable: true } : {}),
   }
 }
 
