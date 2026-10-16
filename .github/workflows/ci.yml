@@ -35,6 +35,9 @@ jobs:
       R2_ACCESS_KEY_ID: ci
       R2_SECRET_ACCESS_KEY: ci
       R2_BUCKET: ci
+      # Deliberately different from R2_BUCKET: the isolation assertion refuses
+      # to store documents when the two match.
+      R2_DOCUMENTS_BUCKET: ci-documents
       R2_PUBLIC_BASE_URL: https://cdn.sazejchytre.cz
       UPSTASH_REDIS_REST_URL: https://ci.upstash.invalid
       UPSTASH_REDIS_REST_TOKEN: ci

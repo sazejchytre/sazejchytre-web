@@ -78,6 +78,25 @@ const serverEnvSchema = z.object({
   R2_ACCESS_KEY_ID: secret(1),
   R2_SECRET_ACCESS_KEY: secret(1),
   R2_BUCKET: secret(1),
+
+  /**
+   * A SEPARATE bucket for invoices and credit notes.
+   *
+   * Not a prefix inside `R2_BUCKET`. That was the original design and it was
+   * wrong: `R2_PUBLIC_BASE_URL` is bound to the media bucket at its ROOT, so
+   * every prefix in it — including one called `private/` — is served over
+   * the public domain. A document stored there is fetchable by anyone who
+   * knows or guesses the key, which for sequential document numbers is
+   * anyone at all.
+   *
+   * This bucket must have NO public domain and NO r2.dev access enabled.
+   * `assertDocumentBucketIsolated()` refuses to store anything if it is the
+   * same bucket as the media one, so the mistake cannot recur quietly.
+   *
+   * No default: a wrong guess here is a privacy incident, and the CDN cache
+   * does not purge on delete, so a leak outlives the fix.
+   */
+  R2_DOCUMENTS_BUCKET: secret(1),
   // Public CDN origin the bucket is served from. No trailing slash.
   R2_PUBLIC_BASE_URL: z
     .url({ error: 'must be an absolute URL' })

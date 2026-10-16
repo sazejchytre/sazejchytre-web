@@ -312,17 +312,25 @@ value is allowed, value → different value never is. A corrected document is a
 new document, so a second PDF under one number must be impossible rather than
 merely discouraged.
 
-### Documents are never public
+### Documents are never public — a separate BUCKET, not a prefix
 
-They go under a private prefix that `cdn.sazejchytre.cz` does not map to, and
-reach the customer only through `/ucet/doklady/<id>`, which checks the document
-belongs to the requester — document ids are sequential, so without that check
-the route is an enumeration of other people's invoices.
+Documents live in `R2_DOCUMENTS_BUCKET`, which must have **no public domain
+and no r2.dev access**, and reach the customer only through
+`/ucet/doklady/<id>`, which scopes the query by customer — document ids are
+sequential, so without that check the route enumerates other people's
+invoices.
 
-This is a separate prefix and a separate code path rather than a flag, because
-**the CDN cache does not purge on delete**. A document served publicly even
-once is cached at the edge, and deleting the object in R2 does not evict it;
-the leak outlives the fix and no deploy takes it back.
+A separate bucket because a prefix is **not** sufficient, and that was
+established the hard way: the first version stored documents under
+`private/documents/` in the media bucket, and fetching
+`https://cdn.sazejchytre.cz/private/documents/...` returned the PDF with HTTP 200. `R2_PUBLIC_BASE_URL` is bound to that bucket at its **root**, so every
+prefix in it is served publicly. Object keys are not secrets.
+
+`assertBucketsDiffer` refuses to store or read a document when the two buckets
+match, so the misconfiguration cannot recur silently. That matters more than
+usual because **the CDN cache does not purge on delete**: a document served
+publicly once is cached at the edge, deleting the object does not evict it,
+and no deploy takes it back.
 
 ### No VAT, and the document says so
 
@@ -475,6 +483,11 @@ Nothing in the application code disables a trigger.
   first real payment arrives in step 5. The issuing path is wired to
   `invoice.paid` and covered by tests, but it has never run against a live
   Stripe payment.
+- **`R2_DOCUMENTS_BUCKET` does not exist yet.** It has to be created in
+  Cloudflare R2, with no public domain and no r2.dev access, before anything
+  can store a PDF. Until then issuing and the row succeed and the PDF step
+  fails, which leaves the document `PENDING` for the retry sweep — the
+  intended failure mode, but it means no customer receives a PDF yet.
 - **The product/price sync and the Stripe adapter have never run against the
   Stripe API.** No test keys were available when they were written, so they
   are typechecked against the pinned API version's type definitions and

@@ -2,31 +2,32 @@
  * Storing documents in R2, privately.
  *
  * ──────────────────────────────────────────────────────────────────────────
- * WHY NOT THE MEDIA BINDING
+ * A SEPARATE BUCKET, NOT A PREFIX
  *
- * `media` is served straight from `cdn.sazejchytre.cz` with
- * `disablePayloadAccessControl: true`, because serving public images through a
- * serverless function is a waste. Invoices are the opposite case: they carry
- * both parties' names and addresses and what somebody bought, and an object
- * key is not a secret. A document reachable by URL is a document reachable by
- * anybody who guesses, scrapes or is forwarded that URL.
+ * The first version of this used a `private/` prefix inside the media bucket.
+ * That was wrong, and it was proven wrong by fetching one: the public domain
+ * is bound to the media bucket at its ROOT, so every prefix in it is served
+ * publicly. `GET https://cdn.sazejchytre.cz/private/documents/...` returned
+ * the PDF with HTTP 200.
  *
- * So documents go under a prefix that the public domain does not map to, and
- * reach the customer only through an authenticated route that checks the
- * document is theirs.
+ * An object key is not a secret, and document numbers are sequential. So a
+ * document in a publicly-bound bucket is readable by anyone who can count.
+ *
+ * Documents therefore live in a bucket of their own with no public domain and
+ * no r2.dev access, and reach the customer only through an authenticated
+ * route that checks the document is theirs. The prefix is kept as well, but
+ * it is tidiness, not a control.
  *
  * ──────────────────────────────────────────────────────────────────────────
  * AND THE CDN CACHE DOES NOT PURGE ON DELETE
  *
- * This is the part that makes the mistake unrecoverable rather than
- * embarrassing. If a document is ever served through the public binding, the
- * CDN caches it at the edge; deleting the object in R2 does not evict that
- * copy. The leak then outlives the fix by however long the cache lives, and
- * there is no deploy that takes it back.
+ * This is what makes the mistake unrecoverable rather than embarrassing. A
+ * document served through the public binding is cached at the edge; deleting
+ * the object in R2 does not evict that copy. The leak outlives the fix by
+ * however long the cache lives, and no deploy takes it back.
  *
- * Which is why this is a separate prefix and a separate code path rather than
- * a flag on the existing one. There is no configuration mistake that can
- * quietly make these public.
+ * Hence `assertDocumentBucketIsolated()`: the configuration that caused this
+ * cannot recur silently, because storing a document fails loudly instead.
  */
 import {
   GetObjectCommand,
@@ -35,6 +36,7 @@ import {
 } from '@aws-sdk/client-s3'
 
 import { env } from '../env.ts'
+import { assertBucketsDiffer } from './bucket-isolation.ts'
 
 /**
  * The prefix documents live under.
@@ -44,6 +46,19 @@ import { env } from '../env.ts'
  * rather than configuration.
  */
 export const PRIVATE_DOCUMENT_PREFIX = 'private/documents'
+
+/**
+ * Refuse to store documents in the publicly-served bucket.
+ *
+ * The one check that matters. `R2_BUCKET` has a public domain bound to its
+ * root; `R2_DOCUMENTS_BUCKET` must not be the same bucket, or every invoice
+ * is one guessed URL away from a stranger. Checked on every store and every
+ * read rather than once at boot, because the cost is a string comparison and
+ * the failure is a privacy incident.
+ */
+export const assertDocumentBucketIsolated = (): void => {
+  assertBucketsDiffer(env.R2_DOCUMENTS_BUCKET, env.R2_BUCKET)
+}
 
 let client: S3Client | null = null
 
@@ -115,9 +130,11 @@ export const putPrivateDocument = async (
     )
   }
 
+  assertDocumentBucketIsolated()
+
   await getClient().send(
     new PutObjectCommand({
-      Bucket: env.R2_BUCKET,
+      Bucket: env.R2_DOCUMENTS_BUCKET,
       Key: key,
       Body: body,
       ContentType: 'application/pdf',
@@ -133,8 +150,10 @@ export const putPrivateDocument = async (
 
 /** Read a document back, for the authenticated download route. */
 export const getPrivateDocument = async (key: string): Promise<Buffer> => {
+  assertDocumentBucketIsolated()
+
   const result = await getClient().send(
-    new GetObjectCommand({ Bucket: env.R2_BUCKET, Key: key }),
+    new GetObjectCommand({ Bucket: env.R2_DOCUMENTS_BUCKET, Key: key }),
   )
 
   const body = result.Body
