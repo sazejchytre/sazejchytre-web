@@ -220,7 +220,8 @@ describe('a refund credits the invoice without touching it', () => {
       providerRefundId: `${RUN}-re-1`,
       reason: 'Customer request, full refund',
       now: new Date('2026-06-10T00:00:00.000Z'),
-      billingCountry: 'CZ',
+      // billingCountry is now copied from the invoice by issueCreditNote,
+      // which is the only place that knows it.
       allocate: allocateInTestYear,
     })
 

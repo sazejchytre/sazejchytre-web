@@ -1,6 +1,13 @@
 /**
  * Transactional email delivery through Resend.
  *
+ * THE APPLICATION'S ONE TRANSPORT. It lives under `auth/` because that is
+ * where the first sender was, and billing now sends through it too — one
+ * place that holds the Resend credential, one test seam, one redacting
+ * logger. Invoice mail benefits from that logger as much as auth mail does:
+ * an invoice email carries a name, an address and a document number, none of
+ * which belong in a log.
+ *
  * FAILURES ARE NOT SWALLOWED
  *
  * A send that fails must be visible. The two failure modes have different
@@ -45,11 +52,36 @@ export class EmailDeliveryError extends Error {
 const RESEND_ENDPOINT = 'https://api.resend.com/emails'
 const RESEND_TIMEOUT_MS = 10_000
 
+/**
+ * A file travelling with the email.
+ *
+ * Added for invoicing: a customer receiving "here is your invoice" with no
+ * invoice attached has to come and find it, which defeats the point of
+ * sending anything. The content is held in memory because an invoice is a few
+ * kilobytes; anything large enough to need streaming does not belong in an
+ * email.
+ */
+export type EmailAttachment = {
+  /** As the recipient will see it, e.g. `FA2026-000001.pdf`. */
+  filename: string
+  content: Buffer
+  /** Defaults to `application/pdf`, which is all we currently send. */
+  contentType?: string
+}
+
 export type SendArgs = {
   to: string
   email: RenderedEmail
   /** Short label for logs. Never the subject, which can contain user data. */
   kind: string
+  /**
+   * Files to attach.
+   *
+   * Never logged, not even by name: an attachment name carries the document
+   * number, and a document number plus an email address is more than a log
+   * line needs.
+   */
+  attachments?: readonly EmailAttachment[]
 }
 
 /**
@@ -65,7 +97,12 @@ export type SendArgs = {
  */
 export type EmailTransport = (args: SendArgs) => Promise<void>
 
-const resendTransport: EmailTransport = async ({ to, email, kind }) => {
+const resendTransport: EmailTransport = async ({
+  to,
+  email,
+  kind,
+  attachments,
+}) => {
   let response: Response
 
   try {
@@ -83,6 +120,17 @@ const resendTransport: EmailTransport = async ({ to, email, kind }) => {
         // Always both parts. A security notice that renders blank in a
         // text-only client is the same as no notice.
         text: email.text,
+        ...(attachments && attachments.length > 0
+          ? {
+              attachments: attachments.map((attachment) => ({
+                filename: attachment.filename,
+                // Resend takes base64. Done here rather than by the caller so
+                // no other code has to know the provider's wire format.
+                content: attachment.content.toString('base64'),
+                content_type: attachment.contentType ?? 'application/pdf',
+              })),
+            }
+          : {}),
       }),
       signal: AbortSignal.timeout(RESEND_TIMEOUT_MS),
       cache: 'no-store',
@@ -117,7 +165,14 @@ const resendTransport: EmailTransport = async ({ to, email, kind }) => {
 
   // Note what was sent and to whom, as a hash. Never the subject, the body or
   // the link — all three carry the token.
-  authLog.info('email.sent', { kind, email: to })
+  // Count, not names: an attachment filename carries the document number.
+  authLog.info('email.sent', {
+    kind,
+    email: to,
+    ...(attachments && attachments.length > 0
+      ? { attachmentCount: attachments.length }
+      : {}),
+  })
 }
 
 let transport: EmailTransport = resendTransport

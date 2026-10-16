@@ -68,6 +68,13 @@ import type {
 import { CURRENCIES } from '../constants.ts'
 import { allocateDocumentNumber } from '../document-number.ts'
 import {
+  OverCreditError,
+  issueCreditNote,
+} from '../../invoicing/credit-note.ts'
+import { deliverDocument } from '../../invoicing/delivery.ts'
+import { issueInvoiceForPayment } from '../../invoicing/issue.ts'
+import type { ResolvedPayment } from '../../invoicing/stripe-payment.ts'
+import {
   type StoredSubscriptionState,
   decideSubscriptionWrite,
   sequenceFromEventCreated,
@@ -197,11 +204,31 @@ export const paymentIdsOfInvoice = (invoice: Stripe.Invoice): string[] => {
 /* Lookups in our own data                                                    */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * How this handler issues invoices, injected.
+ *
+ * Absent by default. The pure webhook tests must run with no network and no
+ * credentials, and issuing needs Stripe API calls — `invoice.payments` is
+ * expandable, so the event alone carries no payment id. With the seam absent
+ * the handler records the renewal exactly as before and simply does not issue,
+ * which is also the right behaviour for any caller that has not wired
+ * invoicing up. The route supplies the real implementation.
+ */
+export type InvoicingSeam = {
+  resolvePayment: (
+    invoiceId: string,
+    eventCreated: number,
+  ) => Promise<ResolvedPayment>
+  /** Render the PDF and email it after issuing. */
+  deliver: boolean
+}
+
 type Ctx = {
   payload: Payload
   req?: PayloadRequest
   event: Stripe.Event
   now: Date
+  invoicing?: InvoicingSeam
   /** Passed through to `issueCreditNoteForRefund`. See its docs. */
   allocate?: DocumentNumberAllocator
 }
@@ -213,6 +240,9 @@ type SubscriptionRow = {
   id: number | string
   status: SubscriptionStatus
   currency: Currency
+  plan?: unknown
+  currentPeriodStart?: string | null
+  currentPeriodEnd?: string | null
   priceMinor?: number | null
   providerUpdatedAt?: string | null
   cancelAtPeriodEnd?: boolean | null
@@ -632,6 +662,13 @@ const handleInvoicePaid = async (ctx: Ctx): Promise<HandlerResult> => {
     return nothing(reason)
   }
 
+  // ─────────── ISSUE THE DOCUMENT ───────────
+  // The payment is confirmed, so this is the moment an invoice may be issued.
+  // Done before the subscription bookkeeping below because the document is a
+  // statutory obligation and the audit row is our own convenience; if only
+  // one of them can happen, it should be the document.
+  const issuingChanges = await issueForPaidInvoice(ctx, invoice, row)
+
   // A paid invoice is the recovery signal for a dunned subscription. Stripe
   // also sends `subscription.updated`, but relying on a second event to
   // arrive — and to arrive in order — is how a customer stays locked out
@@ -650,8 +687,14 @@ const handleInvoicePaid = async (ctx: Ctx): Promise<HandlerResult> => {
   })
 
   if (!recovered) {
-    return written
-      ? { applied: true, changes: ['recorded renewal'] }
+    if (written) {
+      return { applied: true, changes: ['recorded renewal', ...issuingChanges] }
+    }
+
+    // The audit row already existed, but issuing may still have done
+    // something on this delivery, so the outcome has to say so.
+    return issuingChanges.length > 0
+      ? { applied: true, changes: issuingChanges }
       : nothing('ALREADY_RECORDED')
   }
 
@@ -660,7 +703,11 @@ const handleInvoicePaid = async (ctx: Ctx): Promise<HandlerResult> => {
     sequence: sequenceFromEventCreated(ctx.event.created),
   })
 
-  if (!decision.apply) return nothing(`ORDERING_${decision.reason}`)
+  if (!decision.apply) {
+    return issuingChanges.length > 0
+      ? { applied: true, changes: issuingChanges }
+      : nothing(`ORDERING_${decision.reason}`)
+  }
 
   await ctx.payload.update({
     collection: 'subscriptions',
@@ -675,7 +722,146 @@ const handleInvoicePaid = async (ctx: Ctx): Promise<HandlerResult> => {
     },
   })
 
-  return { applied: true, changes: ['PAST_DUE -> ACTIVE (payment recovered)'] }
+  return {
+    applied: true,
+    changes: ['PAST_DUE -> ACTIVE (payment recovered)', ...issuingChanges],
+  }
+}
+
+/**
+ * Issue, and optionally deliver, the invoice for a payment just confirmed.
+ *
+ * Never throws. A document that cannot be issued must not make the webhook
+ * return 500 and have Stripe retry the whole event for days — the payment is
+ * real either way, and issuing is retryable. The reason lands in the changes
+ * list and in the log.
+ */
+const issueForPaidInvoice = async (
+  ctx: Ctx,
+  invoice: Stripe.Invoice,
+  row: SubscriptionRow,
+): Promise<string[]> => {
+  if (!ctx.invoicing) return []
+
+  try {
+    const resolved = await ctx.invoicing.resolvePayment(
+      invoice.id as string,
+      ctx.event.created,
+    )
+
+    if (!resolved.ok) {
+      return [`invoice not issued: ${resolved.reason}`]
+    }
+
+    const customerId =
+      typeof row.customer === 'object' && row.customer !== null
+        ? (row.customer as { id: number }).id
+        : (row.customer as number)
+
+    const period = await billedPeriod(ctx, invoice, row)
+
+    if (!period) {
+      return ['invoice not issued: PERIOD_UNKNOWN']
+    }
+
+    const issued = await issueInvoiceForPayment({
+      payload: ctx.payload,
+      ...reqOpt(ctx),
+      customerId,
+      subscriptionId: Number(row.id),
+      payment: resolved.payment,
+      period,
+    })
+
+    const changes = [
+      issued.created
+        ? `issued invoice ${issued.number}`
+        : `invoice ${issued.number} already issued for this payment`,
+    ]
+
+    if (issued.created && ctx.invoicing.deliver) {
+      const outcome = await deliverDocument({
+        payload: ctx.payload,
+        ...reqOpt(ctx),
+        collection: 'invoices',
+        id: issued.id,
+      })
+
+      changes.push(
+        outcome.delivered
+          ? `emailed ${issued.number}`
+          : `delivery pending: ${outcome.reason ?? 'unknown'}`,
+      )
+    }
+
+    return changes
+  } catch (error) {
+    ctx.payload.logger.error(
+      {
+        scope: 'billing',
+        event: 'invoice.issue_failed',
+        eventId: ctx.event.id,
+        error: redactForLog(error),
+      },
+      'Could not issue an invoice for a confirmed payment. The payment stands; issuing is retryable.',
+    )
+
+    return ['invoice not issued: ISSUE_FAILED']
+  }
+}
+
+/**
+ * The period the payment bought.
+ *
+ * From the invoice's own line item, which is the authoritative service period
+ * for that charge. The subscription row's current period can still be the
+ * previous one if `customer.subscription.updated` has not landed yet, and
+ * events are not ordered — so the row is only the fallback.
+ */
+const billedPeriod = async (
+  ctx: Ctx,
+  invoice: Stripe.Invoice,
+  row: SubscriptionRow,
+): Promise<{ planName: string; periodStart: Date; periodEnd: Date } | null> => {
+  const line = invoice.lines?.data?.[0]
+
+  const start =
+    typeof line?.period?.start === 'number'
+      ? new Date(line.period.start * 1000)
+      : row.currentPeriodStart
+        ? new Date(row.currentPeriodStart)
+        : null
+
+  const end =
+    typeof line?.period?.end === 'number'
+      ? new Date(line.period.end * 1000)
+      : row.currentPeriodEnd
+        ? new Date(row.currentPeriodEnd)
+        : null
+
+  if (!start || !end) return null
+
+  const planId =
+    typeof row.plan === 'object' && row.plan !== null
+      ? (row.plan as { id: number }).id
+      : (row.plan as number | undefined)
+
+  // A fallback name rather than a refusal: the document must describe what
+  // was sold, and "Předplatné" is true even when the plan row has vanished.
+  let planName = 'Předplatné'
+
+  if (planId !== undefined && planId !== null) {
+    const plan = await ctx.payload.findByID({
+      collection: 'plans',
+      id: planId,
+      depth: 0,
+      overrideAccess: true,
+      ...reqOpt(ctx),
+    })
+    planName = plan.name
+  }
+
+  return { planName, periodStart: start, periodEnd: end }
 }
 
 const handleInvoicePaymentFailed = async (ctx: Ctx): Promise<HandlerResult> => {
@@ -843,9 +1029,6 @@ const handleChargeRefunded = async (ctx: Ctx): Promise<HandlerResult> => {
     reason: `Refund of charge ${charge.id} (Stripe refund ${refund.id})`,
     now: new Date(ctx.event.created * 1000),
     ...(ctx.allocate ? { allocate: ctx.allocate } : {}),
-    ...(invoice.billingCountry
-      ? { billingCountry: invoice.billingCountry }
-      : {}),
   })
 
   if (invoice.subscription) {
@@ -887,7 +1070,6 @@ export type IssueCreditNoteArgs = {
   providerRefundId: string
   reason: string
   now: Date
-  billingCountry?: string
   /**
    * Overridable number allocator.
    *
@@ -923,71 +1105,48 @@ export const issueCreditNoteForRefund = async ({
   providerRefundId,
   reason,
   now,
-  billingCountry,
   allocate = allocateDocumentNumber,
 }: IssueCreditNoteArgs): Promise<{
   issued: boolean
   number: string | null
 }> => {
-  const reqOption = req ? { req } : {}
-
-  const existing = await payload.find({
-    collection: 'credit-notes',
-    depth: 0,
-    limit: 1,
-    pagination: false,
-    overrideAccess: true,
-    ...reqOption,
-    where: { providerRefundId: { equals: providerRefundId } },
-  })
-
-  const already = existing.docs[0] as { number?: string } | undefined
-
-  if (already) {
-    return { issued: false, number: already.number ?? null }
-  }
-
-  const allocated = await allocate({
-    payload,
-    series: 'CREDIT_NOTE',
-    now,
-    ...reqOption,
-  })
-
-  await payload.create({
-    collection: 'credit-notes',
-    overrideAccess: true,
-    ...reqOption,
-    data: {
-      number: allocated.number,
-      numberYear: allocated.year,
-      numberSequence: allocated.sequence,
-      invoice: invoiceId as number,
-      currency,
+  try {
+    const result = await issueCreditNote({
+      payload,
+      ...(req ? { req } : {}),
+      invoiceId: Number(invoiceId),
       amountMinor,
+      currency,
       reason,
-      issuedAt: now.toISOString(),
       providerRefundId,
-      // Issued now; the PDF and the email follow and may fail without
-      // unissuing the document.
-      deliveryState: 'PENDING',
-      deliveryAttempts: 0,
-      ...(billingCountry ? { billingCountry } : {}),
-    },
-  })
+      now,
+      allocate,
+    })
 
-  // The invoice's own status becomes CREDITED so the admin shows at a glance
-  // that it has been corrected. This is the one permitted change to an issued
-  // invoice: a status marker, never an amount. Totals stay as issued.
-  await payload.update({
-    collection: 'invoices',
-    id: invoiceId as number,
-    overrideAccess: true,
-    ...reqOption,
-    data: { status: 'CREDITED' },
-  })
+    return { issued: result.created, number: result.number }
+  } catch (error) {
+    // Over-crediting is a REFUSAL, not a crash. Step 4 left this open; the
+    // guard now lives in `issueCreditNote`, and the refund handler has to be
+    // able to report it without returning 500 and making Stripe retry a
+    // refund that will never be creditable.
+    if (error instanceof OverCreditError) {
+      payload.logger.warn(
+        {
+          scope: 'billing',
+          event: 'credit_note.over_credit_refused',
+          invoiceId: error.invoiceId,
+          invoiceTotalMinor: error.invoiceTotalMinor,
+          alreadyCreditedMinor: error.alreadyCreditedMinor,
+          requestedMinor: error.requestedMinor,
+        },
+        error.message,
+      )
 
-  return { issued: true, number: allocated.number }
+      return { issued: false, number: null }
+    }
+
+    throw error
+  }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1223,6 +1382,8 @@ export type HandleStripeEventArgs = {
   now?: Date
   /** Overridable document-number allocator. See `IssueCreditNoteArgs`. */
   allocate?: DocumentNumberAllocator
+  /** How to issue invoices. Absent means do not issue; see `InvoicingSeam`. */
+  invoicing?: InvoicingSeam
 }
 
 /**
@@ -1239,6 +1400,7 @@ export const handleStripeEvent = async ({
   req,
   now = new Date(),
   allocate,
+  invoicing,
 }: HandleStripeEventArgs): Promise<StripeEventOutcome> => {
   const handler = STRIPE_HANDLERS[event.type]
 
@@ -1259,6 +1421,7 @@ export const handleStripeEvent = async ({
     now,
     ...(req ? { req } : {}),
     ...(allocate ? { allocate } : {}),
+    ...(invoicing ? { invoicing } : {}),
   }
   const result = await handler(ctx)
 
