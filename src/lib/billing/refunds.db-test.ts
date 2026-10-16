@@ -100,6 +100,11 @@ after(async () => {
   await db().execute(
     sql`DELETE FROM "customers" WHERE "email" LIKE ${`${RUN}%`}`,
   )
+
+  // Close the pg pool. An open pool is a live handle, so without this the
+  // process survives after every test has passed, holds Neon connections and
+  // can contend with the next run — which has already cost one stalled suite.
+  await payload.destroy()
 })
 
 /* -------------------------------------------------------------------------- */
