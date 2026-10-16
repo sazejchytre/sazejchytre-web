@@ -250,6 +250,41 @@ export const disputeObject = (
     },
   }) as unknown as Stripe.Dispute
 
+/**
+ * A subscription as a PRE-`2025-03-31.basil` payload would arrive.
+ *
+ * Periods on the SUBSCRIPTION, absent from the item. This is what the account
+ * or endpoint rendering events at an older version actually looks like, and
+ * the only way to test that the refusal names the version rather than
+ * shrugging.
+ */
+export const preRelocationSubscriptionObject = (
+  options: SubscriptionFixtureOptions = {},
+): Stripe.Subscription => {
+  const modern = subscriptionObject(options) as unknown as Record<
+    string,
+    unknown
+  >
+  const items = modern.items as { data: Record<string, unknown>[] }
+  const item = items.data[0] as Record<string, unknown>
+
+  modern.current_period_start = item.current_period_start
+  modern.current_period_end = item.current_period_end
+  delete item.current_period_start
+  delete item.current_period_end
+
+  return modern as unknown as Stripe.Subscription
+}
+
+/** A subscription with two items, as only a hand-built one would be. */
+export const multiItemSubscriptionObject = (): Stripe.Subscription => {
+  const base = subscriptionObject() as unknown as Record<string, unknown>
+  const items = base.items as { data: unknown[] }
+  items.data = [items.data[0], { ...(items.data[0] as object), id: 'si_two' }]
+
+  return base as unknown as Stripe.Subscription
+}
+
 let eventCounter = 0
 
 /** Wrap an object in a Stripe event envelope. */

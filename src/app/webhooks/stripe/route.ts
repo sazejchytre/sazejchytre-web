@@ -55,6 +55,7 @@ import { env } from '@/lib/env'
 import { redactForLog } from '@/lib/billing/redact'
 import { handleStripeEvent } from '@/lib/billing/stripe/webhook'
 import { verifyStripeWebhook } from '@/lib/billing/stripe/verify'
+import { FIELD_RELOCATION_VERSION } from '@/lib/billing/stripe/api-version'
 import {
   claimWebhookEvent,
   markWebhookEventProcessed,
@@ -193,12 +194,32 @@ export async function POST(request: Request): Promise<Response> {
       provider: 'STRIPE',
       eventId: event.id,
       eventType: event.type,
+      // On EVERY event, not just failures. The version a payload was rendered
+      // at is the first thing anybody asks when a handler refuses, and it is
+      // not knowable from this repository — it comes from the webhook
+      // endpoint or the account default, both of which live in a dashboard.
+      apiVersion: event.api_version ?? null,
       applied: outcome.applied,
       ...(outcome.reason ? { reason: outcome.reason } : {}),
+      ...(outcome.detail ? { detail: redactForLog(outcome.detail) } : {}),
       changes: outcome.changes,
     }
 
-    if (outcome.reason === 'DISPUTE_NOT_ATTRIBUTABLE') {
+    if (outcome.unreadable) {
+      // We could not READ the payload, as distinct from reading it and
+      // deciding it is not ours. Almost always an API version mismatch, and
+      // it affects every subscription rather than this one, so it is an alert
+      // and the message says exactly what to check.
+      payload.logger.error(
+        logLine,
+        `Could not parse a Stripe ${event.type} payload (${outcome.reason}). ` +
+          `The event was rendered at API version ${event.api_version ?? 'unknown'}; ` +
+          `this code reads the post-${FIELD_RELOCATION_VERSION} field layout. ` +
+          'Pin the webhook endpoint to a version at or after that, or raise ' +
+          "the account's default. This affects EVERY subscription event, not " +
+          'just this one.',
+      )
+    } else if (outcome.reason === 'DISPUTE_NOT_ATTRIBUTABLE') {
       // Louder than the rest on purpose. An unattributed chargeback is money
       // on its way out with an evidence deadline attached and nobody assigned
       // to it; that deserves an alert, not an info line.

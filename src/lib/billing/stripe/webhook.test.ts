@@ -25,7 +25,9 @@ import {
   createPayloadDouble,
   disputeObject,
   invoiceObject,
+  multiItemSubscriptionObject,
   paymentIntentObject,
+  preRelocationSubscriptionObject,
   stripeEvent,
   subscriptionObject,
 } from './webhook-fixtures.ts'
@@ -1125,8 +1127,143 @@ describe('unhandled events', () => {
     )
 
     assert.equal(outcome.applied, false)
-    assert.equal(outcome.reason, 'UNTRANSLATABLE_SUBSCRIPTION')
+    // Specifically NOT_OURS, and specifically not an unreadable payload: this
+    // is a correct refusal and must not look like a fault.
+    assert.equal(outcome.reason, 'NOT_OURS_CURRENCY')
+    assert.notEqual(outcome.unreadable, true)
+    assert.equal(outcome.detail?.currency, 'jpy')
+    assert.deepEqual(outcome.detail?.weSell, ['CZK', 'EUR'])
     assert.equal(subscriptionRow(double)?.currency, 'CZK')
+  })
+
+  it('reports a USD trigger fixture as not ours, not as unparseable', async () => {
+    // Exactly what `stripe trigger customer.subscription.created` produces:
+    // a perfectly readable subscription in a currency we do not sell. This
+    // used to share one reason string with a payload we could not parse,
+    // which made a correct refusal indistinguishable from a broken
+    // integration.
+    const { double } = world({ status: 'ACTIVE' })
+
+    const outcome = await run(
+      double,
+      stripeEvent(
+        'customer.subscription.created',
+        subscriptionObject({ currency: 'usd' }),
+      ),
+    )
+
+    assert.equal(outcome.reason, 'NOT_OURS_CURRENCY')
+    assert.notEqual(outcome.unreadable, true)
+  })
+
+  it('names the API version when the payload predates the field move', async () => {
+    // Periods on the subscription instead of the item. The refusal must say
+    // so, because this one breaks every subscription event rather than
+    // just this one.
+    const { double } = world({ status: 'ACTIVE' })
+
+    const outcome = await run(
+      double,
+      stripeEvent(
+        'customer.subscription.updated',
+        preRelocationSubscriptionObject(),
+      ),
+    )
+
+    assert.equal(outcome.applied, false)
+    assert.equal(outcome.reason, 'UNREADABLE_PERIOD_FIELDS')
+    assert.equal(outcome.unreadable, true)
+    assert.equal(outcome.detail?.periodOnItem, false)
+    assert.equal(
+      outcome.detail?.periodOnSubscriptionInstead,
+      true,
+      'the refusal did not notice the period was in the OLD place',
+    )
+    assert.equal(outcome.detail?.fieldsMovedIn, '2025-03-31.basil')
+    // Nothing was written on a payload we could not read.
+    assert.equal(subscriptionRow(double)?.status, 'ACTIVE')
+  })
+
+  it('reports the version problem even when the currency is also wrong', async () => {
+    // Both faults at once. The version one wins, because it is the one that
+    // explains every other subscription failing too.
+    const { double } = world({ status: 'ACTIVE' })
+
+    const outcome = await run(
+      double,
+      stripeEvent(
+        'customer.subscription.updated',
+        preRelocationSubscriptionObject({ currency: 'usd' }),
+      ),
+    )
+
+    assert.equal(outcome.reason, 'UNREADABLE_PERIOD_FIELDS')
+    assert.equal(outcome.unreadable, true)
+  })
+
+  it('declines a multi-item subscription as not ours', async () => {
+    const { double } = world({ status: 'ACTIVE' })
+
+    const outcome = await run(
+      double,
+      stripeEvent(
+        'customer.subscription.updated',
+        multiItemSubscriptionObject(),
+      ),
+    )
+
+    assert.equal(outcome.reason, 'NOT_OURS_MULTIPLE_ITEMS')
+    assert.notEqual(outcome.unreadable, true)
+    assert.equal(outcome.detail?.itemCount, 2)
+  })
+
+  it('declines an interval we do not sell as not ours', async () => {
+    const { double } = world({ status: 'ACTIVE' })
+
+    const weekly = subscriptionObject() as unknown as {
+      items: { data: { price: { recurring: Record<string, unknown> } }[] }
+    }
+    weekly.items.data[0]!.price.recurring = {
+      interval: 'week',
+      interval_count: 1,
+    }
+
+    const outcome = await run(
+      double,
+      stripeEvent(
+        'customer.subscription.updated',
+        weekly as unknown as Parameters<typeof stripeEvent>[1],
+      ),
+    )
+
+    assert.equal(outcome.reason, 'NOT_OURS_INTERVAL')
+    assert.notEqual(outcome.unreadable, true)
+    assert.equal(outcome.detail?.interval, 'week')
+  })
+
+  it('never lets a not-ours reason and an unreadable reason coincide', async () => {
+    // The property the brief asked for, asserted directly rather than implied
+    // by the cases above.
+    const { double } = world({ status: 'ACTIVE' })
+
+    const notOurs = await run(
+      double,
+      stripeEvent(
+        'customer.subscription.updated',
+        subscriptionObject({ currency: 'usd' }),
+      ),
+    )
+    const unreadable = await run(
+      double,
+      stripeEvent(
+        'customer.subscription.updated',
+        preRelocationSubscriptionObject(),
+      ),
+    )
+
+    assert.notEqual(notOurs.reason, unreadable.reason)
+    assert.ok(String(notOurs.reason).startsWith('NOT_OURS_'))
+    assert.ok(String(unreadable.reason).startsWith('UNREADABLE_'))
   })
 
   it('refuses to overwrite our currency with a different one', async () => {
