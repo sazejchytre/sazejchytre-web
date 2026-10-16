@@ -31,6 +31,7 @@
     "sync:prices": "cross-env NODE_OPTIONS=--no-deprecation payload run src/scripts/sync-stripe-prices.ts",
     "sync:prices:apply": "cross-env APPLY=1 NODE_OPTIONS=--no-deprecation payload run src/scripts/sync-stripe-prices.ts",
     "reconcile:subscriptions": "cross-env NODE_OPTIONS=--no-deprecation payload run src/scripts/reconcile-subscriptions.ts",
+    "export:accounting": "cross-env NODE_OPTIONS=--no-deprecation payload run src/scripts/export-accounting.ts",
     "auth:migrate": "cross-env NODE_OPTIONS=\"--no-deprecation --import tsx\" node --env-file-if-exists=.env src/scripts/auth-migrate.ts",
     "auth:migrate:dry": "cross-env NODE_OPTIONS=\"--no-deprecation --import tsx\" node --env-file-if-exists=.env src/scripts/auth-migrate.ts --dry",
     "sweep:lockouts": "cross-env NODE_OPTIONS=\"--no-deprecation --import tsx\" node --env-file-if-exists=.env src/scripts/sweep-lockouts.ts",

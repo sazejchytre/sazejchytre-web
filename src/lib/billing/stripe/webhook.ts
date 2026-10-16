@@ -71,7 +71,6 @@ import {
   OverCreditError,
   issueCreditNote,
 } from '../../invoicing/credit-note.ts'
-import { deliverDocument } from '../../invoicing/delivery.ts'
 import { issueInvoiceForPayment } from '../../invoicing/issue.ts'
 import type { ResolvedPayment } from '../../invoicing/stripe-payment.ts'
 import {
@@ -780,6 +779,11 @@ const issueForPaidInvoice = async (
     ]
 
     if (issued.created && ctx.invoicing.deliver) {
+      // Imported here, not at module scope. Delivery reaches for Resend and
+      // R2 credentials, and this module must stay loadable without an
+      // environment so the webhook tests can run offline.
+      const { deliverDocument } = await import('../../invoicing/delivery.ts')
+
       const outcome = await deliverDocument({
         payload: ctx.payload,
         ...reqOpt(ctx),

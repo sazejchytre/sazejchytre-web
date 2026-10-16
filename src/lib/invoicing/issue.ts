@@ -49,7 +49,6 @@ import {
   assertOperatorConfigured,
   formatOperatorAddress,
 } from '../legal/operator.ts'
-import { isProduction } from '../env.ts'
 import type { BilledPeriod, ConfirmedPayment } from './confirmed-payment.ts'
 
 /* -------------------------------------------------------------------------- */
@@ -90,7 +89,11 @@ export const operatorSnapshot = (): {
   vatRegistered: boolean
   email: string
 } => {
-  if (isProduction) {
+  // A bare `process.env` read rather than the validated `env`, deliberately:
+  // issuing has to be loadable without a full environment so the pure tests
+  // can exercise it, and "are we in production" is the one question that does
+  // not need the schema to answer.
+  if (process.env.NODE_ENV === 'production') {
     assertOperatorConfigured()
   }
 
