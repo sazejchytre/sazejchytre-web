@@ -127,6 +127,16 @@ export const Customers: CollectionConfig = {
           'Populated by step 3 from better-auth. Null for customers who have no account yet.',
       },
     },
+    {
+      name: 'fakturoidSubjectId',
+      type: 'text',
+      unique: true,
+      index: true,
+      admin: {
+        description:
+          'This customer as a Fakturoid subject. Cached so issuing does not look it up every time; null until their first document.',
+      },
+    },
   ],
   hooks: {
     beforeValidate: [normaliseEmail, normaliseBillingCountry],

@@ -6,10 +6,14 @@
  *
  * An issued invoice has been sent, and may already be in somebody else's
  * accounting. In Czech terms a correction is a separate document, not an edit,
- * so a refund produces a new document in its own series that references the
- * original. The pair then shows what actually happened rather than only the
- * corrected end state — which is the difference between a record and a
- * revision.
+ * so a refund produces a new document that references the original. The pair
+ * then shows what actually happened rather than only the corrected end state —
+ * which is the difference between a record and a revision.
+ *
+ * At Fakturoid that is a `document_type: "correction"` carrying a
+ * `correction_id`, and Fakturoid numbers it in its own series. We no longer
+ * allocate one: two numbering series inside an accounting year is not
+ * something an accountant can reconcile.
  *
  * The one permitted change to the invoice is its `status` marker moving to
  * CREDITED, so the admin can see at a glance that a correction exists. No
@@ -28,11 +32,18 @@
  * backstop, because the read-then-write below has a window that two concurrent
  * refunds can both pass. The application check gives a good message; the
  * trigger makes the invariant true.
+ *
+ * ──────────────────────────────────────────────────────────────────────────
+ * THIS CREATES THE ROW. THE CORRECTION DOCUMENT FOLLOWS
+ *
+ * Same split, and the same reason, as `issue.ts`: the refund is recorded
+ * unconditionally, and `ensureCreditNoteDocument` creates the document at
+ * Fakturoid afterwards. A provider outage must not be able to stop us
+ * recording that money went back to a customer.
  */
 import type { Payload, PayloadRequest } from 'payload'
 
 import type { Currency } from '../billing/constants.ts'
-import { allocateDocumentNumber } from '../billing/document-number.ts'
 
 /* -------------------------------------------------------------------------- */
 /* Errors                                                                     */
@@ -131,13 +142,12 @@ export type IssueCreditNoteArgs = {
    */
   providerRefundId?: string | null
   now?: Date
-  /** Overridable allocator, for tests that must not touch the live series. */
-  allocate?: typeof allocateDocumentNumber
 }
 
 export type IssuedCreditNote = {
   id: number
-  number: string
+  /** Fakturoid's number, once the correction document exists. Null until then. */
+  number: string | null
   /** False when a credit note for this provider refund already existed. */
   created: boolean
 }
@@ -147,7 +157,7 @@ const existingForRefund = async (
   payload: Payload,
   providerRefundId: string,
   req?: PayloadRequest,
-): Promise<{ id: number; number: string } | null> => {
+): Promise<{ id: number; number: string | null } | null> => {
   const found = await payload.find({
     collection: 'credit-notes',
     depth: 0,
@@ -160,14 +170,14 @@ const existingForRefund = async (
 
   const doc = found.docs[0]
 
-  return doc ? { id: doc.id, number: doc.number } : null
+  return doc ? { id: doc.id, number: doc.fakturoidNumber ?? null } : null
 }
 
 /**
  * Issue a credit note against an invoice.
  *
- * Does NOT render the PDF or send the email; those follow and may fail
- * without unissuing the document.
+ * Does NOT create the correction document, fetch the PDF or send the email;
+ * those follow and may fail without undoing the refund.
  *
  * @throws {OverCreditError} the total credited would exceed the invoice total.
  * @throws {CreditCurrencyMismatchError} currencies disagree.
@@ -181,7 +191,6 @@ export const issueCreditNote = async ({
   reason,
   providerRefundId = null,
   now = new Date(),
-  allocate = allocateDocumentNumber,
 }: IssueCreditNoteArgs): Promise<IssuedCreditNote> => {
   if (!Number.isInteger(amountMinor) || amountMinor <= 0) {
     throw new RangeError(
@@ -224,21 +233,13 @@ export const issueCreditNote = async ({
     })
   }
 
-  const allocated = await allocate({
-    payload,
-    series: 'CREDIT_NOTE',
-    now,
-    ...(req ? { req } : {}),
-  })
-
   const created = await payload.create({
     collection: 'credit-notes',
     overrideAccess: true,
     ...(req ? { req } : {}),
     data: {
-      number: allocated.number,
-      numberYear: allocated.year,
-      numberSequence: allocated.sequence,
+      // No number. Fakturoid allocates it with the correction document.
+      accountingState: 'PENDING' as const,
       invoice: invoiceId,
       currency,
       amountMinor,
@@ -268,5 +269,5 @@ export const issueCreditNote = async ({
     })
   }
 
-  return { id: created.id, number: created.number, created: true }
+  return { id: created.id, number: null, created: true }
 }

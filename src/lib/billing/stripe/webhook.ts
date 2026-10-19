@@ -66,7 +66,6 @@ import type {
   SubscriptionStatus,
 } from '../constants.ts'
 import { CURRENCIES } from '../constants.ts'
-import { allocateDocumentNumber } from '../document-number.ts'
 import {
   OverCreditError,
   issueCreditNote,
@@ -218,7 +217,14 @@ export type InvoicingSeam = {
     invoiceId: string,
     eventCreated: number,
   ) => Promise<ResolvedPayment>
-  /** Render the PDF and email it after issuing. */
+  /**
+   * Create the accounting document, fetch its PDF and email it after
+   * recording the row.
+   *
+   * False in the pure tests, which must not reach a network. With it false
+   * the row is still recorded — which is the whole point of the row coming
+   * first — and `accountingState` stays PENDING for the cron.
+   */
   deliver: boolean
 }
 
@@ -228,8 +234,6 @@ type Ctx = {
   event: Stripe.Event
   now: Date
   invoicing?: InvoicingSeam
-  /** Passed through to `issueCreditNoteForRefund`. See its docs. */
-  allocate?: DocumentNumberAllocator
 }
 
 /** `req` spread conditionally — exactOptionalPropertyTypes rejects undefined. */
@@ -774,28 +778,44 @@ const issueForPaidInvoice = async (
 
     const changes = [
       issued.created
-        ? `issued invoice ${issued.number}`
-        : `invoice ${issued.number} already issued for this payment`,
+        ? `recorded invoice row ${String(issued.id)}`
+        : `invoice row ${String(issued.id)} already recorded for this payment`,
     ]
 
     if (issued.created && ctx.invoicing.deliver) {
-      // Imported here, not at module scope. Delivery reaches for Resend and
-      // R2 credentials, and this module must stay loadable without an
+      // Imported here, not at module scope. These reach for Fakturoid, Resend
+      // and R2 credentials, and this module must stay loadable without an
       // environment so the webhook tests can run offline.
+      const { ensureInvoiceDocument } =
+        await import('../../invoicing/accounting-document.ts')
       const { deliverDocument } = await import('../../invoicing/delivery.ts')
 
-      const outcome = await deliverDocument({
+      const document = await ensureInvoiceDocument({
         payload: ctx.payload,
         ...reqOpt(ctx),
-        collection: 'invoices',
         id: issued.id,
       })
 
-      changes.push(
-        outcome.delivered
-          ? `emailed ${issued.number}`
-          : `delivery pending: ${outcome.reason ?? 'unknown'}`,
-      )
+      // The reason is logged verbatim, never flattened into "failed". A
+      // provider that is unreachable, one that is throttling us, one that
+      // refused our data and a document that already existed are four
+      // different situations needing four different responses.
+      changes.push(`accounting document: ${document.reason}`)
+
+      if (document.number) {
+        const outcome = await deliverDocument({
+          payload: ctx.payload,
+          ...reqOpt(ctx),
+          collection: 'invoices',
+          id: issued.id,
+        })
+
+        changes.push(
+          outcome.delivered
+            ? `emailed ${document.number}`
+            : `delivery pending: ${outcome.reason ?? 'unknown'}`,
+        )
+      }
     }
 
     return changes
@@ -807,7 +827,7 @@ const issueForPaidInvoice = async (
         eventId: ctx.event.id,
         error: redactForLog(error),
       },
-      'Could not issue an invoice for a confirmed payment. The payment stands; issuing is retryable.',
+      'Could not record an invoice for a confirmed payment. The payment and the entitlement stand; recording is retryable.',
     )
 
     return ['invoice not issued: ISSUE_FAILED']
@@ -1032,7 +1052,6 @@ const handleChargeRefunded = async (ctx: Ctx): Promise<HandlerResult> => {
     providerRefundId: refund.id,
     reason: `Refund of charge ${charge.id} (Stripe refund ${refund.id})`,
     now: new Date(ctx.event.created * 1000),
-    ...(ctx.allocate ? { allocate: ctx.allocate } : {}),
   })
 
   if (invoice.subscription) {
@@ -1048,22 +1067,58 @@ const handleChargeRefunded = async (ctx: Ctx): Promise<HandlerResult> => {
         ? {
             amountMinor: refund.amount,
             currency: refund.currency,
-            creditNote: created.number,
+            // Our row id, not a document number: the number comes from
+            // Fakturoid a moment later and may not exist yet.
+            creditNoteId: created.creditNoteId,
           }
         : {
             declined: 'CREDIT_NOTE_ALREADY_EXISTS',
             eventType: ctx.event.type,
-            existingCreditNote: created.number,
+            existingCreditNoteId: created.creditNoteId,
           },
     })
   }
 
-  return created.issued
-    ? { applied: true, changes: [`credit note ${created.number} issued`] }
-    : nothing('CREDIT_NOTE_ALREADY_EXISTS')
-}
+  if (!created.issued) {
+    return nothing('CREDIT_NOTE_ALREADY_EXISTS')
+  }
 
-export type DocumentNumberAllocator = typeof allocateDocumentNumber
+  const changes = [`recorded credit note row ${String(created.creditNoteId)}`]
+
+  if (ctx.invoicing?.deliver && created.creditNoteId !== null) {
+    // Same split as an invoice: the refund is recorded unconditionally, then
+    // the correction document is created at Fakturoid. Imported here so this
+    // module stays loadable without credentials.
+    const { ensureCreditNoteDocument } =
+      await import('../../invoicing/accounting-document.ts')
+    const { deliverDocument } = await import('../../invoicing/delivery.ts')
+
+    const document = await ensureCreditNoteDocument({
+      payload: ctx.payload,
+      ...reqOpt(ctx),
+      id: created.creditNoteId,
+    })
+
+    changes.push(`correction document: ${document.reason}`)
+
+    if (document.number) {
+      const outcome = await deliverDocument({
+        payload: ctx.payload,
+        ...reqOpt(ctx),
+        collection: 'credit-notes',
+        id: created.creditNoteId,
+      })
+
+      changes.push(
+        outcome.delivered
+          ? `emailed ${document.number}`
+          : `delivery pending: ${outcome.reason ?? 'unknown'}`,
+      )
+    }
+  }
+
+  return { applied: true, changes }
+}
 
 export type IssueCreditNoteArgs = {
   payload: Payload
@@ -1074,16 +1129,6 @@ export type IssueCreditNoteArgs = {
   providerRefundId: string
   reason: string
   now: Date
-  /**
-   * Overridable number allocator.
-   *
-   * The real one takes the next number in the series with an atomic SQL
-   * upsert, which needs a database. Injecting it lets the webhook scenarios
-   * run as pure tests, where the thing under test is the credit-note decision
-   * rather than Postgres' ability to increment a counter — that part has its
-   * own test against Neon. Same seam as the email transport in step 3.
-   */
-  allocate?: DocumentNumberAllocator
 }
 
 /**
@@ -1109,10 +1154,11 @@ export const issueCreditNoteForRefund = async ({
   providerRefundId,
   reason,
   now,
-  allocate = allocateDocumentNumber,
 }: IssueCreditNoteArgs): Promise<{
   issued: boolean
   number: string | null
+  /** Our row id, so the caller can issue the correction document. */
+  creditNoteId: number | null
 }> => {
   try {
     const result = await issueCreditNote({
@@ -1124,10 +1170,13 @@ export const issueCreditNoteForRefund = async ({
       reason,
       providerRefundId,
       now,
-      allocate,
     })
 
-    return { issued: result.created, number: result.number }
+    return {
+      issued: result.created,
+      number: result.number,
+      creditNoteId: result.id,
+    }
   } catch (error) {
     // Over-crediting is a REFUSAL, not a crash. Step 4 left this open; the
     // guard now lives in `issueCreditNote`, and the refund handler has to be
@@ -1146,7 +1195,7 @@ export const issueCreditNoteForRefund = async ({
         error.message,
       )
 
-      return { issued: false, number: null }
+      return { issued: false, number: null, creditNoteId: null }
     }
 
     throw error
@@ -1384,8 +1433,6 @@ export type HandleStripeEventArgs = {
   req?: PayloadRequest
   /** Injected clock. */
   now?: Date
-  /** Overridable document-number allocator. See `IssueCreditNoteArgs`. */
-  allocate?: DocumentNumberAllocator
   /** How to issue invoices. Absent means do not issue; see `InvoicingSeam`. */
   invoicing?: InvoicingSeam
 }
@@ -1403,7 +1450,6 @@ export const handleStripeEvent = async ({
   event,
   req,
   now = new Date(),
-  allocate,
   invoicing,
 }: HandleStripeEventArgs): Promise<StripeEventOutcome> => {
   const handler = STRIPE_HANDLERS[event.type]
@@ -1424,7 +1470,6 @@ export const handleStripeEvent = async ({
     event,
     now,
     ...(req ? { req } : {}),
-    ...(allocate ? { allocate } : {}),
     ...(invoicing ? { invoicing } : {}),
   }
   const result = await handler(ctx)

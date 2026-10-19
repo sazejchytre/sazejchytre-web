@@ -37,15 +37,15 @@ import {
 
 import { env } from '../env.ts'
 import { assertBucketsDiffer } from './bucket-isolation.ts'
+import {
+  PRIVATE_DOCUMENT_PREFIX,
+  type DocumentStorageKind,
+  documentStorageKey,
+} from './document-key.ts'
 
-/**
- * The prefix documents live under.
- *
- * Deliberately not `media/`, which the public domain maps to. Changing this
- * to anything the CDN serves would be a privacy incident, so it is a constant
- * rather than configuration.
- */
-export const PRIVATE_DOCUMENT_PREFIX = 'private/documents'
+// Re-exported so existing callers keep one import. The definitions moved to a
+// module with no environment of its own — see `document-key.ts`.
+export { PRIVATE_DOCUMENT_PREFIX, documentStorageKey, type DocumentStorageKind }
 
 /**
  * Refuse to store documents in the publicly-served bucket.
@@ -90,32 +90,6 @@ const getClient = (): S3Client => {
 /** For tests that swap configuration. */
 export const resetDocumentStorageClient = (): void => {
   client = null
-}
-
-export type DocumentStorageKind = 'invoices' | 'credit-notes'
-
-/**
- * The object key for a document.
- *
- * Partitioned by year because that is how documents are retrieved for an
- * accountant and for a tax inspection, and because a flat prefix with ten
- * years of documents in it is unpleasant to list.
- *
- * The number is the filename, so an object found loose in a bucket is
- * identifiable without a database.
- */
-export const documentStorageKey = (
-  kind: DocumentStorageKind,
-  year: number,
-  documentNumber: string,
-): string => {
-  if (!/^[A-Z]{2}\d{4}-\d{6}$/.test(documentNumber)) {
-    // A key is derived from the number, so a malformed number must not be
-    // allowed to produce a path with a slash or a traversal in it.
-    throw new RangeError(`Malformed document number: ${documentNumber}`)
-  }
-
-  return `${PRIVATE_DOCUMENT_PREFIX}/${kind}/${String(year)}/${documentNumber}.pdf`
 }
 
 /** Store a document. Returns the key it was stored under. */

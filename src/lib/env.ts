@@ -207,6 +207,57 @@ const serverEnvSchema = z.object({
    */
   BILLING_PROVIDER: z.enum(BILLING_PROVIDERS).default('STRIPE'),
 
+  /* --- Accounting documents (Fakturoid) ----------------------------------- */
+  /**
+   * Which accounting provider issues documents: FAKTUROID or FAKE.
+   *
+   * ───────────────────────────────────────────────────────────────────────
+   * THE DEFAULT IS **FAKE**, AND THAT IS NOT AN OVERSIGHT
+   *
+   * `BILLING_PROVIDER` defaults to STRIPE because a Stripe test key is
+   * harmless. This cannot: there is no Fakturoid sandbox. The credentials
+   * below point at the operator's real accounting account, where every
+   * document created is real, permanently numbered in a statutory series,
+   * and impossible to remove without leaving a gap that has to be explained
+   * to a tax inspection.
+   *
+   * So the real provider has to be asked for by name. The cost of the default
+   * being wrong is a document that was never issued, which the retry cron
+   * fixes. The cost of the opposite default being wrong is a real document in
+   * real books, which nothing fixes.
+   */
+  ACCOUNTING_PROVIDER: z.enum(['FAKTUROID', 'FAKE']).default('FAKE'),
+
+  /**
+   * Fakturoid OAuth 2 client credentials and account slug.
+   *
+   * Declared here so a deploy that means to issue documents fails at boot
+   * rather than on the first sale. `readFakturoidConfig()` reads
+   * `process.env` itself rather than importing this module, so that the unit
+   * tests and the opt-in live script can run without the whole server
+   * schema — this declaration is the deploy-time gate, that function is the
+   * runtime reader, and they look at the same four variables.
+   */
+  FAKTUROID_CLIENT_ID: secret(1),
+  FAKTUROID_CLIENT_SECRET: secret(1),
+  /** The account slug. Appears in every API path. */
+  FAKTUROID_SLUG: secret(1),
+  /**
+   * Identifies us to Fakturoid, with a contact address.
+   *
+   * Fakturoid answers 400 to any request without a `User-Agent`, and that 400
+   * does not mention headers — so it reads like malformed input. Required to
+   * contain an email address because that is what the requirement is for: a
+   * human they can contact when our integration misbehaves.
+   */
+  FAKTUROID_USER_AGENT: secret(1).refine(
+    (value) => /[^@\s]+@[^@\s]+\.[^@\s]+/.test(value),
+    {
+      error:
+        'must contain a contact email, e.g. "sazejchytre.cz (kontakt@sazejchytre.cz)"',
+    },
+  ),
+
   /**
    * Countries we are set up to sell into, as a comma-separated list of ISO
    * 3166-1 alpha-2 codes.

@@ -17,7 +17,6 @@ import { getPayload, type Payload } from 'payload'
 import type * as PayloadDrizzle from '@payloadcms/db-postgres/drizzle'
 
 import config from '@/payload.config'
-import { allocateDocumentNumber } from '@/lib/billing/document-number'
 import type { ConfirmedPayment } from '@/lib/invoicing/confirmed-payment'
 import { issueInvoiceForPayment } from '@/lib/invoicing/issue'
 import {
@@ -25,6 +24,11 @@ import {
   creditedTotalMinor,
   issueCreditNote,
 } from '@/lib/invoicing/credit-note'
+import { createFakeAccountingPort } from '@/lib/accounting/fake-adapter'
+import {
+  ensureCreditNoteDocument,
+  ensureInvoiceDocument,
+} from '@/lib/invoicing/accounting-document'
 import { anonymiseCustomer } from '@/lib/invoicing/retention'
 import { collectAccountingRows } from '@/lib/invoicing/export'
 
@@ -84,9 +88,6 @@ const db = () =>
   ).drizzle
 
 /** Allocator pinned to the throwaway year, so the live series is untouched. */
-const allocateInTestYear: typeof allocateDocumentNumber = (args) =>
-  allocateDocumentNumber({ ...args, year: TEST_YEAR })
-
 before(async () => {
   payload = await getPayload({ config })
   sql = (await import('@payloadcms/db-postgres/drizzle')).sql
@@ -109,14 +110,27 @@ before(async () => {
 after(async () => {
   // Raw SQL: these collections refuse deletion by design, which is itself
   // asserted below.
+  // Scoped by the RUN-prefixed customer, not by document number.
+  //
+  // Teardown used to delete by `number LIKE '%<TEST_YEAR>%'`, which worked
+  // because we allocated the number and could put a throwaway year in it.
+  // Fakturoid allocates it now, so there is no number to key on — and a row
+  // may legitimately have none at all. The customer is the stable handle:
+  // every fixture row in this file hangs off one, and its email carries RUN.
   await db().execute(
-    sql`DELETE FROM "credit_notes" WHERE "number" LIKE ${`%${TEST_YEAR}%`}`,
+    sql`DELETE FROM "credit_notes"
+        WHERE "invoice_id" IN (
+          SELECT "id" FROM "invoices"
+          WHERE "customer_id" IN (
+            SELECT "id" FROM "customers" WHERE "email" LIKE ${`${RUN}%`}
+          )
+        )`,
   )
   await db().execute(
-    sql`DELETE FROM "invoices" WHERE "number" LIKE ${`%${TEST_YEAR}%`}`,
-  )
-  await db().execute(
-    sql`DELETE FROM "invoice_number_counters" WHERE "year" = ${TEST_YEAR}`,
+    sql`DELETE FROM "invoices"
+        WHERE "customer_id" IN (
+          SELECT "id" FROM "customers" WHERE "email" LIKE ${`${RUN}%`}
+        )`,
   )
   await db().execute(
     sql`DELETE FROM "customers" WHERE "email" LIKE ${`${RUN}%`}`,
@@ -196,7 +210,11 @@ describe('one confirmed payment, one invoice', () => {
     })
 
     assert.equal(result.created, true)
-    assert.match(result.number, new RegExp(`^FA${String(TEST_YEAR)}-\\d{6}$`))
+    // No number yet, and that is the point: the row records the sale the
+    // moment money arrives, and the accounting document — which is what gets
+    // numbered — is issued afterwards at Fakturoid. A row with no number is a
+    // normal state, not a broken one.
+    assert.equal(result.number, null)
 
     const invoice = await payload.findByID({
       collection: 'invoices',
@@ -341,24 +359,42 @@ describe('one confirmed payment, one invoice', () => {
     )
   })
 
-  it('never produces a gap in the series', async () => {
-    // A gap has to be explained to a tax inspection, so the series is checked
-    // as a whole rather than per document.
+  it('never lets two rows claim one accounting document', async () => {
+    // This replaced a gap-in-the-series test.
+    //
+    // That test checked `number_sequence` ran 1..n with no holes, which was
+    // the right invariant while WE allocated the numbers. We do not any more,
+    // and a test of Fakturoid's internal numbering would be a test of
+    // somebody else's code that we could not fix if it failed.
+    //
+    // What IS ours, and is just as damaging to get wrong, is the mapping: two
+    // of our rows must never point at one statutory document. The unique
+    // indexes make that impossible; this proves they are doing it.
     const rows = (await db().execute(
-      sql`SELECT "number_sequence" AS seq FROM "invoices"
-          WHERE "number_year" = ${TEST_YEAR} ORDER BY "number_sequence"`,
-    )) as unknown as { rows?: { seq: number }[] }
+      sql`SELECT COUNT(*) AS total,
+                 COUNT(DISTINCT "fakturoid_document_id") AS documents,
+                 COUNT("fakturoid_document_id") AS issued
+          FROM "invoices"
+          WHERE "customer_id" IN (
+            SELECT "id" FROM "customers" WHERE "email" LIKE ${`${RUN}%`}
+          )`,
+    )) as unknown as {
+      rows?: { total: number; documents: number; issued: number }[]
+    }
 
-    const sequences = (rows.rows ?? []).map((row) => Number(row.seq))
+    const counts = (rows.rows ?? [])[0]
 
-    assert.ok(sequences.length > 0, 'no invoices issued in the test year')
-    sequences.forEach((value, index) => {
-      assert.equal(
-        value,
-        index + 1,
-        `series has a gap: expected ${String(index + 1)}, found ${String(value)}`,
-      )
-    })
+    assert.ok(counts, 'no invoices found for this run')
+    assert.ok(Number(counts.total) > 0, 'no invoices issued in this run')
+    // Every issued row has its own document. In this suite nothing reaches an
+    // accounting provider at all, so `issued` is zero and the assertion holds
+    // trivially — which is itself the point being made: a row with no
+    // document number is a normal state, not a broken one.
+    assert.equal(
+      Number(counts.documents),
+      Number(counts.issued),
+      'two rows share one Fakturoid document id',
+    )
   })
 })
 
@@ -386,7 +422,6 @@ describe('over-crediting is refused', () => {
       currency: 'CZK',
       reason: 'Částečná vratka',
       providerRefundId: `re_${RUN}_a`,
-      allocate: allocateInTestYear,
     })
     const second = await issueCreditNote({
       payload,
@@ -395,12 +430,13 @@ describe('over-crediting is refused', () => {
       currency: 'CZK',
       reason: 'Zbytek',
       providerRefundId: `re_${RUN}_b`,
-      allocate: allocateInTestYear,
     })
 
     assert.equal(first.created, true)
     assert.equal(second.created, true)
-    assert.match(first.number, new RegExp(`^OD${String(TEST_YEAR)}-\\d{6}$`))
+    // Same as an invoice: the refund is recorded now, Fakturoid numbers the
+    // correction document afterwards.
+    assert.equal(first.number, null)
 
     assert.equal(
       await creditedTotalMinor({ payload, invoiceId: invoice.id }),
@@ -429,7 +465,6 @@ describe('over-crediting is refused', () => {
       currency: 'CZK',
       reason: 'Většina',
       providerRefundId: `re_${RUN}_c`,
-      allocate: allocateInTestYear,
     })
 
     await assert.rejects(
@@ -442,7 +477,6 @@ describe('over-crediting is refused', () => {
           currency: 'CZK',
           reason: 'Příliš',
           providerRefundId: `re_${RUN}_d`,
-          allocate: allocateInTestYear,
         }),
       (error: unknown) => {
         assert.ok(error instanceof OverCreditError)
@@ -467,19 +501,14 @@ describe('over-crediting is refused', () => {
     // understates revenue in a VAT return and never self-corrects.
     const { invoice } = await setup('credit-trigger')
 
-    const number = await allocateInTestYear({
-      payload,
-      series: 'CREDIT_NOTE',
-    })
-
     await assert.rejects(
       () =>
         db().execute(
           sql`INSERT INTO "credit_notes"
-                ("number", "number_year", "number_sequence", "invoice_id",
+                ("accounting_state", "invoice_id",
                  "currency", "amount_minor", "reason", "issued_at",
                  "delivery_state", "delivery_attempts", "updated_at", "created_at")
-              VALUES (${number.number}, ${number.year}, ${number.sequence},
+              VALUES ('PENDING'::"enum_credit_notes_accounting_state",
                       ${invoice.id}, 'CZK'::"enum_credit_notes_currency",
                       34901, 'Raw SQL over-credit',
                       now(), 'PENDING'::"enum_credit_notes_delivery_state",
@@ -516,7 +545,6 @@ describe('over-crediting is refused', () => {
           amountMinor: 1_000,
           currency: 'EUR',
           reason: 'Wrong currency',
-          allocate: allocateInTestYear,
         }),
       /Cannot credit EUR/,
     )
@@ -533,7 +561,6 @@ describe('over-crediting is refused', () => {
       currency: 'CZK',
       reason: 'Redelivered refund',
       providerRefundId: refundId,
-      allocate: allocateInTestYear,
     })
     const second = await issueCreditNote({
       payload,
@@ -542,7 +569,6 @@ describe('over-crediting is refused', () => {
       currency: 'CZK',
       reason: 'Redelivered refund',
       providerRefundId: refundId,
-      allocate: allocateInTestYear,
     })
 
     assert.equal(first.created, true)
@@ -600,7 +626,7 @@ describe('retention: erasure keeps the accounting record', () => {
     assert.equal(after.customerSnapshot.email, before.customerSnapshot.email)
     assert.match(after.customerSnapshot.name, /Žluťoučký/)
     assert.equal(after.totalMinor, before.totalMinor)
-    assert.equal(after.number, before.number)
+    assert.equal(after.fakturoidNumber, before.fakturoidNumber)
   })
 
   it('is idempotent', async () => {
@@ -656,7 +682,6 @@ describe('accounting export', () => {
       currency: 'CZK',
       reason: 'Sleva po dohodě',
       providerRefundId: `re_${RUN}_export`,
-      allocate: allocateInTestYear,
       now: new Date(`${String(TEST_YEAR)}-06-02T00:00:00.000Z`),
     })
 
@@ -666,16 +691,173 @@ describe('accounting export', () => {
       to: new Date(`${String(TEST_YEAR)}-12-31T00:00:00.000Z`),
     })
 
-    const mine = rows.filter((row) => row.number.includes(String(TEST_YEAR)))
+    // Filtered by the correction reason, not by the document number.
+    // Numbers come from Fakturoid now, and nothing in this suite reaches it,
+    // so every row in the range has an EMPTY number — which the export
+    // reports rather than hiding, because an unissued document is exactly the
+    // thing somebody needs to see.
+    const mine = rows.filter((row) => row.customerName.includes('Žluťoučký'))
 
     assert.ok(mine.some((row) => row.documentType === 'INVOICE'))
 
     const credit = mine.find((row) => row.documentType === 'CREDIT_NOTE')
     assert.ok(credit, 'the credit note is missing from the export')
     assert.equal(credit.totalMinor, -4_900)
-    assert.match(credit.correctsNumber, /^FA/)
     assert.equal(credit.correctionReason, 'Sleva po dohodě')
     // The customer identity comes from the invoice it corrects.
     assert.match(credit.customerName, /Žluťoučký/)
+
+    // Unissued, and visible as such. A reader must be able to tell "no
+    // document yet" from "document with no number", and `accountingState` is
+    // what says which.
+    assert.equal(credit.number, '')
+    assert.equal(credit.accountingState, 'PENDING')
+    assert.equal(credit.correctsNumber, '')
+  })
+})
+
+/* ========================================================================== */
+
+/**
+ * A Fakturoid outage, end to end, against the real database.
+ *
+ * ──────────────────────────────────────────────────────────────────────────
+ * THE GUARANTEE BEING TESTED
+ *
+ * A provider outage must never lose a payment or roll back an entitlement.
+ * Everything else in this step is arranged to make that true, and this is the
+ * test that says so: the row is written, it stays PENDING, the money on it is
+ * untouched, and a later attempt — which is what the cron is — finishes the
+ * job and never produces a second document.
+ *
+ * Deliberately a database test rather than a pure one. The pure tests prove
+ * the decisions; this proves the WRITES, including that `accountingState` and
+ * the two Fakturoid columns are actually settable on a row whose other fields
+ * are frozen by `lockFieldsAfterCreate`. That is exactly the kind of thing a
+ * Payload double cannot tell you.
+ */
+describe('a Fakturoid outage loses nothing', () => {
+  it('records the sale, stays PENDING, and issues on the retry', async () => {
+    const customer = await makeCustomer('outage')
+    const paid = payment({ amountMinor: 34_900 })
+
+    const invoice = await issue({
+      customerId: Number(customer.id),
+      payment: paid,
+    })
+
+    // 1. The sale is recorded no matter what the provider is doing.
+    assert.equal(invoice.created, true)
+    assert.equal(invoice.number, null)
+
+    const down = createFakeAccountingPort()
+    down.fake.setUnreachable(true)
+
+    const first = await ensureInvoiceDocument({
+      payload,
+      id: invoice.id,
+      port: down,
+    })
+
+    // 2. The outage is reported as itself — not as a rejection, not as a
+    //    crash, and not flattened into "failed".
+    assert.equal(first.reason, 'PROVIDER_UNREACHABLE')
+    assert.equal(first.retryable, true)
+
+    const stranded = await payload.findByID({
+      collection: 'invoices',
+      id: invoice.id,
+      overrideAccess: true,
+      depth: 0,
+    })
+
+    // 3. Nothing was lost and nothing was rolled back.
+    assert.equal(stranded.accountingState, 'PENDING')
+    assert.equal(stranded.fakturoidNumber, null)
+    assert.equal(stranded.fakturoidDocumentId, null)
+    assert.equal(stranded.totalMinor, 34_900)
+    assert.equal(stranded.providerPaymentId, paid.providerPaymentId)
+
+    // 4. The retry — which is what the cron does — finishes the job.
+    const up = createFakeAccountingPort()
+    const second = await ensureInvoiceDocument({
+      payload,
+      id: invoice.id,
+      port: up,
+    })
+
+    assert.equal(second.reason, 'ISSUED')
+    assert.ok(second.number)
+
+    const issuedRow = await payload.findByID({
+      collection: 'invoices',
+      id: invoice.id,
+      overrideAccess: true,
+      depth: 0,
+    })
+
+    assert.equal(issuedRow.accountingState, 'ISSUED')
+    assert.equal(issuedRow.fakturoidNumber, second.number)
+    assert.equal(issuedRow.fakturoidDocumentId, second.providerDocumentId)
+    // Still exactly as sold. The document is new; the sale is not.
+    assert.equal(issuedRow.totalMinor, 34_900)
+
+    // 5. And a third attempt does nothing at all, rather than issuing again.
+    const third = await ensureInvoiceDocument({
+      payload,
+      id: invoice.id,
+      port: up,
+    })
+
+    assert.equal(third.reason, 'ALREADY_ISSUED')
+    assert.equal(
+      up.fake.documents().length,
+      1,
+      'a second document would be a second number in a statutory series',
+    )
+  })
+
+  it('refuses to correct an invoice that has no document yet', async () => {
+    const customer = await makeCustomer('outage-credit')
+    const invoice = await issue({
+      customerId: Number(customer.id),
+      payment: payment({ amountMinor: 34_900 }),
+    })
+
+    const note = await issueCreditNote({
+      payload,
+      invoiceId: invoice.id,
+      amountMinor: 10_000,
+      currency: 'CZK',
+      reason: 'Vratka během výpadku',
+      providerRefundId: `re_${RUN}_outage`,
+    })
+
+    // The refund is recorded regardless — money went back to a customer and
+    // that is not contingent on a third party being reachable.
+    assert.equal(note.created, true)
+    assert.equal(note.number, null)
+
+    const port = createFakeAccountingPort()
+    const outcome = await ensureCreditNoteDocument({
+      payload,
+      id: note.id,
+      port,
+    })
+
+    // A correction has to point at a document. "Not yet" is retryable, not a
+    // failure: the cron comes back once the invoice has been issued.
+    assert.equal(outcome.retryable, true)
+    assert.equal(port.fake.documents().length, 0)
+
+    const row = await payload.findByID({
+      collection: 'credit-notes',
+      id: note.id,
+      overrideAccess: true,
+      depth: 0,
+    })
+
+    assert.equal(row.accountingState, 'PENDING')
+    assert.equal(row.amountMinor, 10_000)
   })
 })

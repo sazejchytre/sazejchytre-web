@@ -8,6 +8,7 @@ import {
   lockOnceSet,
 } from '@/lib/billing/append-only'
 import {
+  ACCOUNTING_DOCUMENT_STATES,
   CURRENCIES,
   DOCUMENT_DELIVERY_STATES,
   INVOICE_STATUSES,
@@ -37,12 +38,28 @@ import { isValidMinorAmount } from '@/lib/billing/money'
  * (invoice, credit note) always shows what happened rather than only the
  * corrected end state.
  *
- * NUMBERING
+ * NUMBERING BELONGS TO THE ACCOUNTING PROVIDER NOW
  *
- * `number` is allocated by `allocateDocumentNumber` only once a payment is
- * confirmed, so an abandoned checkout burns nothing. `numberYear` and
- * `numberSequence` are stored alongside the rendered string so the series can
- * be checked for gaps with a query instead of by parsing text.
+ * We used to allocate `FA2026-000001` ourselves, from a counter table. We no
+ * longer do, and the reason is not tidiness: two numbering series inside one
+ * accounting year is not something an accountant can reconcile. Fakturoid is
+ * the system of record for accounting documents, so Fakturoid owns the
+ * series, and `fakturoidNumber` records what it allocated.
+ *
+ * The consequence is that a row can exist with no number at all. That is
+ * deliberate. The row is written the moment money arrives, because losing a
+ * payment is unacceptable; the accounting document is written at a third
+ * party that can be unreachable. `accountingState` says how far that has got,
+ * and the retry cron finishes the job.
+ *
+ * WHY THE SNAPSHOTS STAY, NOW THAT A THIRD PARTY HOLDS THE DOCUMENT
+ *
+ * Because the document is at a third party. If Fakturoid is unreachable, goes
+ * away, or is replaced, this row still has to say who was billed, for what
+ * period, how much, in which currency, and where they were — enough to
+ * reconstruct the document and to answer a customer. A row that was only a
+ * foreign key into somebody else's system would be worthless on the day that
+ * system was not there.
  */
 
 /** The arithmetic has to hold, or the document contradicts itself. */
@@ -118,9 +135,10 @@ const enforceTaxTreatmentConsistency: CollectionBeforeValidateHook = ({
 export const Invoices: CollectionConfig = {
   slug: 'invoices',
   admin: {
-    useAsTitle: 'number',
+    useAsTitle: 'fakturoidNumber',
     defaultColumns: [
-      'number',
+      'fakturoidNumber',
+      'accountingState',
       'customer',
       'issuedAt',
       'totalMinor',
@@ -139,43 +157,47 @@ export const Invoices: CollectionConfig = {
     admin: canAccessAdminPanel,
   },
   indexes: [
-    // Gap checking and per-year reporting both scan this.
-    { fields: ['numberYear', 'numberSequence'], unique: true },
     { fields: ['customer', 'issuedAt'], unique: false },
+    // Finds the rows the retry cron has to pick up.
+    { fields: ['accountingState', 'issuedAt'], unique: false },
     // Drives the cross-border revenue aggregation.
     { fields: ['billingCountry', 'issuedAt'], unique: false },
   ],
   fields: [
     {
-      name: 'number',
-      type: 'text',
+      name: 'accountingState',
+      type: 'select',
       required: true,
+      defaultValue: 'PENDING',
+      index: true,
+      options: toOptions(ACCOUNTING_DOCUMENT_STATES),
+      admin: {
+        description:
+          'Whether the accounting provider holds a document for this row. PENDING is the ordinary resting state right after a sale.',
+      },
+    },
+    {
+      name: 'fakturoidDocumentId',
+      type: 'text',
+      // Nullable: the row exists before the document does. See the header.
+      required: false,
       unique: true,
       index: true,
       admin: {
         description:
-          'Human-readable, strictly sequential per year (e.g. FA2026-000001). Allocated only after payment is confirmed.',
+          "The document's id at Fakturoid. Set once, never changed — it is how we find the document again.",
       },
     },
     {
-      name: 'numberYear',
-      type: 'number',
-      required: true,
-      admin: { description: 'Year component of `number`, for gap queries.' },
-      validate: (value: unknown) =>
-        Number.isInteger(value) ? true : 'numberYear must be an integer.',
-    },
-    {
-      name: 'numberSequence',
-      type: 'number',
-      required: true,
+      name: 'fakturoidNumber',
+      type: 'text',
+      required: false,
+      unique: true,
+      index: true,
       admin: {
-        description: 'Sequence component of `number`, for gap queries.',
+        description:
+          'The document number as issued by Fakturoid (e.g. 2026-0001). We no longer allocate our own.',
       },
-      validate: (value: unknown) =>
-        Number.isInteger(value) && (value as number) >= 1
-          ? true
-          : 'numberSequence must be an integer >= 1.',
     },
     {
       name: 'customer',
@@ -535,19 +557,34 @@ export const Invoices: CollectionConfig = {
     beforeValidate: [
       lockFieldsAfterCreate('An issued invoice', [
         'status',
-        // The artefact and its delivery are not knowable at creation: the PDF
-        // needs the allocated number, and the email needs the PDF. Which
-        // fields may move is decided here; how often is decided by
-        // `lockOnceSet` below.
+        // None of these are knowable when the row is created. The row is
+        // written the moment money arrives; the accounting document is issued
+        // at a third party afterwards, the PDF comes from that document, and
+        // the email needs the PDF. Which fields may move is decided here; how
+        // often is decided by `lockOnceSet` below.
+        'accountingState',
+        'fakturoidDocumentId',
+        'fakturoidNumber',
         'pdfStorageKey',
         'deliveryState',
         'deliveredAt',
         'deliveryAttempts',
         'deliveryError',
       ]),
-      // Written once, never rewritten. A second PDF under the same number
-      // would mean two files could both claim to be this invoice.
-      lockOnceSet('An issued invoice', ['pdfStorageKey', 'deliveredAt']),
+      // Written once, never rewritten.
+      //
+      // The two Fakturoid fields matter most. Repointing a row at a different
+      // accounting document would silently reassign a statutory number, and
+      // the old document would still exist at Fakturoid with nothing in our
+      // books referring to it. If adoption ever hands back a different id
+      // than the one already stored, that is a bug worth a loud failure
+      // rather than a quiet overwrite.
+      lockOnceSet('An issued invoice', [
+        'fakturoidDocumentId',
+        'fakturoidNumber',
+        'pdfStorageKey',
+        'deliveredAt',
+      ]),
       enforceTotals,
       enforceTaxTreatmentConsistency,
     ],

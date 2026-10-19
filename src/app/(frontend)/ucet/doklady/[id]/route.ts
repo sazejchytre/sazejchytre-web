@@ -141,7 +141,7 @@ export async function GET(
       'content-type': 'application/pdf',
       // The document number, not the row id: that is what the customer and
       // their accountant will look for on disk.
-      'content-disposition': `attachment; filename="${invoice.number}.pdf"`,
+      'content-disposition': `attachment; filename="${invoice.fakturoidNumber ?? String(invoice.id)}.pdf"`,
       'content-length': String(pdf.length),
       // Never cached. See the note at the top.
       'cache-control': 'no-store, private',

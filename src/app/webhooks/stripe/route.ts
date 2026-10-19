@@ -167,7 +167,39 @@ export async function POST(request: Request): Promise<Response> {
 
   // 4. Handle it.
   try {
-    const outcome = await handleStripeEvent({ payload, event })
+    const outcome = await handleStripeEvent({
+      payload,
+      event,
+      // The invoicing seam, supplied here and nowhere else.
+      //
+      // The handler takes it as an argument rather than importing it, so the
+      // webhook scenario tests can run with no network and no credentials.
+      // The consequence is that it has to be wired up at the one real entry
+      // point — this one. Without it the handler records the renewal and
+      // issues nothing, which is correct for a test and silently wrong here.
+      invoicing: {
+        resolvePayment: async (invoiceId, eventCreated) => {
+          // `invoice.payments` is expandable and absent from the event
+          // payload, so settlement has to be re-read from the API. That is
+          // the whole reason this is a seam and not a pure function of the
+          // event.
+          const { getStripeClient } =
+            await import('@/lib/billing/stripe/client')
+          const { resolveConfirmedPayment } =
+            await import('@/lib/invoicing/stripe-payment')
+
+          return resolveConfirmedPayment({
+            stripe: getStripeClient(),
+            invoiceId,
+            eventCreated,
+          })
+        },
+        // Issue the accounting document, fetch its PDF, email our copy. Each
+        // step is retryable from wherever the last one stopped, and a failure
+        // in any of them leaves the recorded sale and the entitlement alone.
+        deliver: true,
+      },
+    })
 
     await markWebhookEventProcessed({ payload, id: claim.id })
 
