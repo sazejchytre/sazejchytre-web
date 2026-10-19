@@ -7,9 +7,9 @@ const row = (
   parts: Partial<AccountingDocumentRow> = {},
 ): AccountingDocumentRow => ({
   documentType: 'INVOICE',
-  number: 'FA2026-000001',
-  numberYear: 2026,
-  numberSequence: 1,
+  // Fakturoid's format, not ours. We no longer allocate numbers.
+  number: '2026-0001',
+  accountingState: 'ISSUED',
   issuedAt: '2026-10-16T09:00:00.000Z',
   taxableSupplyDate: '2026-10-16T00:00:00.000Z',
   currency: 'CZK',

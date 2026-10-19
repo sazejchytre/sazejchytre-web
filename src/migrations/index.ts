@@ -10,6 +10,7 @@ import * as migration_20261015_201500_tip_immutability_triggers from './20261015
 import * as migration_20261015_220849_step_4_billing from './20261015_220849_step_4_billing';
 import * as migration_20261016_083730_step_5b_invoicing from './20261016_083730_step_5b_invoicing';
 import * as migration_20261016_084500_credit_note_total_trigger from './20261016_084500_credit_note_total_trigger';
+import * as migration_20261017_110000_step_5c_fakturoid from './20261017_110000_step_5c_fakturoid';
 
 export const migrations = [
   {
@@ -71,5 +72,10 @@ export const migrations = [
     up: migration_20261016_084500_credit_note_total_trigger.up,
     down: migration_20261016_084500_credit_note_total_trigger.down,
     name: '20261016_084500_credit_note_total_trigger',
+  },
+  {
+    up: migration_20261017_110000_step_5c_fakturoid.up,
+    down: migration_20261017_110000_step_5c_fakturoid.down,
+    name: '20261017_110000_step_5c_fakturoid',
   },
 ];

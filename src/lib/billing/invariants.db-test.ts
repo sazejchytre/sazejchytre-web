@@ -28,19 +28,20 @@ import { getPayload, type Payload } from 'payload'
 import type * as PayloadDrizzle from '@payloadcms/db-postgres/drizzle'
 
 import config from '@/payload.config'
-import {
-  allocateDocumentNumber,
-  isContiguousFromOne,
-} from '@/lib/billing/document-number'
 import { claimWebhookEvent } from '@/lib/billing/webhook-events'
 
 const RUN = `dbtest-${Date.now()}`
-/** A year no real document will ever use, so the real series stay untouched. */
-/**
- * One year per test file — these run in parallel and teardown deletes by
- * year. See the note in refunds.db-test.ts for what sharing one costs.
+/*
+ * There was a `TEST_YEAR` here — a year no real document would use,
+ * one per test file, so that parallel suites could delete their own
+ * fixtures by the year embedded in the document number.
+ *
+ * It is gone because the number is gone. Fakturoid allocates numbers
+ * now, and a row may legitimately have none, so teardown keys off the
+ * RUN-prefixed customer instead. That is strictly better: it scopes to
+ * this run rather than to a year shared with every past run of the
+ * same file.
  */
-const TEST_YEAR = 2099
 
 let payload: Payload
 let sql: typeof PayloadDrizzle.sql
@@ -157,13 +158,20 @@ after(async () => {
     sql`DELETE FROM "webhook_events" WHERE "external_event_id" LIKE ${`${RUN}%`}`,
   )
   await db().execute(
-    sql`DELETE FROM "invoice_number_counters" WHERE "year" = ${TEST_YEAR}`,
-  )
-  await db().execute(
     sql`DELETE FROM "subscription_events" WHERE "source_event_id" LIKE ${`${RUN}%`}`,
   )
+  // Scoped by the RUN-prefixed customer, not by document number.
+  //
+  // Teardown used to delete by `number LIKE '%<TEST_YEAR>%'`, which worked
+  // because we allocated the number and could put a throwaway year in it.
+  // Fakturoid allocates it now, so there is no number to key on — and a row
+  // may legitimately have none at all. The customer is the stable handle:
+  // every fixture row in this file hangs off one, and its email carries RUN.
   await db().execute(
-    sql`DELETE FROM "invoices" WHERE "number" LIKE ${`%${TEST_YEAR}%`}`,
+    sql`DELETE FROM "invoices"
+        WHERE "customer_id" IN (
+          SELECT "id" FROM "customers" WHERE "email" LIKE ${`${RUN}%`}
+        )`,
   )
   await db().execute(
     sql`DELETE FROM "prices" WHERE "provider_price_id" LIKE ${`${RUN}%`}`,
@@ -178,60 +186,19 @@ after(async () => {
 
 /* ========================================================================== */
 
-describe('document numbering under concurrency', () => {
-  it('25 concurrent allocations produce a contiguous, duplicate-free series', async () => {
-    const CONCURRENCY = 25
-
-    const results = await Promise.all(
-      Array.from({ length: CONCURRENCY }, () =>
-        allocateDocumentNumber({
-          payload,
-          series: 'INVOICE',
-          year: TEST_YEAR,
-        }),
-      ),
-    )
-
-    const sequences = results.map((r) => r.sequence)
-
-    // No duplicates: two invoices sharing a number is an accounting defect.
-    assert.equal(
-      new Set(sequences).size,
-      CONCURRENCY,
-      `expected ${CONCURRENCY} distinct sequences, got ${JSON.stringify(sequences.sort((a, b) => a - b))}`,
-    )
-
-    // No gaps: a missing number has to be explained to a tax inspection.
-    assert.ok(
-      isContiguousFromOne(sequences),
-      `expected a contiguous run 1..${CONCURRENCY}, got ${JSON.stringify(sequences.sort((a, b) => a - b))}`,
-    )
-
-    // Rendered numbers are distinct too.
-    assert.equal(new Set(results.map((r) => r.number)).size, CONCURRENCY)
-  })
-
-  it('keeps invoice and credit-note series independent', async () => {
-    const invoice = await allocateDocumentNumber({
-      payload,
-      series: 'INVOICE',
-      year: TEST_YEAR,
-    })
-    const note = await allocateDocumentNumber({
-      payload,
-      series: 'CREDIT_NOTE',
-      year: TEST_YEAR,
-    })
-
-    // The credit-note series starts at 1 even though invoices are well past it.
-    assert.equal(note.sequence, 1)
-    assert.ok(invoice.sequence > 1)
-    assert.match(invoice.number, /^FA2099-/)
-    assert.match(note.number, /^OD2099-/)
-  })
-})
-
-/* ========================================================================== */
+/*
+ * The document-numbering concurrency suite lived here.
+ *
+ * It proved that 25 concurrent allocations produced a contiguous, duplicate-
+ * free series, and that invoices and credit notes kept independent counters.
+ * Both invariants still matter — they just are not ours any more. Fakturoid
+ * allocates the numbers now, and the invariant we have to hold instead is
+ * that one payment produces one document, which `invoicing.db-test.ts` tests
+ * through the unique index on `providerPaymentId` and the `custom_id`
+ * adoption in `src/lib/accounting/fakturoid/adapter.test.ts`.
+ *
+ * Keeping a test of a counter we deleted would have been a test of nothing.
+ */
 
 describe('webhook idempotency under concurrency', () => {
   it('two concurrent claims of one event yield exactly one winner', async () => {
@@ -596,20 +563,12 @@ describe('invoices are immutable', () => {
   const invoiceFixture = async () => {
     const customer = await makeCustomer('invoice')
     const subscription = await makeSubscription(customer.id, 'CZK', 'invoice')
-    const allocated = await allocateDocumentNumber({
-      payload,
-      series: 'INVOICE',
-      year: TEST_YEAR,
-    })
-
     return payload.create({
       collection: 'invoices',
       data: {
         deliveryState: 'PENDING',
         deliveryAttempts: 0,
-        number: allocated.number,
-        numberYear: allocated.year,
-        numberSequence: allocated.sequence,
+        accountingState: 'PENDING',
         customer: customer.id,
         subscription: subscription.id,
         issuedAt: new Date('2026-06-15T00:00:00.000Z').toISOString(),
@@ -662,12 +621,6 @@ describe('invoices are immutable', () => {
   it('rejects totals that do not add up', async () => {
     const customer = await makeCustomer('badtotals')
     const subscription = await makeSubscription(customer.id, 'CZK', 'badtotals')
-    const allocated = await allocateDocumentNumber({
-      payload,
-      series: 'INVOICE',
-      year: TEST_YEAR,
-    })
-
     await assert.rejects(
       () =>
         payload.create({
@@ -675,9 +628,7 @@ describe('invoices are immutable', () => {
           data: {
             deliveryState: 'PENDING',
             deliveryAttempts: 0,
-            number: allocated.number,
-            numberYear: allocated.year,
-            numberSequence: allocated.sequence,
+            accountingState: 'PENDING',
             customer: customer.id,
             subscription: subscription.id,
             issuedAt: new Date().toISOString(),
@@ -726,12 +677,6 @@ describe('invoices are immutable', () => {
   it('rejects charging VAT while not VAT registered', async () => {
     const customer = await makeCustomer('vat')
     const subscription = await makeSubscription(customer.id, 'CZK', 'vat')
-    const allocated = await allocateDocumentNumber({
-      payload,
-      series: 'INVOICE',
-      year: TEST_YEAR,
-    })
-
     await assert.rejects(
       () =>
         payload.create({
@@ -739,9 +684,7 @@ describe('invoices are immutable', () => {
           data: {
             deliveryState: 'PENDING',
             deliveryAttempts: 0,
-            number: allocated.number,
-            numberYear: allocated.year,
-            numberSequence: allocated.sequence,
+            accountingState: 'PENDING',
             customer: customer.id,
             subscription: subscription.id,
             issuedAt: new Date().toISOString(),

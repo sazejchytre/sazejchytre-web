@@ -7,6 +7,7 @@ import {
   lockOnceSet,
 } from '@/lib/billing/append-only'
 import {
+  ACCOUNTING_DOCUMENT_STATES,
   CURRENCIES,
   DOCUMENT_DELIVERY_STATES,
   toOptions,
@@ -22,8 +23,10 @@ import { isValidMinorAmount } from '@/lib/billing/money'
  * becoming "we invoiced X − Y". That matters for the same reason the invoice is
  * immutable: the customer and the accountant each hold a copy of the original.
  *
- * Its own numbering series, allocated by the same atomic allocator. Sharing the
- * invoice counter would put gaps in both series.
+ * Fakturoid numbers it, as a correction document bound to the invoice it
+ * corrects (`document_type: "correction"` with `correction_id`). We no longer
+ * allocate a series of our own — two numbering series inside one accounting
+ * year is not something an accountant can reconcile.
  *
  * `amountMinor` is the credited amount and may be less than the invoice total —
  * partial refunds are normal. Several credit notes may therefore reference one
@@ -34,9 +37,9 @@ import { isValidMinorAmount } from '@/lib/billing/money'
 export const CreditNotes: CollectionConfig = {
   slug: 'credit-notes',
   admin: {
-    useAsTitle: 'number',
+    useAsTitle: 'fakturoidNumber',
     defaultColumns: [
-      'number',
+      'fakturoidNumber',
       'invoice',
       'amountMinor',
       'currency',
@@ -48,45 +51,53 @@ export const CreditNotes: CollectionConfig = {
     create: isAdmin,
     read: isAdmin,
     // Its CONTENT may never change — it is a tax document in its own right.
-    // Relaxed from denyAll only so the rendered PDF and the delivery outcome
-    // can be recorded after creation, which cannot happen at creation because
-    // the PDF needs the allocated number. The hooks below allow exactly those
-    // fields and exactly one write each.
+    // Relaxed from denyAll only so the accounting document, the stored PDF
+    // and the delivery outcome can be recorded after creation — none of which
+    // is knowable at creation, because the document is issued at a third
+    // party afterwards. The hooks below allow exactly those fields and
+    // exactly one write each.
     update: isAdmin,
     delete: denyAll,
     admin: canAccessAdminPanel,
   },
   indexes: [
-    { fields: ['numberYear', 'numberSequence'], unique: true },
     { fields: ['invoice'], unique: false },
+    // Finds the rows the retry cron has to pick up.
+    { fields: ['accountingState', 'issuedAt'], unique: false },
   ],
   fields: [
     {
-      name: 'number',
-      type: 'text',
+      name: 'accountingState',
+      type: 'select',
       required: true,
+      defaultValue: 'PENDING',
+      index: true,
+      options: toOptions(ACCOUNTING_DOCUMENT_STATES),
+      admin: {
+        description:
+          'Whether Fakturoid holds a correction document for this row yet.',
+      },
+    },
+    {
+      name: 'fakturoidDocumentId',
+      type: 'text',
+      // Nullable: the row records the refund the moment it happens, which is
+      // before the correction document can be created at Fakturoid.
+      required: false,
+      unique: true,
+      index: true,
+      admin: { description: "The correction document's id at Fakturoid." },
+    },
+    {
+      name: 'fakturoidNumber',
+      type: 'text',
+      required: false,
       unique: true,
       index: true,
       admin: {
         description:
-          'Own strictly sequential series, separate from invoices (e.g. OD2026-000001).',
+          'The correction document number as issued by Fakturoid, in its own series.',
       },
-    },
-    {
-      name: 'numberYear',
-      type: 'number',
-      required: true,
-      validate: (value: unknown) =>
-        Number.isInteger(value) ? true : 'numberYear must be an integer.',
-    },
-    {
-      name: 'numberSequence',
-      type: 'number',
-      required: true,
-      validate: (value: unknown) =>
-        Number.isInteger(value) && (value as number) >= 1
-          ? true
-          : 'numberSequence must be an integer >= 1.',
     },
     {
       name: 'invoice',
@@ -200,13 +211,23 @@ export const CreditNotes: CollectionConfig = {
   hooks: {
     beforeValidate: [
       lockFieldsAfterCreate('A credit note', [
+        'accountingState',
+        'fakturoidDocumentId',
+        'fakturoidNumber',
         'pdfStorageKey',
         'deliveryState',
         'deliveredAt',
         'deliveryAttempts',
         'deliveryError',
       ]),
-      lockOnceSet('A credit note', ['pdfStorageKey', 'deliveredAt']),
+      // Repointing a row at a different correction document would silently
+      // reassign a statutory number and orphan the original at Fakturoid.
+      lockOnceSet('A credit note', [
+        'fakturoidDocumentId',
+        'fakturoidNumber',
+        'pdfStorageKey',
+        'deliveredAt',
+      ]),
     ],
     beforeDelete: [blockDeletes('A credit note')],
   },

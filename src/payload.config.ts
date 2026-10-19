@@ -20,7 +20,6 @@ import { CreditNotes } from '@/collections/billing/CreditNotes'
 import { Disputes } from '@/collections/billing/Disputes'
 import { Customers } from '@/collections/billing/Customers'
 import { EntitlementGrants } from '@/collections/billing/EntitlementGrants'
-import { InvoiceNumberCounters } from '@/collections/billing/InvoiceNumberCounters'
 import { Invoices } from '@/collections/billing/Invoices'
 import { Plans } from '@/collections/billing/Plans'
 import { Prices } from '@/collections/billing/Prices'
@@ -84,7 +83,6 @@ export default buildConfig({
     Invoices,
     CreditNotes,
     Disputes,
-    InvoiceNumberCounters,
     ConsentRecords,
     WebhookEvents,
 

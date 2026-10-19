@@ -59,6 +59,18 @@ jobs:
       STRIPE_WEBHOOK_SECRET: whsec_ci_build_only_not_a_real_secret_0000
       # Vercel Cron shared secret. Minimum 32 characters.
       CRON_SECRET: ci-build-only-value-not-a-real-secret-000000
+      # Fakturoid. Placeholders only, and ACCOUNTING_PROVIDER is left at its
+      # FAKE default on purpose: these credentials would otherwise point at a
+      # REAL accounting account, where every document created is permanently
+      # numbered in a statutory series and cannot be deleted without leaving a
+      # gap. CI must never be able to reach it.
+      #
+      # The User-Agent has to contain an email address or the schema refuses
+      # it — Fakturoid rejects requests whose agent names no contactable owner.
+      FAKTUROID_CLIENT_ID: ci-build-only-not-a-real-client-id
+      FAKTUROID_CLIENT_SECRET: ci-build-only-not-a-real-client-secret
+      FAKTUROID_SLUG: ci-build-only
+      FAKTUROID_USER_AGENT: sazejchytre.cz-ci (ci@sazejchytre.cz)
 
     steps:
       - name: Checkout

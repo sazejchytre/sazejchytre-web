@@ -2,104 +2,82 @@
  * Getting a document to the customer, and recording whether it got there.
  *
  * ──────────────────────────────────────────────────────────────────────────
- * A DELIVERY FAILURE DOES NOT UNISSUE A DOCUMENT
+ * A DELIVERY FAILURE DOES NOT UNDO ANYTHING
  *
- * The document exists the moment it is issued. It has a number out of a
- * gap-free series, it is the statutory record of a payment that really
+ * The document exists the moment the accounting provider issues it. It has a
+ * number out of a statutory series, it is the record of a payment that really
  * happened, and it is in the customer's account page whether or not an email
  * left the building.
  *
  * So nothing here rolls anything back. A failure is written to
  * `deliveryState` with the reason, and the retry sweep picks it up. The
- * alternative — unissuing on a send failure — would either burn a number for
- * nothing or, worse, make Resend's availability a precondition for Czech
- * accounting law.
+ * alternative — undoing on a send failure — would make Resend's availability a
+ * precondition for Czech accounting law.
  *
  * ──────────────────────────────────────────────────────────────────────────
- * ORDER: ROW, THEN PDF, THEN EMAIL
+ * ORDER: ROW, THEN DOCUMENT, THEN PDF, THEN EMAIL
  *
- * Each step is retryable from whatever state the last one left. The PDF is
- * rendered once and `pdfStorageKey` is write-once at the collection level, so
- * a retry after a successful render reuses the stored file rather than
- * producing a second one that could also claim to be this document.
+ * Four steps, four places to fail, each retryable from wherever the last one
+ * stopped. The document and the PDF both come from a third party now, which
+ * is exactly why they are separate states rather than one.
+ *
+ * ──────────────────────────────────────────────────────────────────────────
+ * WE SEND OUR OWN COPY, AND NEVER A PROVIDER LINK
+ *
+ * The attachment is read back out of our own bucket, not taken from the
+ * provider on the way past and not linked to. Two reasons, and both matter:
+ *
+ *   - The customer must receive the same bytes the account page serves. A
+ *     re-fetch could differ, and then there are two files that both claim to
+ *     be this document.
+ *   - A Fakturoid URL in a customer's inbox is an accounting account's
+ *     address handed to a stranger, and it outlives our control of it.
+ *
+ * This is also why Fakturoid's own email sending is not used at all.
  */
 import type { Payload, PayloadRequest } from 'payload'
 
 import type { Currency } from '../billing/constants.ts'
 import { EmailDeliveryError, sendEmail } from '../auth/email.ts'
-import { renderDocumentPdf, type RenderableDocument } from './pdf.ts'
 import {
-  documentStorageKey,
-  getPrivateDocument,
-  putPrivateDocument,
-} from './storage.ts'
+  ensureDocumentPdf,
+  type DocumentCollection,
+} from './accounting-document.ts'
+import { getPrivateDocument } from './storage.ts'
 import {
   invoiceDeliveryEmail,
   creditNoteDeliveryEmail,
 } from './email-templates.ts'
 
-export type DocumentCollection = 'invoices' | 'credit-notes'
+export type { DocumentCollection }
 
 export type DeliveryOutcome = {
   /** True when the email was accepted by the provider on this call. */
   delivered: boolean
-  /** True when the PDF was rendered and stored on this call. */
+  /** True when the PDF was fetched and stored on this call. */
   pdfStored: boolean
   storageKey: string | null
   /** Set when nothing could be done; safe to log. */
   reason?: string
 }
 
-const STORAGE_KIND: Readonly<
-  Record<DocumentCollection, 'invoices' | 'credit-notes'>
-> = {
-  invoices: 'invoices',
-  'credit-notes': 'credit-notes',
-}
-
-/* -------------------------------------------------------------------------- */
-/* PDF                                                                       */
-/* -------------------------------------------------------------------------- */
-
 /**
- * Make sure the document has a stored PDF, rendering it if it does not.
+ * What the delivery email needs to say.
  *
- * Idempotent and cheap on the happy path: an existing `pdfStorageKey` short
- * circuits, so a delivery retry does not re-render. That is not just an
- * optimisation — re-rendering would produce a second file for one document
- * number, and only one of them is the one the customer received.
+ * Much smaller than it used to be. When we rendered the PDF ourselves this
+ * had to carry both parties' identities, the tax treatment and the layout
+ * data; now that the provider renders it, all that is needed is enough to
+ * write a covering email — and the attachment comes from storage.
  */
-export const ensureDocumentPdf = async (args: {
-  payload: Payload
-  req?: PayloadRequest
-  collection: DocumentCollection
-  id: number
-  renderable: RenderableDocument
-  numberYear: number
-  existingKey?: string | null
-}): Promise<{ key: string; rendered: boolean }> => {
-  if (args.existingKey) {
-    return { key: args.existingKey, rendered: false }
-  }
-
-  const pdf = await renderDocumentPdf(args.renderable)
-  const key = documentStorageKey(
-    STORAGE_KIND[args.collection],
-    args.numberYear,
-    args.renderable.number,
-  )
-
-  await putPrivateDocument(key, pdf)
-
-  await args.payload.update({
-    collection: args.collection,
-    id: args.id,
-    overrideAccess: true,
-    ...(args.req ? { req: args.req } : {}),
-    data: { pdfStorageKey: key },
-  })
-
-  return { key, rendered: true }
+type Deliverable = {
+  number: string
+  email: string
+  amountMinor: number
+  currency: Currency
+  periodStart: Date
+  periodEnd: Date
+  /** Credit notes only: the invoice being corrected. */
+  correctsNumber: string
 }
 
 /* -------------------------------------------------------------------------- */
@@ -112,10 +90,12 @@ type DeliverArgs = {
   collection: DocumentCollection
   id: number
   now?: Date
+  /** Injected so tests do not actually wait between PDF polls. */
+  sleep?: (ms: number) => Promise<void>
 }
 
 /**
- * Render if needed, email, and record the outcome.
+ * Fetch and store the PDF if needed, email it, and record the outcome.
  *
  * Never throws for a delivery failure — the caller is usually a webhook or a
  * cron sweep, and neither should fail because an email bounced.
@@ -126,6 +106,7 @@ export const deliverDocument = async ({
   collection,
   id,
   now = new Date(),
+  sleep,
 }: DeliverArgs): Promise<DeliveryOutcome> => {
   const reqOption = req ? { req } : {}
 
@@ -146,54 +127,69 @@ export const deliverDocument = async ({
     }
   }
 
-  const renderable = await toRenderable(payload, collection, doc, reqOption)
-
-  if (!renderable) {
+  if (doc.accountingState !== 'ISSUED' || !doc.fakturoidNumber) {
+    // There is no document to send yet. Not a delivery failure, so
+    // `deliveryState` is left alone and the attempt counter is not burnt: the
+    // accounting document has to be issued first, and a separate state
+    // already tracks that.
     return {
       delivered: false,
       pdfStored: false,
       storageKey: null,
-      reason: 'NOT_RENDERABLE',
+      reason: 'NO_ACCOUNTING_DOCUMENT',
     }
   }
 
-  let storageKey: string | null = null
-  let pdfStored = false
+  const deliverable = await toDeliverable(payload, collection, doc, reqOption)
 
-  try {
-    const pdf = await ensureDocumentPdf({
-      payload,
-      ...reqOption,
-      collection,
-      id,
-      renderable,
-      numberYear: doc.numberYear as number,
-      existingKey: (doc.pdfStorageKey as string | null) ?? null,
-    })
-    storageKey = pdf.key
-    pdfStored = pdf.rendered
-  } catch (error) {
-    await recordFailure({
-      payload,
-      reqOption,
-      collection,
-      id,
-      attempts: (doc.deliveryAttempts as number) ?? 0,
-      reason: `PDF_FAILED: ${describe(error)}`,
-    })
+  if (!deliverable) {
+    return {
+      delivered: false,
+      pdfStored: false,
+      storageKey: null,
+      reason: 'NOT_DELIVERABLE',
+    }
+  }
+
+  const pdf = await ensureDocumentPdf({
+    payload,
+    ...reqOption,
+    collection,
+    id,
+    ...(sleep ? { sleep } : {}),
+  })
+
+  if (!pdf.key) {
+    // Still generating, or the provider could not be reached. Both are
+    // ordinary and both are the cron's business, so the reason is recorded
+    // only when it is NOT retryable — burning a delivery attempt on "the PDF
+    // isn't ready yet" would eventually trip the give-up threshold on a
+    // document that was never actually refused.
+    if (!pdf.retryable) {
+      await recordFailure({
+        payload,
+        reqOption,
+        collection,
+        id,
+        attempts: (doc.deliveryAttempts as number) ?? 0,
+        reason: `PDF_UNAVAILABLE_${pdf.reason}: ${pdf.detail ?? ''}`,
+      })
+    }
 
     return {
       delivered: false,
       pdfStored: false,
       storageKey: null,
-      reason: 'PDF_FAILED',
+      reason: `PDF_${pdf.reason}`,
     }
   }
 
-  // Read the stored bytes back rather than reusing the freshly rendered
-  // buffer. On a retry there is no fresh buffer, and the customer must
-  // receive the SAME file that the download route serves — not a
-  // re-render that might differ.
+  const storageKey = pdf.key
+  const pdfStored = pdf.reason === 'STORED'
+
+  // Read the stored bytes back rather than reusing whatever was just fetched.
+  // On a retry there is no fresh buffer, and the customer must receive the
+  // SAME file the download route serves.
   let attachment: Buffer
 
   try {
@@ -219,26 +215,26 @@ export const deliverDocument = async ({
   const email =
     collection === 'invoices'
       ? invoiceDeliveryEmail({
-          number: renderable.number,
-          amount: renderable.amountMinor,
-          currency: renderable.currency,
-          periodStart: renderable.periodStart,
-          periodEnd: renderable.periodEnd,
+          number: deliverable.number,
+          amount: deliverable.amountMinor,
+          currency: deliverable.currency,
+          periodStart: deliverable.periodStart,
+          periodEnd: deliverable.periodEnd,
         })
       : creditNoteDeliveryEmail({
-          number: renderable.number,
-          amount: renderable.amountMinor,
-          currency: renderable.currency,
-          correctsNumber: renderable.corrects?.number ?? '',
+          number: deliverable.number,
+          amount: deliverable.amountMinor,
+          currency: deliverable.currency,
+          correctsNumber: deliverable.correctsNumber,
         })
 
   try {
     await sendEmail({
-      to: renderable.customer.email,
+      to: deliverable.email,
       email,
       kind: collection === 'invoices' ? 'invoice.issued' : 'credit_note.issued',
       attachments: [
-        { filename: `${renderable.number}.pdf`, content: attachment },
+        { filename: `${deliverable.number}.pdf`, content: attachment },
       ],
     })
   } catch (error) {
@@ -300,82 +296,47 @@ const describe = (error: unknown): string =>
   error instanceof Error ? error.message.slice(0, 200) : 'unknown'
 
 /* -------------------------------------------------------------------------- */
-/* Row → renderable                                                           */
+/* Row → deliverable                                                          */
 /* -------------------------------------------------------------------------- */
 
 /**
- * Build the renderable document from the stored row.
+ * Build what the covering email needs from the stored row.
  *
- * Reads the SNAPSHOTS, never the live relations. The document must render the
- * same in five years, when the plan has been renamed and the customer has
- * moved; joining would quietly produce a different document from the one that
- * was sent.
+ * Reads the SNAPSHOTS, never the live relations. The email has to describe the
+ * document that was issued, not whatever the plan is called today.
  */
-const toRenderable = async (
+const toDeliverable = async (
   payload: Payload,
   collection: DocumentCollection,
   doc: Record<string, unknown>,
   reqOption: { req?: PayloadRequest },
-): Promise<RenderableDocument | null> => {
-  const operator = doc.operatorSnapshot as
-    | {
-        legalName: string
-        address: string
-        businessId: string
-        taxId?: string | null
-        vatRegistered: boolean
-        email?: string | null
-      }
-    | undefined
+): Promise<Deliverable | null> => {
+  const number = doc.fakturoidNumber as string | null
+
+  if (!number) return null
 
   if (collection === 'invoices') {
-    const customer = doc.customerSnapshot as {
-      name: string
-      email: string
-      address?: string | null
-      country: string
-      businessId?: string | null
-      taxId?: string | null
-    }
-    const service = doc.serviceSnapshot as {
-      planName: string
-      description: string
-      periodStart: string
-      periodEnd: string
-    }
-    const paymentInfo = doc.paymentSnapshot as {
-      method: string
-      paidAt: string
-      cardBrand?: string | null
-      cardLast4?: string | null
-    }
+    const customer = doc.customerSnapshot as { email?: string } | undefined
+    const service = doc.serviceSnapshot as
+      { periodStart?: string; periodEnd?: string } | undefined
 
-    if (!operator || !customer || !service || !paymentInfo) return null
+    if (!customer?.email || !service?.periodStart || !service.periodEnd) {
+      return null
+    }
 
     return {
-      kind: 'INVOICE',
-      number: doc.number as string,
-      issuedAt: new Date(doc.issuedAt as string),
-      taxableSupplyDate: new Date(doc.taxableSupplyDate as string),
-      supplier: operator,
-      supplierVatRegistered: operator.vatRegistered,
-      customer,
-      description: service.description,
-      periodStart: new Date(service.periodStart),
-      periodEnd: new Date(service.periodEnd),
+      number,
+      email: customer.email,
       amountMinor: doc.totalMinor as number,
       currency: doc.currency as Currency,
-      payment: {
-        method: paymentInfo.method,
-        paidAt: new Date(paymentInfo.paidAt),
-        cardBrand: paymentInfo.cardBrand ?? null,
-        cardLast4: paymentInfo.cardLast4 ?? null,
-      },
+      periodStart: new Date(service.periodStart),
+      periodEnd: new Date(service.periodEnd),
+      correctsNumber: '',
     }
   }
 
   // A credit note carries no snapshots of its own: it corrects exactly one
-  // invoice, and the parties and the service are that invoice's. Taking them
+  // invoice, and the parties and the period are that invoice's. Taking them
   // from there is not a live join — the invoice's own fields are frozen.
   const invoiceRef = doc.invoice
   const invoiceId =
@@ -391,41 +352,24 @@ const toRenderable = async (
     ...reqOption,
   })) as unknown as Record<string, unknown>
 
-  const invoiceOperator = invoice.operatorSnapshot as typeof operator
-  const invoiceCustomer = invoice.customerSnapshot as {
-    name: string
-    email: string
-    address?: string | null
-    country: string
-  }
-  const service = invoice.serviceSnapshot as {
-    description: string
-    periodStart: string
-    periodEnd: string
-  }
+  const customer = invoice.customerSnapshot as { email?: string } | undefined
+  const service = invoice.serviceSnapshot as
+    { periodStart?: string; periodEnd?: string } | undefined
 
-  if (!invoiceOperator || !invoiceCustomer || !service) return null
+  if (!customer?.email || !service?.periodStart || !service.periodEnd) {
+    return null
+  }
 
   return {
-    kind: 'CREDIT_NOTE',
-    number: doc.number as string,
-    issuedAt: new Date(doc.issuedAt as string),
-    taxableSupplyDate: new Date(doc.issuedAt as string),
-    supplier: invoiceOperator,
-    supplierVatRegistered: invoiceOperator.vatRegistered,
-    customer: invoiceCustomer,
-    description: service.description,
-    periodStart: new Date(service.periodStart),
-    periodEnd: new Date(service.periodEnd),
+    number,
+    email: customer.email,
     amountMinor: doc.amountMinor as number,
     currency: doc.currency as Currency,
-    payment: {
-      method: 'CARD',
-      paidAt: new Date(doc.issuedAt as string),
-    },
-    corrects: {
-      number: invoice.number as string,
-      reason: doc.reason as string,
-    },
+    periodStart: new Date(service.periodStart),
+    periodEnd: new Date(service.periodEnd),
+    // Empty rather than absent when the invoice has no number yet — which
+    // cannot happen, since a correction needs an issued invoice to point at,
+    // but the email must not print "undefined" if it ever did.
+    correctsNumber: (invoice.fakturoidNumber as string | null) ?? '',
   }
 }

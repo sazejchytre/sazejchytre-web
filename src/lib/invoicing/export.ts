@@ -2,23 +2,33 @@
  * The shape an accountant needs, and a CSV of it.
  *
  * ──────────────────────────────────────────────────────────────────────────
- * WHY A TYPE AND NOT JUST A QUERY
+ * THIS IS A CONVENIENCE, NOT THE SYSTEM OF RECORD
  *
- * Whatever this feeds — a CSV today, Fakturoid's API later, an accountant's
- * own template — the set of facts per document is the same, and it is worth
- * naming once. `docs/accounting-integration.md` maps these fields onto
- * Fakturoid; if that mapping is ever built, it consumes this type rather than
- * re-deriving everything from the collections.
+ * Fakturoid holds the documents and exports to Pohoda and Money S3 natively,
+ * so the accountant does not need this file to do their job. It stays because
+ * it is the one view that joins the accounting document to OUR side of the
+ * story — the Stripe payment id, the subscription, the location evidence —
+ * which is what gets asked for when a payout has to be reconciled or a
+ * cross-border threshold checked. Nobody should be told to use this instead
+ * of Fakturoid's own export.
+ *
+ * ──────────────────────────────────────────────────────────────────────────
+ * THE NUMBERS ARE FAKTUROID'S
+ *
+ * `number` is whatever Fakturoid allocated, reported verbatim. We no longer
+ * allocate our own, so there is no year/sequence pair to report either: the
+ * provider owns the series and may format it however it likes. A row whose
+ * document has not been issued yet carries an EMPTY number and says so in
+ * `accountingState`, rather than being silently omitted — an unissued
+ * document is exactly the thing somebody needs to see.
  *
  * ──────────────────────────────────────────────────────────────────────────
  * EVERY ROW CARRIES ITS DOCUMENT TYPE
  *
- * Invoices and credit notes live in separate series (FA…, OD…), so the
- * numbers cannot collide. The type column is still explicit, because an
- * export is read by software that should not have to infer meaning from a
- * prefix — and because a credit note is a NEGATIVE entry in the books while
- * an invoice is a positive one, which is the single most important thing for
- * a reader to get right.
+ * Explicit, because an export is read by software that should not have to
+ * infer meaning from a number's shape — and because a credit note is a
+ * NEGATIVE entry in the books while an invoice is a positive one, which is
+ * the single most important thing for a reader to get right.
  *
  * Amounts stay in MINOR UNITS in the typed shape and are formatted only at
  * the CSV boundary. A float in an accounting export is how a rounding
@@ -32,10 +42,10 @@ export type AccountingDocumentType = 'INVOICE' | 'CREDIT_NOTE'
 
 export type AccountingDocumentRow = {
   documentType: AccountingDocumentType
-  /** `FA2026-000001` / `OD2026-000001`. */
+  /** As issued by Fakturoid. Empty when the document has not been issued yet. */
   number: string
-  numberYear: number
-  numberSequence: number
+  /** PENDING / ISSUED / FAILED, so an unissued document is visible. */
+  accountingState: string
   /** Datum vystavení. */
   issuedAt: string
   /** Datum uskutečnění plnění. Equal to `issuedAt` for a credit note. */
@@ -82,9 +92,11 @@ export type ExportRangeArgs = {
 /**
  * Every document issued in a date range, ordered as an accountant reads them.
  *
- * Ordered by number within year rather than by timestamp: the series is the
- * thing being audited, and a gap is only visible when the rows are in series
- * order.
+ * Ordered by issue date, then by number. It used to be ordered by number
+ * alone, because the series was ours and a gap in it was the thing being
+ * audited. The series is Fakturoid's now and gaps in it are Fakturoid's
+ * business, so date order — which is how a period is read — is the better
+ * default. Rows with no number yet sort together at the end of their day.
  */
 export const collectAccountingRows = async ({
   payload,
@@ -113,7 +125,7 @@ export const collectAccountingRows = async ({
       pagination: false,
       overrideAccess: true,
       ...reqOption,
-      sort: 'number',
+      sort: 'issuedAt',
       where: range,
     }),
     payload.find({
@@ -123,7 +135,7 @@ export const collectAccountingRows = async ({
       pagination: false,
       overrideAccess: true,
       ...reqOption,
-      sort: 'number',
+      sort: 'issuedAt',
       where: range,
     }),
   ])
@@ -136,9 +148,8 @@ export const collectAccountingRows = async ({
 
     rows.push({
       documentType: 'INVOICE',
-      number: invoice.number,
-      numberYear: invoice.numberYear,
-      numberSequence: invoice.numberSequence,
+      number: invoice.fakturoidNumber ?? '',
+      accountingState: invoice.accountingState,
       issuedAt: invoice.issuedAt,
       taxableSupplyDate: invoice.taxableSupplyDate,
       currency: invoice.currency as Currency,
@@ -166,9 +177,8 @@ export const collectAccountingRows = async ({
 
     rows.push({
       documentType: 'CREDIT_NOTE',
-      number: note.number,
-      numberYear: note.numberYear,
-      numberSequence: note.numberSequence,
+      number: note.fakturoidNumber ?? '',
+      accountingState: note.accountingState,
       issuedAt: note.issuedAt,
       // A credit note has no separate supply date: the correction takes
       // effect when it is issued.
@@ -186,14 +196,17 @@ export const collectAccountingRows = async ({
       customerEmail: invoice?.customerSnapshot.email ?? '',
       customerCountry: invoice?.customerSnapshot.country ?? '',
       description: invoice?.serviceSnapshot.description ?? '',
-      correctsNumber: invoice?.number ?? '',
+      correctsNumber: invoice?.fakturoidNumber ?? '',
       correctionReason: note.reason,
       providerPaymentId: invoice?.providerPaymentId ?? '',
       deliveryState: note.deliveryState,
     })
   }
 
-  return rows.sort((a, b) => a.number.localeCompare(b.number))
+  return rows.sort(
+    (a, b) =>
+      a.issuedAt.localeCompare(b.issuedAt) || a.number.localeCompare(b.number),
+  )
 }
 
 /* -------------------------------------------------------------------------- */
@@ -203,8 +216,7 @@ export const collectAccountingRows = async ({
 const COLUMNS: readonly (keyof AccountingDocumentRow)[] = [
   'documentType',
   'number',
-  'numberYear',
-  'numberSequence',
+  'accountingState',
   'issuedAt',
   'taxableSupplyDate',
   'currency',

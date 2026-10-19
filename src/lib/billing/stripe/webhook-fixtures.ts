@@ -36,8 +36,6 @@
 import type { Payload } from 'payload'
 import type Stripe from 'stripe'
 
-import type { AllocatedDocumentNumber } from '../document-number.ts'
-
 /* -------------------------------------------------------------------------- */
 /* Event fixtures                                                             */
 /* -------------------------------------------------------------------------- */
@@ -364,17 +362,12 @@ export type PayloadDouble = {
   /** Seed a document and get its id. */
   seed(collection: string, data: Record<string, unknown>): Doc
   rows(collection: string): Doc[]
-  /** A document-number allocator that needs no database. */
-  allocate: (args: {
-    series: 'INVOICE' | 'CREDIT_NOTE'
-  }) => Promise<AllocatedDocumentNumber>
 }
 
 export const createPayloadDouble = (): PayloadDouble => {
   const store = new Map<string, Doc[]>()
   const logs: string[] = []
   let nextId = 1
-  let nextSequence = 0
 
   const rows = (collection: string): Doc[] => {
     const existing = store.get(collection)
@@ -489,17 +482,5 @@ export const createPayloadDouble = (): PayloadDouble => {
     logs,
     seed,
     rows,
-    allocate: async ({ series }) => {
-      nextSequence += 1
-
-      return {
-        series,
-        year: 2026,
-        sequence: nextSequence,
-        number: `${series === 'INVOICE' ? 'FA' : 'OD'}2026-${String(
-          nextSequence,
-        ).padStart(6, '0')}`,
-      }
-    },
   }
 }

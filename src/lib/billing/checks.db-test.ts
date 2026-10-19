@@ -22,16 +22,20 @@ import { getPayload, type Payload } from 'payload'
 
 import type * as PayloadDrizzle from '@payloadcms/db-postgres/drizzle'
 
-import { allocateDocumentNumber } from '@/lib/billing/document-number'
 import config from '@/payload.config'
 
 const RUN = `chk-${Date.now()}`
-/** A year no real document will ever use, so the real series stay untouched. */
-/**
- * One year per test file — these run in parallel and teardown deletes by
- * year. See the note in refunds.db-test.ts for what sharing one costs.
+/*
+ * There was a `TEST_YEAR` here — a year no real document would use,
+ * one per test file, so that parallel suites could delete their own
+ * fixtures by the year embedded in the document number.
+ *
+ * It is gone because the number is gone. Fakturoid allocates numbers
+ * now, and a row may legitimately have none, so teardown keys off the
+ * RUN-prefixed customer instead. That is strictly better: it scopes to
+ * this run rather than to a year shared with every past run of the
+ * same file.
  */
-const TEST_YEAR = 2098
 
 let payload: Payload
 let sql: typeof PayloadDrizzle.sql
@@ -152,11 +156,18 @@ before(async () => {
 
 after(async () => {
   // Raw SQL: invoices and consent records refuse deletion through Payload.
+  // Scoped by the RUN-prefixed customer, not by document number.
+  //
+  // Teardown used to delete by `number LIKE '%<TEST_YEAR>%'`, which worked
+  // because we allocated the number and could put a throwaway year in it.
+  // Fakturoid allocates it now, so there is no number to key on — and a row
+  // may legitimately have none at all. The customer is the stable handle:
+  // every fixture row in this file hangs off one, and its email carries RUN.
   await db().execute(
-    sql`DELETE FROM "invoices" WHERE "number_year" = ${TEST_YEAR}`,
-  )
-  await db().execute(
-    sql`DELETE FROM "invoice_number_counters" WHERE "year" = ${TEST_YEAR}`,
+    sql`DELETE FROM "invoices"
+        WHERE "customer_id" IN (
+          SELECT "id" FROM "customers" WHERE "email" LIKE ${`${RUN}%`}
+        )`,
   )
   await db().execute(
     sql`DELETE FROM "consent_records" WHERE "document_version" LIKE ${`${RUN}%`}`,
@@ -182,16 +193,10 @@ const rawInvoice = async (
   customerId: number,
   overrides: Record<string, string> = {},
 ): Promise<unknown> => {
-  const allocated = await allocateDocumentNumber({
-    payload,
-    series: 'INVOICE',
-    year: TEST_YEAR,
-  })
-
   const columns: Record<string, string> = {
-    number: `'${allocated.number}'`,
-    number_year: String(allocated.year),
-    number_sequence: String(allocated.sequence),
+    // No number: Fakturoid allocates it, and this row is deliberately created
+    // before any accounting document exists.
+    accounting_state: `'PENDING'::"enum_invoices_accounting_state"`,
     customer_id: String(customerId),
     issued_at: 'now()',
     taxable_supply_date: 'now()',
@@ -343,20 +348,12 @@ describe('invoices.subscription is nullable', () => {
     await rawInvoice(customer, {})
 
     // And through Payload, which is what application code will do.
-    const allocated = await allocateDocumentNumber({
-      payload,
-      series: 'INVOICE',
-      year: TEST_YEAR,
-    })
-
     const doc = await payload.create({
       collection: 'invoices',
       data: {
         deliveryState: 'PENDING',
         deliveryAttempts: 0,
-        number: allocated.number,
-        numberYear: allocated.year,
-        numberSequence: allocated.sequence,
+        accountingState: 'PENDING',
         customer,
         issuedAt: new Date().toISOString(),
         taxableSupplyDate: new Date().toISOString(),
@@ -535,5 +532,130 @@ describe('consent_records_withdrawal_ordered', () => {
       VALUES ('TERMS'::"enum_consent_records_type",
               ${`${RUN}-v2`}, 'text', now(), now(), now())
     `)
+  })
+})
+
+/* ========================================================================== */
+
+/**
+ * The shape step 5c left behind.
+ *
+ * Asserted against `information_schema` rather than trusted, because every one
+ * of these is load-bearing and none of them is visible from the application:
+ *
+ *   - the new columns must be NULLABLE, or a row could not be written while
+ *     Fakturoid is unreachable, and then a provider outage would mean losing a
+ *     payment or revoking a paid-for entitlement;
+ *   - the old numbering columns must be GONE, or something could still write a
+ *     second series alongside Fakturoid's;
+ *   - the document id and number must be UNIQUE, so two of our rows can never
+ *     point at one statutory document.
+ */
+describe('accounting document columns (step 5c)', () => {
+  const columns = async (table: string) => {
+    const result = await db().execute(
+      sql`SELECT column_name, is_nullable, data_type
+          FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = ${table}`,
+    )
+
+    const rows = Array.isArray(result)
+      ? (result as Record<string, unknown>[])
+      : ((result as { rows?: Record<string, unknown>[] }).rows ?? [])
+
+    return new Map(
+      rows.map((row) => [
+        String(row.column_name),
+        { nullable: row.is_nullable === 'YES', type: String(row.data_type) },
+      ]),
+    )
+  }
+
+  const uniqueIndexes = async (table: string) => {
+    const result = await db().execute(
+      sql`SELECT indexname, indexdef FROM pg_indexes
+          WHERE schemaname = 'public' AND tablename = ${table}`,
+    )
+
+    const rows = Array.isArray(result)
+      ? (result as Record<string, unknown>[])
+      : ((result as { rows?: Record<string, unknown>[] }).rows ?? [])
+
+    return rows
+      .filter((row) => String(row.indexdef).includes('CREATE UNIQUE INDEX'))
+      .map((row) => String(row.indexdef))
+  }
+
+  for (const table of ['invoices', 'credit_notes'] as const) {
+    it(`${table} carries a nullable Fakturoid id and number`, async () => {
+      const found = await columns(table)
+
+      for (const column of ['fakturoid_document_id', 'fakturoid_number']) {
+        const definition = found.get(column)
+
+        assert.ok(definition, `${table}.${column} is missing`)
+        assert.equal(
+          definition.nullable,
+          true,
+          `${table}.${column} must be nullable — the row exists before the document does`,
+        )
+      }
+    })
+
+    it(`${table}.accounting_state is NOT NULL and defaults to PENDING`, async () => {
+      const found = await columns(table)
+      const definition = found.get('accounting_state')
+
+      assert.ok(definition, `${table}.accounting_state is missing`)
+      assert.equal(definition.nullable, false)
+    })
+
+    it(`${table} no longer has our own numbering columns`, async () => {
+      const found = await columns(table)
+
+      for (const column of ['number', 'number_year', 'number_sequence']) {
+        assert.ok(
+          !found.has(column),
+          `${table}.${column} still exists — Fakturoid owns the numbering now`,
+        )
+      }
+    })
+
+    it(`${table} cannot point two rows at one document`, async () => {
+      const unique = await uniqueIndexes(table)
+
+      for (const column of ['fakturoid_document_id', 'fakturoid_number']) {
+        assert.ok(
+          unique.some((definition) => definition.includes(`(${column})`)),
+          `${table}.${column} has no unique index`,
+        )
+      }
+    })
+  }
+
+  it('customers cannot hold two Fakturoid subjects for one customer', async () => {
+    const unique = await uniqueIndexes('customers')
+
+    assert.ok(
+      unique.some((definition) =>
+        definition.includes('(fakturoid_subject_id)'),
+      ),
+      'customers.fakturoid_subject_id has no unique index — two subjects for ' +
+        'one customer would split their documents in two',
+    )
+  })
+
+  it('the number counter table is gone', async () => {
+    const result = await db().execute(
+      sql`SELECT table_name FROM information_schema.tables
+          WHERE table_schema = 'public'
+            AND table_name = 'invoice_number_counters'`,
+    )
+
+    const rows = Array.isArray(result)
+      ? (result as Record<string, unknown>[])
+      : ((result as { rows?: Record<string, unknown>[] }).rows ?? [])
+
+    assert.equal(rows.length, 0, 'invoice_number_counters still exists')
   })
 })

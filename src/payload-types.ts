@@ -79,7 +79,6 @@ export interface Config {
     invoices: Invoice;
     'credit-notes': CreditNote;
     disputes: Dispute;
-    'invoice-number-counters': InvoiceNumberCounter;
     'consent-records': ConsentRecord;
     'webhook-events': WebhookEvent;
     'auth-lockouts': AuthLockout;
@@ -108,7 +107,6 @@ export interface Config {
     invoices: InvoicesSelect<false> | InvoicesSelect<true>;
     'credit-notes': CreditNotesSelect<false> | CreditNotesSelect<true>;
     disputes: DisputesSelect<false> | DisputesSelect<true>;
-    'invoice-number-counters': InvoiceNumberCountersSelect<false> | InvoiceNumberCountersSelect<true>;
     'consent-records': ConsentRecordsSelect<false> | ConsentRecordsSelect<true>;
     'webhook-events': WebhookEventsSelect<false> | WebhookEventsSelect<true>;
     'auth-lockouts': AuthLockoutsSelect<false> | AuthLockoutsSelect<true>;
@@ -322,6 +320,10 @@ export interface Customer {
    * Populated by step 3 from better-auth. Null for customers who have no account yet.
    */
   authUserId?: string | null;
+  /**
+   * This customer as a Fakturoid subject. Cached so issuing does not look it up every time; null until their first document.
+   */
+  fakturoidSubjectId?: string | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -503,17 +505,17 @@ export interface EntitlementGrant {
 export interface Invoice {
   id: number;
   /**
-   * Human-readable, strictly sequential per year (e.g. FA2026-000001). Allocated only after payment is confirmed.
+   * Whether the accounting provider holds a document for this row. PENDING is the ordinary resting state right after a sale.
    */
-  number: string;
+  accountingState: 'PENDING' | 'ISSUED' | 'FAILED';
   /**
-   * Year component of `number`, for gap queries.
+   * The document's id at Fakturoid. Set once, never changed — it is how we find the document again.
    */
-  numberYear: number;
+  fakturoidDocumentId?: string | null;
   /**
-   * Sequence component of `number`, for gap queries.
+   * The document number as issued by Fakturoid (e.g. 2026-0001). We no longer allocate our own.
    */
-  numberSequence: number;
+  fakturoidNumber?: string | null;
   customer: number | Customer;
   /**
    * The subscription being billed, when there is one. Null for a one-off charge.
@@ -680,11 +682,17 @@ export interface Invoice {
 export interface CreditNote {
   id: number;
   /**
-   * Own strictly sequential series, separate from invoices (e.g. OD2026-000001).
+   * Whether Fakturoid holds a correction document for this row yet.
    */
-  number: string;
-  numberYear: number;
-  numberSequence: number;
+  accountingState: 'PENDING' | 'ISSUED' | 'FAILED';
+  /**
+   * The correction document's id at Fakturoid.
+   */
+  fakturoidDocumentId?: string | null;
+  /**
+   * The correction document number as issued by Fakturoid, in its own series.
+   */
+  fakturoidNumber?: string | null;
   /**
    * The invoice this corrects.
    */
@@ -794,26 +802,6 @@ export interface Dispute {
    * What we submitted and why. Free text, editable — this is the working record, not the audit trail.
    */
   notes?: string | null;
-  updatedAt: string;
-  createdAt: string;
-}
-/**
- * Internal numbering state. Advanced atomically by allocateDocumentNumber — do not edit by hand.
- *
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "invoice-number-counters".
- */
-export interface InvoiceNumberCounter {
-  id: number;
-  series: 'INVOICE' | 'CREDIT_NOTE';
-  /**
-   * Calendar year. Each year restarts at 1.
-   */
-  year: number;
-  /**
-   * Highest sequence issued for this series and year. The next document takes lastNumber + 1.
-   */
-  lastNumber: number;
   updatedAt: string;
   createdAt: string;
 }
@@ -1300,10 +1288,6 @@ export interface PayloadLockedDocument {
         value: number | Dispute;
       } | null)
     | ({
-        relationTo: 'invoice-number-counters';
-        value: number | InvoiceNumberCounter;
-      } | null)
-    | ({
         relationTo: 'consent-records';
         value: number | ConsentRecord;
       } | null)
@@ -1464,6 +1448,7 @@ export interface CustomersSelect<T extends boolean = true> {
   preferredLocale?: T;
   currency?: T;
   authUserId?: T;
+  fakturoidSubjectId?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -1534,9 +1519,9 @@ export interface EntitlementGrantsSelect<T extends boolean = true> {
  * via the `definition` "invoices_select".
  */
 export interface InvoicesSelect<T extends boolean = true> {
-  number?: T;
-  numberYear?: T;
-  numberSequence?: T;
+  accountingState?: T;
+  fakturoidDocumentId?: T;
+  fakturoidNumber?: T;
   customer?: T;
   subscription?: T;
   issuedAt?: T;
@@ -1601,9 +1586,9 @@ export interface InvoicesSelect<T extends boolean = true> {
  * via the `definition` "credit-notes_select".
  */
 export interface CreditNotesSelect<T extends boolean = true> {
-  number?: T;
-  numberYear?: T;
-  numberSequence?: T;
+  accountingState?: T;
+  fakturoidDocumentId?: T;
+  fakturoidNumber?: T;
   invoice?: T;
   currency?: T;
   amountMinor?: T;
@@ -1638,17 +1623,6 @@ export interface DisputesSelect<T extends boolean = true> {
   providerDisputeId?: T;
   providerChargeId?: T;
   notes?: T;
-  updatedAt?: T;
-  createdAt?: T;
-}
-/**
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "invoice-number-counters_select".
- */
-export interface InvoiceNumberCountersSelect<T extends boolean = true> {
-  series?: T;
-  year?: T;
-  lastNumber?: T;
   updatedAt?: T;
   createdAt?: T;
 }

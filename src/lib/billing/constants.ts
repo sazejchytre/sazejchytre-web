@@ -216,13 +216,6 @@ export const TAX_TREATMENTS = [
 export type TaxTreatment = (typeof TAX_TREATMENTS)[number]
 
 /**
- * Independent document numbering series.
- *
- * Invoices and credit notes each run their own strictly sequential, per-year
- * series. They must never share a counter: a gap in either series is a
- * bookkeeping defect.
- */
-/**
  * How far a document has got towards the customer.
  *
  * Separate from the document's existence on purpose. An issued invoice is a
@@ -239,8 +232,38 @@ export const DOCUMENT_DELIVERY_STATES = [
 ] as const
 export type DocumentDeliveryState = (typeof DOCUMENT_DELIVERY_STATES)[number]
 
-export const DOCUMENT_SERIES = ['INVOICE', 'CREDIT_NOTE'] as const
-export type DocumentSeries = (typeof DOCUMENT_SERIES)[number]
+/**
+ * Whether the accounting provider holds a document for this row yet.
+ *
+ * Separate from `deliveryState`, and from the row's own existence, because
+ * the three fail independently. Our row is the record of the sale and is
+ * written the moment money arrives; the accounting document is written at a
+ * third party that can be unreachable, in maintenance, or throttling us; the
+ * email is a fourth thing again.
+ *
+ * Collapsing any of them would mean a provider outage either losing a payment
+ * or rolling back an entitlement the customer has already been given. Neither
+ * is acceptable, so the row is created first and this field says how far the
+ * rest has got.
+ */
+export const ACCOUNTING_DOCUMENT_STATES = [
+  /**
+   * No accounting document yet. The resting state after a sale, and where a
+   * row waits while the provider is unreachable. The retry cron picks these
+   * up; nothing about it is exceptional.
+   */
+  'PENDING',
+  /** Issued at the provider, numbered by it, and locked. */
+  'ISSUED',
+  /**
+   * The provider refused our data, or the account is blocked. Retrying would
+   * be refused identically every time, so this needs a human rather than
+   * another attempt.
+   */
+  'FAILED',
+] as const
+export type AccountingDocumentState =
+  (typeof ACCOUNTING_DOCUMENT_STATES)[number]
 
 /* -------------------------------------------------------------------------- */
 /* Consent                                                                    */

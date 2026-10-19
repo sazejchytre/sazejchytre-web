@@ -106,7 +106,7 @@ export default async function DokladyPage() {
           <tbody>
             {invoices.docs.map((invoice) => (
               <tr key={invoice.id}>
-                <td>{invoice.number}</td>
+                <td>{invoice.fakturoidNumber ?? 'Připravuje se'}</td>
                 <td>{czechDate(invoice.issuedAt)}</td>
                 <td>
                   {formatMinorAmount(
@@ -151,7 +151,7 @@ export default async function DokladyPage() {
           <tbody>
             {creditNotes.docs.map((note) => (
               <tr key={note.id}>
-                <td>{note.number}</td>
+                <td>{note.fakturoidNumber ?? 'Připravuje se'}</td>
                 <td>{czechDate(note.issuedAt)}</td>
                 <td>
                   {formatMinorAmount(
@@ -161,7 +161,7 @@ export default async function DokladyPage() {
                 </td>
                 <td>
                   {typeof note.invoice === 'object' && note.invoice !== null
-                    ? note.invoice.number
+                    ? (note.invoice.fakturoidNumber ?? '—')
                     : '—'}
                 </td>
               </tr>

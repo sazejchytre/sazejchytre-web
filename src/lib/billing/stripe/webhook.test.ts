@@ -103,7 +103,6 @@ const run = async (
   handleStripeEvent({
     payload: double.payload,
     event,
-    allocate: double.allocate as never,
   })
 
 const subscriptionRow = (double: ReturnType<typeof createPayloadDouble>) =>
@@ -516,7 +515,12 @@ describe('scenario: refund', () => {
     assert.equal(notes[0]?.amountMinor, 59_900)
     assert.equal(notes[0]?.currency, 'CZK')
     assert.equal(notes[0]?.invoice, invoice.id)
-    assert.match(String(notes[0]?.number), /^OD2026-\d{6}$/)
+    // No number on the row: Fakturoid numbers the correction document, and
+    // this suite runs with the invoicing seam absent — no network, no
+    // credentials. The refund is recorded all the same, which is the property
+    // that matters here.
+    assert.equal(notes[0]?.fakturoidNumber, undefined)
+    assert.equal(notes[0]?.accountingState, 'PENDING')
 
     // THE INVOICE IS NOT TOUCHED. Its amounts are exactly as issued; only the
     // status marker changes, so the admin can see it has been corrected.

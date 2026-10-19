@@ -4,10 +4,23 @@
  * ──────────────────────────────────────────────────────────────────────────
  * ONE CONFIRMED PAYMENT, ONE INVOICE
  *
- * An invoice is a statutory document. Issuing one burns a sequence number
- * that can never be reused, and the series must have no gaps — so a document
- * is created only when money has definitely arrived, and exactly once per
- * payment.
+ * An invoice is a statutory document, so one is recorded only when money has
+ * definitely arrived, and exactly once per payment.
+ *
+ * ──────────────────────────────────────────────────────────────────────────
+ * THIS CREATES THE ROW. IT DOES NOT CREATE THE ACCOUNTING DOCUMENT
+ *
+ * The accounting document lives at Fakturoid now, which allocates its number.
+ * That is a separate step — `ensureInvoiceDocument` in
+ * `accounting-document.ts` — and it runs AFTER this one, deliberately.
+ *
+ * The reason is the one failure that must not happen: if issuing the
+ * accounting document were part of recording the sale, then Fakturoid being
+ * unreachable would mean either losing a payment or rolling back an
+ * entitlement the customer has already paid for. So the row is written first
+ * and unconditionally, `accountingState` stays PENDING, and the retry cron
+ * finishes the job. A row with no document number is a normal, expected
+ * state.
  *
  * "Definitely arrived" is not a judgement made here. The caller supplies a
  * `ConfirmedPayment`, which is the evidence; see that file for why the
@@ -24,9 +37,13 @@
  *    concurrency test demonstrates — and the index is what stops the second
  *    one. On that collision we re-read and return the winner's invoice.
  *
- * Without the second layer the failure is expensive and quiet: two numbers
- * burnt, two documents emailed, and a VAT return that counts the revenue
- * twice.
+ * Without the second layer the failure is expensive and quiet: two documents
+ * issued, two emails sent, and a VAT return that counts the revenue twice.
+ *
+ * A third layer sits at Fakturoid: every document carries our row id as its
+ * `custom_id`, and the adapter adopts an existing one rather than creating a
+ * second. That is what covers a failure between Fakturoid creating a document
+ * and us recording its id — the case neither of the layers above can see.
  *
  * ──────────────────────────────────────────────────────────────────────────
  * WHAT IS SNAPSHOTTED AND WHY NOTHING IS JOINED
@@ -42,7 +59,6 @@
 import type { Payload, PayloadRequest } from 'payload'
 import { APIError } from 'payload'
 
-import { allocateDocumentNumber } from '../billing/document-number.ts'
 import {
   OPERATOR,
   assertOperatorConfigured,
@@ -136,7 +152,14 @@ export type IssueInvoiceArgs = {
 
 export type IssuedInvoice = {
   id: number
-  number: string
+  /**
+   * The number Fakturoid allocated, once it has.
+   *
+   * Null on the ordinary path: the row is created before the accounting
+   * document exists. A caller that needs the number has to issue the document
+   * first — which is exactly the sequencing this split is for.
+   */
+  number: string | null
   /** False when an invoice for this payment already existed. */
   created: boolean
 }
@@ -153,7 +176,7 @@ const existingFor = async (
   payload: Payload,
   providerPaymentId: string,
   req?: PayloadRequest,
-): Promise<{ id: number; number: string } | null> => {
+): Promise<{ id: number; number: string | null } | null> => {
   const found = await payload.find({
     collection: 'invoices',
     depth: 0,
@@ -166,14 +189,15 @@ const existingFor = async (
 
   const doc = found.docs[0]
 
-  return doc ? { id: doc.id, number: doc.number } : null
+  return doc ? { id: doc.id, number: doc.fakturoidNumber ?? null } : null
 }
 
 /**
  * Issue an invoice for a confirmed payment, or return the one that exists.
  *
- * Does NOT render the PDF or send the email. Those follow, and may fail
- * without unissuing the document — see `pdf.ts` and `delivery.ts`.
+ * Does NOT create the accounting document, fetch the PDF or send the email.
+ * Those follow, and each may fail without undoing the sale — see
+ * `accounting-document.ts` and `delivery.ts`.
  */
 export const issueInvoiceForPayment = async ({
   payload,
@@ -216,17 +240,11 @@ export const issueInvoiceForPayment = async ({
   })) as CustomerRow
 
   const operator = operatorSnapshot()
-  const allocated = await allocateDocumentNumber({
-    payload,
-    series: 'INVOICE',
-    now,
-    ...(req ? { req } : {}),
-  })
 
   const data = {
-    number: allocated.number,
-    numberYear: allocated.year,
-    numberSequence: allocated.sequence,
+    // No number. Fakturoid allocates it when the document is issued, which is
+    // a later step on purpose — see the header.
+    accountingState: 'PENDING' as const,
     customer: customerId,
     ...(subscriptionId === null ? {} : { subscription: subscriptionId }),
     issuedAt: now.toISOString(),
@@ -284,7 +302,7 @@ export const issueInvoiceForPayment = async ({
       data,
     })
 
-    return { id: created.id, number: created.number, created: true }
+    return { id: created.id, number: null, created: true }
   } catch (error) {
     // The unique index on providerPaymentId. Another delivery won the race
     // between our read above and this insert — which is the case the

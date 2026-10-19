@@ -131,8 +131,6 @@ const INTEGER_COLUMNS: Record<
     priceMinor: { column: 'price_minor', notNull: true },
   },
   invoices: {
-    numberYear: { column: 'number_year', notNull: true },
-    numberSequence: { column: 'number_sequence', notNull: true },
     // A count, not a measurement.
     deliveryAttempts: {
       column: 'delivery_attempts',
@@ -149,8 +147,6 @@ const INTEGER_COLUMNS: Record<
     },
   },
   credit_notes: {
-    numberYear: { column: 'number_year', notNull: true },
-    numberSequence: { column: 'number_sequence', notNull: true },
     amountMinor: { column: 'amount_minor', notNull: true },
     deliveryAttempts: {
       column: 'delivery_attempts',
@@ -160,10 +156,6 @@ const INTEGER_COLUMNS: Record<
   },
   disputes: {
     amountMinor: { column: 'amount_minor', notNull: true },
-  },
-  invoice_number_counters: {
-    year: { column: 'year', notNull: true },
-    lastNumber: { column: 'last_number', notNull: true, default: 0 },
   },
   // Not billing, but the same rule: a count has no business being a decimal.
   auth_lockouts: {

@@ -171,23 +171,24 @@ for (const name of [
   )
 }
 
-/* --- 6. Numbering is untouched by this step ------------------------------- */
+/* --- 6. Numbering ---------------------------------------------------------- */
 
-const counters = await rowsOf(sql`
-  SELECT column_name, data_type
-  FROM information_schema.columns
-  WHERE table_schema = 'public' AND table_name = 'invoice_number_counters'
-  ORDER BY column_name
-`)
-
-check(
-  'invoice_number_counters still has year and last_number',
-  ['year', 'last_number'].every((name) =>
-    counters.some((row) => row.column_name === name),
-  ),
-  // Step 5b deliberately changed nothing about numbering.
-  counters.map((row) => String(row.column_name)).join(', '),
-)
+/*
+ * This section used to assert that `invoice_number_counters` still had its
+ * `year` and `last_number` columns, because step 5b deliberately changed
+ * nothing about numbering.
+ *
+ * Step 5c dropped that table. Fakturoid allocates the numbers now, and two
+ * numbering series inside one accounting year is not something an accountant
+ * can reconcile.
+ *
+ * The check is removed rather than inverted: this script verifies what step 5b
+ * built, and "the counters are gone" is not a fact about step 5b. The current
+ * shape — nullable `fakturoid_document_id` and `fakturoid_number`, their
+ * unique indexes, `accounting_state`, and the counters table being absent — is
+ * asserted in `src/lib/billing/checks.db-test.ts`, which runs against Neon on
+ * every `pnpm test:db` rather than only when somebody remembers a script.
+ */
 
 /* --- Summary -------------------------------------------------------------- */
 

@@ -112,7 +112,17 @@ before(async () => {
   })
 
   const synced = prices.docs
-    .filter((doc) => typeof doc.providerPriceId === 'string')
+    // `price_` is not cosmetic: a `prices` row can carry a provider id that
+    // Stripe has never heard of, because the database-test suites create
+    // fixture prices and a teardown that dies leaves them behind. One such row
+    // in this list makes the whole contract fail with `resource_missing`,
+    // pointing at the adapter instead of at the debris. Ask for ids that
+    // could actually exist at Stripe.
+    .filter(
+      (doc) =>
+        typeof doc.providerPriceId === 'string' &&
+        doc.providerPriceId.startsWith('price_'),
+    )
     .map((doc): ContractPrice => ({
       providerPriceId: doc.providerPriceId as string,
       currency: doc.currency as Currency,

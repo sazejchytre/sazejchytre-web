@@ -24,25 +24,23 @@ import { getPayload, type Payload } from 'payload'
 import type * as PayloadDrizzle from '@payloadcms/db-postgres/drizzle'
 
 import config from '@/payload.config'
-import { allocateDocumentNumber } from '@/lib/billing/document-number'
 import { issueCreditNoteForRefund } from '@/lib/billing/stripe/webhook'
 import { loadCustomerEntitlementState } from '@/lib/billing/entitlement-loader'
 import { resolveEntitlements } from '@/lib/entitlements'
 
 const RUN = `dbtest-refund-${Date.now()}`
 
-/**
- * A year no real document will use, so the live series stay untouched.
+/*
+ * There was a `TEST_YEAR` here — a year no real document would use,
+ * one per test file, so that parallel suites could delete their own
+ * fixtures by the year embedded in the document number.
  *
- * ONE YEAR PER TEST FILE. The test runner runs these files in PARALLEL, and
- * teardown deletes by year, so two files sharing a year delete each other's
- * invoices mid-run — which surfaces as a foreign-key violation from
- * `credit_notes.invoice_id`, in whichever file happened to finish first, with
- * nothing in the failure to suggest the real cause.
- *
- * Claimed so far:  2099 invariants   2098 checks   2097 refunds (this file)
+ * It is gone because the number is gone. Fakturoid allocates numbers
+ * now, and a row may legitimately have none, so teardown keys off the
+ * RUN-prefixed customer instead. That is strictly better: it scopes to
+ * this run rather than to a year shared with every past run of the
+ * same file.
  */
-const TEST_YEAR = 2097
 
 let payload: Payload
 let sql: typeof PayloadDrizzle.sql
@@ -54,10 +52,6 @@ const db = () =>
       drizzle: { execute: (q: unknown) => Promise<unknown> }
     }
   ).drizzle
-
-/** An allocator pinned to the throwaway year, so real numbering is untouched. */
-const allocateInTestYear: typeof allocateDocumentNumber = (args) =>
-  allocateDocumentNumber({ ...args, year: TEST_YEAR })
 
 before(async () => {
   payload = await getPayload({ config })
@@ -82,17 +76,30 @@ after(async () => {
   await db().execute(
     sql`DELETE FROM "disputes" WHERE "provider_dispute_id" LIKE ${`${RUN}%`}`,
   )
+  // Scoped by the RUN-prefixed customer, not by document number.
+  //
+  // Teardown used to delete by `number LIKE '%<TEST_YEAR>%'`, which worked
+  // because we allocated the number and could put a throwaway year in it.
+  // Fakturoid allocates it now, so there is no number to key on — and a row
+  // may legitimately have none at all. The customer is the stable handle:
+  // every fixture row in this file hangs off one, and its email carries RUN.
   await db().execute(
-    sql`DELETE FROM "credit_notes" WHERE "number" LIKE ${`%${TEST_YEAR}%`}`,
+    sql`DELETE FROM "credit_notes"
+        WHERE "invoice_id" IN (
+          SELECT "id" FROM "invoices"
+          WHERE "customer_id" IN (
+            SELECT "id" FROM "customers" WHERE "email" LIKE ${`${RUN}%`}
+          )
+        )`,
   )
   await db().execute(
     sql`DELETE FROM "subscription_events" WHERE "source_event_id" LIKE ${`${RUN}%`}`,
   )
   await db().execute(
-    sql`DELETE FROM "invoices" WHERE "number" LIKE ${`%${TEST_YEAR}%`}`,
-  )
-  await db().execute(
-    sql`DELETE FROM "invoice_number_counters" WHERE "year" = ${TEST_YEAR}`,
+    sql`DELETE FROM "invoices"
+        WHERE "customer_id" IN (
+          SELECT "id" FROM "customers" WHERE "email" LIKE ${`${RUN}%`}
+        )`,
   )
   await db().execute(
     sql`DELETE FROM "subscriptions" WHERE "provider_subscription_id" LIKE ${`sub_${RUN}%`}`,
@@ -139,12 +146,6 @@ const makeWorld = async (suffix: string) => {
     },
   })
 
-  const number = await allocateDocumentNumber({
-    payload,
-    series: 'INVOICE',
-    year: TEST_YEAR,
-  })
-
   const invoice = await payload.create({
     collection: 'invoices',
     overrideAccess: true,
@@ -152,9 +153,7 @@ const makeWorld = async (suffix: string) => {
     data: {
       deliveryState: 'PENDING',
       deliveryAttempts: 0,
-      number: number.number,
-      numberYear: number.year,
-      numberSequence: number.sequence,
+      accountingState: 'PENDING',
       customer: Number(customer.id),
       subscription: Number(subscription.id),
       issuedAt: new Date('2026-06-01T00:00:00.000Z').toISOString(),
@@ -222,16 +221,14 @@ describe('a refund credits the invoice without touching it', () => {
       now: new Date('2026-06-10T00:00:00.000Z'),
       // billingCountry is now copied from the invoice by issueCreditNote,
       // which is the only place that knows it.
-      allocate: allocateInTestYear,
     })
 
     assert.equal(result.issued, true)
-    // Derived from TEST_YEAR, not written out: the previous hard-coded year
-    // silently stopped matching the moment TEST_YEAR moved.
-    assert.match(
-      String(result.number),
-      new RegExp(`^OD${String(TEST_YEAR)}-\\d{6}$`),
-    )
+    // No number. Fakturoid allocates it with the correction document, and
+    // nothing in this suite reaches Fakturoid — the refund is recorded
+    // regardless, which is the property under test.
+    assert.equal(result.number, null)
+    assert.ok(result.creditNoteId, 'the credit note row should have an id')
 
     const notes = await payload.find({
       collection: 'credit-notes',
@@ -260,7 +257,7 @@ describe('a refund credits the invoice without touching it', () => {
     assert.equal(after.subtotalMinor, before.subtotalMinor)
     assert.equal(after.taxMinor, before.taxMinor)
     assert.equal(after.currency, before.currency)
-    assert.equal(after.number, before.number)
+    assert.equal(after.fakturoidNumber, before.fakturoidNumber)
     assert.equal(after.issuedAt, before.issuedAt)
 
     // Only the status marker moved, so the admin can see at a glance that
@@ -279,7 +276,6 @@ describe('a refund credits the invoice without touching it', () => {
       providerRefundId: `${RUN}-re-2`,
       reason: 'First delivery',
       now: new Date('2026-06-10T00:00:00.000Z'),
-      allocate: allocateInTestYear,
     })
     const second = await issueCreditNoteForRefund({
       payload,
@@ -289,7 +285,6 @@ describe('a refund credits the invoice without touching it', () => {
       providerRefundId: `${RUN}-re-2`,
       reason: 'Redelivery',
       now: new Date('2026-06-10T00:00:00.000Z'),
-      allocate: allocateInTestYear,
     })
 
     assert.equal(first.issued, true)
@@ -324,7 +319,6 @@ describe('a refund credits the invoice without touching it', () => {
           providerRefundId: `${RUN}-re-3`,
           reason: `Concurrent delivery ${String(index)}`,
           now: new Date('2026-06-10T00:00:00.000Z'),
-          allocate: allocateInTestYear,
         }),
       ),
     )
@@ -366,7 +360,6 @@ describe('a refund credits the invoice without touching it', () => {
       providerRefundId: `${RUN}-re-4`,
       reason: 'Partial',
       now: new Date('2026-06-10T00:00:00.000Z'),
-      allocate: allocateInTestYear,
     })
 
     // The credit note exists, and the invoice is STILL immutable. Writing the
