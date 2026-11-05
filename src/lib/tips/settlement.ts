@@ -42,6 +42,33 @@
  * A VOID leg therefore does NOT void the accumulator — it drops out at 1.000
  * and the remaining legs still decide it. A LOST leg loses the whole thing
  * regardless of the others, because the legs are an AND.
+ *
+ * ──────────────────────────────────────────────────────────────────────────
+ * A TIP THAT IS VOID OVERALL LEAVES THE ROI ENTIRELY
+ *
+ * The operator's methodology: a void bet is neither a win nor a loss. The
+ * stake comes back, nothing was risked, so it is excluded from BOTH sides of
+ * the ROI fraction — numerator and denominator.
+ *
+ * Excluding it from the numerator changes nothing arithmetically, because a
+ * void tip's profit is exactly zero by construction. The denominator is where
+ * it matters: leaving the stake in would divide the same profit by a larger
+ * number and report a return lower than the one actually achieved on the
+ * money that was at risk.
+ *
+ * The distinction to hold on to is BETWEEN A LEG AND A TIP:
+ *
+ *   - a VOID LEG inside an accumulator changes nothing here. That tip
+ *     settled, it had money at risk, and it counts in full;
+ *   - only a tip whose OVERALL result is VOID drops out.
+ *
+ * "Void overall" is what `tipResult` says, which includes a push — an
+ * accumulator whose multiplier lands on exactly 1.000. That is the right
+ * reading: the stake came back, so nothing was at risk either way.
+ *
+ * Void tips are NOT hidden. They keep their own count in the record and stay
+ * fully visible in the history, marked as void. A record that quietly dropped
+ * them would be understating its own sample size.
  */
 import {
   BASIS_POINTS_SCALE,
@@ -396,8 +423,21 @@ export type TrackRecord = {
   settled: number
   won: number
   lost: number
+  /**
+   * Tips that were void overall. Counted, never hidden.
+   *
+   * These are excluded from `stakedUnits` and therefore from the ROI; this
+   * count is how a reader still sees they happened.
+   */
   void: number
-  /** Total staked, in whole units. */
+  /**
+   * Staked on the tips that COUNT FOR ROI, in whole units.
+   *
+   * Not the sum of every stake: void tips are excluded, because their stake
+   * came back and was never at risk. So this is the ROI denominator, and on a
+   * record containing voids it is deliberately smaller than the total of the
+   * stake column. See the header.
+   */
   stakedUnits: number
   /** Net profit, in HUNDREDTHS of a unit. 150 = 1.5 units. */
   profitHundredths: number
@@ -462,10 +502,15 @@ const matchesFilter = (
  * Aggregate a set of tips into a track record.
  *
  * Only SETTLED tips contribute to the money figures: a pending tip has no
- * result, and a voided one has no stake at risk. Statuses can still be
- * filtered, so a caller can ask "how many drafts are there" — but the
- * arithmetic always ignores anything unsettled, because including it would
- * mean publishing a return on bets that have not finished.
+ * result. Statuses can still be filtered, so a caller can ask "how many
+ * drafts are there" — but the arithmetic always ignores anything unsettled,
+ * because including it would mean publishing a return on bets that have not
+ * finished.
+ *
+ * Tips that are VOID OVERALL are counted in `settled` and in `void`, and in
+ * the average-price and closing-line figures — the price we took is a fact
+ * about our selection whatever happened to the fixture — but they are left
+ * out of `stakedUnits` and so out of the ROI. See the module header.
  */
 export const trackRecord = (
   tips: readonly TrackRecordTip[],
@@ -499,8 +544,16 @@ export const trackRecord = (
       voided += 1
     }
 
-    stakedUnits += tip.stakeUnits
-    profitTotal += BigInt(profitHundredths(tip.selections, tip.stakeUnits))
+    // THE VOID RULE. A tip that is void overall had its stake returned, so it
+    // contributes to neither side of the ROI fraction.
+    //
+    // Its profit is exactly zero anyway, so skipping the numerator is a
+    // no-op; it is written this way so that the two exclusions sit together
+    // and nobody later "optimises" the denominator out of step with it.
+    if (result !== 'VOID') {
+      stakedUnits += tip.stakeUnits
+      profitTotal += BigInt(profitHundredths(tip.selections, tip.stakeUnits))
+    }
 
     const taken = combinedOddsThousandths(tip.selections)
     oddsSumThousandths += BigInt(taken)

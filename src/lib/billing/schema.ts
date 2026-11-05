@@ -177,6 +177,17 @@ const INTEGER_COLUMNS: Record<
     // Nullable: confidence is optional and presentational.
     confidence: { column: 'confidence', notNull: false },
   },
+  /* --- Editable content -------------------------------------------------- */
+  // `sortOrder` on the FAQ, for the same reason as `plans.sortOrder`: it is a
+  // position in a list, and a `numeric` column for a position invites 1.5 as
+  // "between 1 and 2" — which works until somebody needs a third value
+  // between 1.5 and 2 and the list quietly starts depending on float
+  // comparison. The collection's own `validate` already demands an integer;
+  // this is the database agreeing.
+  faq_entries: {
+    sortOrder: { column: 'sort_order', notNull: true, default: 0 },
+  },
+
   tip_selections: {
     // Hundredths. Nullable — many markets have no line.
     line: { column: 'line', notNull: false },

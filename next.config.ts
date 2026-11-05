@@ -1,5 +1,14 @@
 import { withPayload } from '@payloadcms/next/withPayload'
+import createNextIntlPlugin from 'next-intl/plugin'
 import type { NextConfig } from 'next'
+
+/**
+ * next-intl, pointed at the request config.
+ *
+ * No routing middleware: there is one locale and it is unprefixed, so there
+ * is nothing to negotiate. See `src/i18n/request.ts`.
+ */
+const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts')
 
 /**
  * Baseline security headers.
@@ -60,6 +69,23 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+
+  /**
+   * `global-not-found.tsx`, which needs this flag.
+   *
+   * This app has TWO root layouts — `(frontend)` and `(payload)` — so when a
+   * request matches no route at all, Next cannot choose which one to render
+   * the 404 inside and falls back to its own grey default page. Verified by
+   * requesting a nonsense URL before this was added.
+   *
+   * `experimental.globalNotFound` is the documented way out of exactly that
+   * situation. It is experimental, so it is worth knowing why it is here:
+   * without it the site has no 404 of its own for a mistyped URL, which is
+   * the single most common way anybody arrives at one.
+   */
+  experimental: {
+    globalNotFound: true,
+  },
   // Drops the `X-Powered-By: Next.js` fingerprint.
   poweredByHeader: false,
 
@@ -78,4 +104,6 @@ const nextConfig: NextConfig = {
   },
 }
 
-export default withPayload(nextConfig, { devBundleServerPackages: false })
+export default withPayload(withNextIntl(nextConfig), {
+  devBundleServerPackages: false,
+})

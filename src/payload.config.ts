@@ -14,6 +14,13 @@ import { Sports } from '@/collections/tips/Sports'
 import { TipAuditEvents } from '@/collections/tips/TipAuditEvents'
 import { TipSelections } from '@/collections/tips/TipSelections'
 import { Tips } from '@/collections/tips/Tips'
+
+// Editable content, added in step 6: the public site needs copy the
+// operator can change without a deploy.
+import { ContactSubmissions } from '@/collections/content/ContactSubmissions'
+import { FaqEntries } from '@/collections/content/FaqEntries'
+import { LegalPages } from '@/collections/content/LegalPages'
+import { SiteSettings } from '@/globals/SiteSettings'
 import { BillingProviderRefs } from '@/collections/billing/BillingProviderRefs'
 import { ConsentRecords } from '@/collections/billing/ConsentRecords'
 import { CreditNotes } from '@/collections/billing/CreditNotes'
@@ -98,7 +105,16 @@ export default buildConfig({
     Tips,
     TipSelections,
     TipAuditEvents,
+
+    // Editable public content. Public read is a QUERY CONSTRAINT on each of
+    // these, not a boolean — see their access blocks for why an unpublished
+    // privacy policy must not be reachable through the REST API either.
+    LegalPages,
+    FaqEntries,
+    ContactSubmissions,
   ],
+
+  globals: [SiteSettings],
 
   db: postgresAdapter({
     pool: {

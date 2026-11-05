@@ -308,14 +308,23 @@ describe('tipResult', () => {
  *                                                           ────────
  *                                                   total    = +5.75
  *
- *  staked  = 2+1+3+1+2+1+2+2+1+1                     = 16 units
+ *  THE VOID RULE: tip #6 is void overall, so its stake was returned and
+ *  nothing was at risk. It leaves BOTH sides of the ROI fraction. It is still
+ *  counted as settled, still counted as void, and still in the average price.
+ *
+ *  Note that #10 is NOT affected. It has a void LEG, but the tip itself won,
+ *  so its stake was at risk and it counts in full.
+ *
+ *  staked  = 2+1+3+1+2 + 2+2+1+1   (#6's 1 excluded)  = 15 units
  *  profit  = +5.75 units                             = 575 hundredths
- *  ROI     = 5.75 ÷ 16 = 0.359375 = 35.9375%         = 3593.75 bps
- *            rounded half away from zero             → 3594 bps
+ *            (#6 contributed 0.00 either way)
+ *  ROI     = 5.75 ÷ 15 = 0.3833333… = 38.33333%      = 3833.333 bps
+ *            rounded half away from zero             → 3833 bps
  *
  *  won  = #1, #2, #5, #7, #9, #10                    = 6
  *  lost = #3, #4, #8                                 = 3
  *  void = #6                                         = 1
+ *  settled = 10  (the void is counted, not hidden)
  *
  *  combined prices (thousandths):
  *    2000, 1800, 1500, 2500, 3000, 1900, 1950, 2200,
@@ -418,9 +427,10 @@ describe('trackRecord — the worked example', () => {
     assert.equal(record.won, 6)
     assert.equal(record.lost, 3)
     assert.equal(record.void, 1)
-    assert.equal(record.stakedUnits, 16)
+    // 15, not 16: tip #6 is void overall and its stake leaves the ROI.
+    assert.equal(record.stakedUnits, 15)
     assert.equal(record.profitHundredths, 575, '+5.75 units')
-    assert.equal(record.roiBasisPoints, 3594, '35.9375% → 3594 bps')
+    assert.equal(record.roiBasisPoints, 3833, '38.33333% → 3833 bps')
     assert.equal(record.averageOddsThousandths, 2345, 'mean price 2.345')
     assert.equal(record.closingLineValueBasisPoints, 263)
     assert.equal(record.closingLineSampleSize, 2)
@@ -513,7 +523,7 @@ describe('trackRecord — edges', () => {
     // Identical to the worked example: publishing a return on bets that have
     // not finished would be the easiest way to flatter the record.
     assert.equal(record.settled, 10)
-    assert.equal(record.stakedUnits, 16)
+    assert.equal(record.stakedUnits, 15)
     assert.equal(record.profitHundredths, 575)
   })
 
@@ -557,7 +567,7 @@ describe('trackRecord — edges', () => {
     assert.equal(record.roiBasisPoints, -10_000)
   })
 
-  it('counts a void tip in the staked total but not as a win or a loss', () => {
+  it('leaves a void tip out of the ROI while still counting it', () => {
     const record = trackRecord([
       {
         id: 1,
@@ -569,12 +579,44 @@ describe('trackRecord — edges', () => {
       },
     ])
 
+    // Visible: it settled, and it was void. Neither a win nor a loss.
+    assert.equal(record.settled, 1)
     assert.equal(record.void, 1)
     assert.equal(record.won, 0)
     assert.equal(record.lost, 0)
-    assert.equal(record.stakedUnits, 4)
+
+    // Nothing was at risk, so there is nothing to divide by.
+    assert.equal(record.stakedUnits, 0)
     assert.equal(record.profitHundredths, 0)
-    assert.equal(record.roiBasisPoints, 0)
+    // NULL, not zero. "0% return" would be a claim about money that was
+    // staked; no money was. Reporting 0% on an all-void record would invent a
+    // result out of an absence of one.
+    assert.equal(record.roiBasisPoints, null)
+
+    // The price we took is still a fact about the selection.
+    assert.equal(record.averageOddsThousandths, 2000)
+  })
+
+  it('keeps a void LEG inside a winning accumulator in the ROI', () => {
+    // The distinction that does the work: a void leg is not a void tip. This
+    // tip settled and its stake was at risk, so it counts in full.
+    const record = trackRecord([
+      {
+        id: 1,
+        sportCode: 'FOOTBALL',
+        status: 'SETTLED',
+        publishedAt: '2026-03-01T10:00:00.000Z',
+        stakeUnits: 2,
+        selections: [leg('WON', 2000), leg('VOID', 1800)],
+      },
+    ])
+
+    assert.equal(record.won, 1)
+    assert.equal(record.void, 0)
+    assert.equal(record.stakedUnits, 2, 'the stake was at risk')
+    // Void leg drops out at 1.000, so the multiplier is 2.000: +2.00 on 2.
+    assert.equal(record.profitHundredths, 200)
+    assert.equal(record.roiBasisPoints, 10_000, '+100%')
   })
 
   it('computes closing line value only from tips that have it', () => {

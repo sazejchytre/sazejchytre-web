@@ -88,6 +88,9 @@ export interface Config {
     tips: Tip;
     'tip-selections': TipSelection;
     'tip-audit-events': TipAuditEvent;
+    'legal-pages': LegalPage;
+    'faq-entries': FaqEntry;
+    'contact-submissions': ContactSubmission;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -116,6 +119,9 @@ export interface Config {
     tips: TipsSelect<false> | TipsSelect<true>;
     'tip-selections': TipSelectionsSelect<false> | TipSelectionsSelect<true>;
     'tip-audit-events': TipAuditEventsSelect<false> | TipAuditEventsSelect<true>;
+    'legal-pages': LegalPagesSelect<false> | LegalPagesSelect<true>;
+    'faq-entries': FaqEntriesSelect<false> | FaqEntriesSelect<true>;
+    'contact-submissions': ContactSubmissionsSelect<false> | ContactSubmissionsSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -125,8 +131,12 @@ export interface Config {
     defaultIDType: number;
   };
   fallbackLocale: null;
-  globals: {};
-  globalsSelect: {};
+  globals: {
+    'site-settings': SiteSetting;
+  };
+  globalsSelect: {
+    'site-settings': SiteSettingsSelect<false> | SiteSettingsSelect<true>;
+  };
   locale: null;
   widgets: {
     collections: CollectionsWidget;
@@ -1216,6 +1226,114 @@ export interface TipAuditEvent {
   createdAt: string;
 }
 /**
+ * Právní dokumenty. Změna obsahu, ke kterému už někdo udělil souhlas, patří do nové verze.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "legal-pages".
+ */
+export interface LegalPage {
+  id: number;
+  /**
+   * Který dokument to je. URL se podle toho neurčuje dynamicky — každá stránka má vlastní route.
+   */
+  pageSlug: 'obchodni-podminky' | 'ochrana-osobnich-udaju' | 'cookies' | 'metodika';
+  /**
+   * Nadpis stránky, zobrazí se jako h1.
+   */
+  title: string;
+  /**
+   * Např. 2026-01. Na tuto hodnotu odkazuje záznam o souhlasu, takže se u zveřejněné verze nemění.
+   */
+  version: string;
+  /**
+   * Od kdy je dokument účinný. Budoucí datum je v pořádku — do té doby se neservíruje jako aktuální.
+   */
+  effectiveFrom?: string | null;
+  /**
+   * Nezveřejněný dokument není vidět nikde — ani na stránce, ani v API.
+   */
+  published: boolean;
+  /**
+   * Jedna až dvě věty pro meta description. Bez toho se použije začátek textu.
+   */
+  summary?: string | null;
+  /**
+   * Text dokumentu.
+   */
+  body: {
+    root: {
+      type: string;
+      children: {
+        type: any;
+        version: number;
+        [k: string]: unknown;
+      }[];
+      direction: ('ltr' | 'rtl') | null;
+      format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+      indent: number;
+      version: number;
+    };
+    [k: string]: unknown;
+  };
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Otázky a odpovědi na úvodní stránce. Odpovědi jdou i do strukturovaných dat, takže musí být čistý text.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "faq-entries".
+ */
+export interface FaqEntry {
+  id: number;
+  /**
+   * Otázka tak, jak by ji napsal čtenář. Ne nadpis — otázka.
+   */
+  question: string;
+  /**
+   * Čistý text. Jde do strukturovaných dat, kde musí odpovídat tomu, co je na stránce.
+   */
+  answer: string;
+  /**
+   * Menší číslo je výš. Integer — viz src/lib/billing/schema.ts.
+   */
+  sortOrder: number;
+  published: boolean;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Zprávy z kontaktního formuláře. Zapisují se před odesláním notifikace, takže se neztratí ani když e-mail nevyjde.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "contact-submissions".
+ */
+export interface ContactSubmission {
+  id: number;
+  name: string;
+  email: string;
+  subject: string;
+  message: string;
+  /**
+   * Kdy odešla notifikace. Prázdné znamená, že zpráva přišla, ale e-mail nevyšel — podívejte se na notifyError.
+   */
+  notifiedAt?: string | null;
+  /**
+   * Proč notifikace nevyšla. Nikdy neobsahuje text zprávy ani tajemství.
+   */
+  notifyError?: string | null;
+  /**
+   * Zkrácený prefix IP, ne celá adresa. Slouží jen k rozpoznání záplavy z jedné sítě.
+   */
+  ipPrefix?: string | null;
+  /**
+   * Zaškrtnuto znamená, že ověření proti robotům se nepodařilo provést (Cloudflare neodpověděl) a zpráva prošla jen na základě limitu a honeypotu.
+   */
+  turnstileDegraded?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv".
  */
@@ -1322,6 +1440,18 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'tip-audit-events';
         value: number | TipAuditEvent;
+      } | null)
+    | ({
+        relationTo: 'legal-pages';
+        value: number | LegalPage;
+      } | null)
+    | ({
+        relationTo: 'faq-entries';
+        value: number | FaqEntry;
+      } | null)
+    | ({
+        relationTo: 'contact-submissions';
+        value: number | ContactSubmission;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -1771,6 +1901,49 @@ export interface TipAuditEventsSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "legal-pages_select".
+ */
+export interface LegalPagesSelect<T extends boolean = true> {
+  pageSlug?: T;
+  title?: T;
+  version?: T;
+  effectiveFrom?: T;
+  published?: T;
+  summary?: T;
+  body?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "faq-entries_select".
+ */
+export interface FaqEntriesSelect<T extends boolean = true> {
+  question?: T;
+  answer?: T;
+  sortOrder?: T;
+  published?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "contact-submissions_select".
+ */
+export interface ContactSubmissionsSelect<T extends boolean = true> {
+  name?: T;
+  email?: T;
+  subject?: T;
+  message?: T;
+  notifiedAt?: T;
+  notifyError?: T;
+  ipPrefix?: T;
+  turnstileDegraded?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv_select".
  */
 export interface PayloadKvSelect<T extends boolean = true> {
@@ -1808,6 +1981,71 @@ export interface PayloadMigrationsSelect<T extends boolean = true> {
   batch?: T;
   updatedAt?: T;
   createdAt?: T;
+}
+/**
+ * Kontakty a odkazy. Identita provozovatele ani ceny tu nejsou — viz komentář v src/globals/SiteSettings.ts.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "site-settings".
+ */
+export interface SiteSetting {
+  id: number;
+  /**
+   * Zobrazuje se v patičce a na kontaktu. Když formulář nevyjde, nabídne se tahle adresa jako náhrada.
+   */
+  contactEmail: string;
+  /**
+   * Kam chodí notifikace o nové zprávě z formuláře. Prázdné = stejná adresa jako contactEmail.
+   */
+  notificationEmail?: string | null;
+  /**
+   * Povinná součást každé stránky. Číslo je předvyplněné na Národní linku pro odvykání.
+   */
+  helpline: {
+    name: string;
+    /**
+     * Ve formátu, v jakém se má zobrazit.
+     */
+    phone: string;
+    url?: string | null;
+  };
+  /**
+   * Jdou i do strukturovaných dat jako sameAs, takže tu patří jen profily, které opravdu existují.
+   */
+  socialLinks?:
+    | {
+        platform: 'x' | 'facebook' | 'instagram' | 'youtube' | 'discord' | 'telegram';
+        url: string;
+        id?: string | null;
+      }[]
+    | null;
+  updatedAt?: string | null;
+  createdAt?: string | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "site-settings_select".
+ */
+export interface SiteSettingsSelect<T extends boolean = true> {
+  contactEmail?: T;
+  notificationEmail?: T;
+  helpline?:
+    | T
+    | {
+        name?: T;
+        phone?: T;
+        url?: T;
+      };
+  socialLinks?:
+    | T
+    | {
+        platform?: T;
+        url?: T;
+        id?: T;
+      };
+  updatedAt?: T;
+  createdAt?: T;
+  globalType?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema

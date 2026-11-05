@@ -12,7 +12,21 @@
 #   esbuild             native binary used by the TS/bundler toolchain
 #   sharp               native libvips bindings; image processing needs these
 #   unrs-resolver       native resolver used by the ESLint import plugin
+#
+# Denied, and why — both arrived as transitive dependencies of next-intl in
+# step 6 and neither is on a path this project executes:
+#
+#   @parcel/watcher  a native file watcher for dev tooling. Next has its own,
+#                    and nothing here imports this one.
+#   @swc/core        a Rust compiler. Next bundles the SWC it actually uses;
+#                    this copy is a sub-dependency's own build tooling.
+#
+# Denying them means no native binary is fetched or compiled for either, which
+# is the point: an install script is arbitrary code, and "we do not need it" is
+# a better reason to skip one than "it probably works".
 allowBuilds:
+  '@parcel/watcher': false
+  '@swc/core': false
   '@tailwindcss/oxide': true
   esbuild: true
   sharp: true

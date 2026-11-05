@@ -13,7 +13,7 @@
  */
 import { z } from 'zod'
 
-import { formatEnvIssues } from './env-format'
+import { formatEnvIssues } from './env-format.ts'
 
 const publicEnvSchema = z.object({
   /** Canonical public origin of the app, e.g. https://sazejchytre.cz */
@@ -42,6 +42,17 @@ const publicEnvSchema = z.object({
     .refine((value) => value.startsWith('pk_'), {
       error: 'must be a Stripe publishable key (pk_test_… or pk_live_…)',
     }),
+
+  /* ───────────────────────────────────────────────────────────────────────
+     NOTE: the Turnstile SITE key is deliberately NOT here.
+
+     It is world-readable, so it would be legal here — but a `NEXT_PUBLIC_*`
+     value is inlined at BUILD time, which means rotating the widget requires
+     a rebuild. It lives in `env.ts` as `TURNSTILE_SITE_KEY` instead and is
+     handed to the widget as a prop by the server component that renders the
+     form. Same visibility to the browser, one fewer variable, and rotatable
+     without a deploy.
+     ─────────────────────────────────────────────────────────────────────── */
 })
 
 export type PublicEnv = z.infer<typeof publicEnvSchema>

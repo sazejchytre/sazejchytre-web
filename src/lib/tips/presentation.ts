@@ -160,8 +160,12 @@ export const trackRecordDataset = (
       unitText: 'tipů',
     },
     {
+      // Labelled "excluding void" because it is: a void tip's stake came back
+      // and leaves the ROI denominator. A dataset that called this plain
+      // "Vsazeno" would not add up against the stake column in the table, and
+      // the reader would be right to distrust the ROI rather than the label.
       name: 'stakedUnits',
-      label: 'Vsazeno',
+      label: 'Vsazeno (bez zrušených tipů)',
       value: record.stakedUnits,
       scale: 1,
       unitText: 'jednotek',

@@ -56,6 +56,8 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
 
 import { env } from '../env.ts'
+import { redisPipeline } from '../redis/client.ts'
+import { RedisUnavailableError } from '../redis/upstash.ts'
 import {
   FAILURE_WINDOW_SECONDS,
   RATE_LIMITS,
@@ -149,61 +151,17 @@ const lockKey = (value: string): string => `${KEY_PREFIX}:lock:${value}`
 /* Upstash REST transport                                                     */
 /* -------------------------------------------------------------------------- */
 
-/** How long we wait on Redis before treating it as unreachable. */
-const REDIS_TIMEOUT_MS = 2_000
-
-class RedisUnavailableError extends Error {}
-
-/**
- * Run a pipeline of Redis commands.
+/*
+ * The transport moved to `src/lib/redis/upstash.ts` when the public forms
+ * needed to count things too.
  *
- * @throws {RedisUnavailableError} on any transport, timeout or protocol fault.
- *   Callers translate that into a closed door, never into "allowed".
+ * It is only the transport that is shared. The DECISION about an unreachable
+ * Redis stays here, and it is the opposite of the one the forms make: this
+ * module fails closed, because an outage otherwise opens an unlimited
+ * password-guessing window. See the note at the top of this file, and the
+ * matching note in `src/lib/forms/rate-limit.ts` for why a contact form
+ * reasons the other way round.
  */
-const pipeline = async (commands: string[][]): Promise<unknown[]> => {
-  let response: Response
-
-  try {
-    response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/pipeline`, {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`,
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify(commands),
-      signal: AbortSignal.timeout(REDIS_TIMEOUT_MS),
-      cache: 'no-store',
-    })
-  } catch (cause) {
-    throw new RedisUnavailableError('Upstash request failed', { cause })
-  }
-
-  if (!response.ok) {
-    throw new RedisUnavailableError(`Upstash responded ${response.status}`)
-  }
-
-  let body: unknown
-
-  try {
-    body = await response.json()
-  } catch (cause) {
-    throw new RedisUnavailableError('Upstash returned invalid JSON', { cause })
-  }
-
-  if (!Array.isArray(body)) {
-    throw new RedisUnavailableError('Upstash returned an unexpected shape')
-  }
-
-  return body.map((entry) => {
-    const item = entry as { result?: unknown; error?: unknown }
-
-    if (item?.error) {
-      throw new RedisUnavailableError(String(item.error))
-    }
-
-    return item?.result
-  })
-}
 
 /* -------------------------------------------------------------------------- */
 /* Public API                                                                 */
@@ -283,7 +241,7 @@ export const enforceRateLimit = async ({
   let results: unknown[]
 
   try {
-    results = await pipeline(commands)
+    results = await redisPipeline(commands)
   } catch (error) {
     if (error instanceof RedisUnavailableError) {
       // FAIL CLOSED. See the note at the top of this file.
@@ -335,7 +293,7 @@ export const recordAuthFailure = async (
   const account = accountKeyHash(identifier)
 
   try {
-    const [failuresRaw] = await pipeline([
+    const [failuresRaw] = await redisPipeline([
       ['INCR', failureKey(account)],
       ['EXPIRE', failureKey(account), String(FAILURE_WINDOW_SECONDS)],
     ])
@@ -344,7 +302,7 @@ export const recordAuthFailure = async (
     const lockSeconds = lockSecondsForFailures(failures)
 
     if (lockSeconds > 0) {
-      await pipeline([
+      await redisPipeline([
         ['SET', lockKey(account), String(failures), 'EX', String(lockSeconds)],
       ])
     }
@@ -364,7 +322,7 @@ export const clearAuthFailures = async (identifier: string): Promise<void> => {
   const account = accountKeyHash(identifier)
 
   try {
-    await pipeline([
+    await redisPipeline([
       ['DEL', failureKey(account)],
       ['DEL', lockKey(account)],
     ])
@@ -386,7 +344,7 @@ export const lockoutStatus = async (
   const account = accountKeyHash(identifier)
 
   try {
-    const [ttl, failures] = await pipeline([
+    const [ttl, failures] = await redisPipeline([
       ['TTL', lockKey(account)],
       ['GET', failureKey(account)],
     ])
@@ -452,7 +410,7 @@ export const claimTotpCode = async (
   const key = `${KEY_PREFIX}:totp:${accountKeyHash(`${userId}:${code}`)}`
 
   try {
-    const [result] = await pipeline([
+    const [result] = await redisPipeline([
       ['SET', key, '1', 'NX', 'EX', String(windowSeconds)],
     ])
 

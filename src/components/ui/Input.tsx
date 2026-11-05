@@ -1,0 +1,226 @@
+/**
+ * Text input, textarea, select and checkbox, with their labels and errors.
+ *
+ * ──────────────────────────────────────────────────────────────────────────
+ * ONE BORDER COLOUR, ON EVERY SURFACE
+ *
+ * `border-strong` reaches 3:1 against all three surfaces — 3.91 / 3.75 / 3.13
+ * in light, 5.30 / 4.19 / 3.32 in dark — so a control looks the same wherever
+ * it sits and there is nothing for a caller to get wrong.
+ *
+ * These components briefly took an `on="page" | "raised"` prop, because an
+ * earlier `border-strong` was under 3:1 on two of the three surfaces and a
+ * control inside a card had to step up to `ink-muted`. The token was fixed
+ * instead, and the prop went with it: a conditional border is a decision at
+ * every call site, and the one thing worse than a wrong border is a border
+ * that is right only when somebody remembers an argument.
+ *
+ * ──────────────────────────────────────────────────────────────────────────
+ * ERRORS ARE WIRED, NOT JUST COLOURED
+ *
+ * `aria-invalid` and `aria-describedby` point at the message, so a screen
+ * reader announces WHY the field was rejected rather than only that it was.
+ * Colour alone would say nothing to a screen reader and nothing to a
+ * colour-blind reader either, which is why the message is always text.
+ */
+import type { ComponentProps, ReactNode } from 'react'
+
+import { cn } from './cn'
+
+const CONTROL_BASE = cn(
+  'w-full rounded-input border border-border-strong bg-surface-page text-ink',
+  'px-3 py-2 text-body',
+  'placeholder:text-ink-muted',
+  'min-h-11',
+  'disabled:cursor-not-allowed disabled:opacity-60',
+)
+
+const INVALID = 'border-result-loss'
+
+/* -------------------------------------------------------------------------- */
+/* Field wrapper                                                              */
+/* -------------------------------------------------------------------------- */
+
+export type FieldProps = {
+  /** The control's `id`. Required: a label without one labels nothing. */
+  id: string
+  label: string
+  /** Rendered under the control, and announced via aria-describedby. */
+  hint?: ReactNode
+  error?: string | undefined
+  required?: boolean
+  children: (ids: { id: string; describedBy: string | undefined }) => ReactNode
+}
+
+/**
+ * Label, control and message, with the aria wiring done once.
+ *
+ * A render prop rather than cloning the child: cloning would silently drop
+ * props a caller had set, and this way the control keeps full control of
+ * itself while still being handed the ids it must use.
+ */
+export const Field = ({
+  id,
+  label,
+  hint,
+  error,
+  required = false,
+  children,
+}: FieldProps) => {
+  const hintId = hint ? `${id}-hint` : undefined
+  const errorId = error ? `${id}-error` : undefined
+  const describedBy = [hintId, errorId].filter(Boolean).join(' ') || undefined
+
+  return (
+    <div className="flex flex-col gap-1">
+      <label htmlFor={id} className="text-label text-ink">
+        {label}
+        {required ? (
+          <>
+            {' '}
+            <span className="text-result-loss" aria-hidden="true">
+              *
+            </span>
+            {/* The asterisk is decoration; this is what a screen reader
+                hears. `required` on the control carries it too, but a visible
+                convention needs a spoken equivalent. */}
+            <span className="sr-only-focusable">(povinné)</span>
+          </>
+        ) : null}
+      </label>
+
+      {children({ id, describedBy })}
+
+      {hint ? (
+        <p id={hintId} className="text-body-sm text-ink-muted">
+          {hint}
+        </p>
+      ) : null}
+
+      {error ? (
+        // `role="alert"` so a message that appears after submission is
+        // announced without the user having to go looking for it.
+        <p id={errorId} role="alert" className="text-body-sm text-result-loss">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+/* Controls                                                                   */
+/* -------------------------------------------------------------------------- */
+
+export type InputProps = Omit<ComponentProps<'input'>, 'className'> & {
+  invalid?: boolean
+  className?: string
+}
+
+export const Input = ({ invalid = false, className, ...rest }: InputProps) => (
+  <input
+    className={cn(CONTROL_BASE, invalid && INVALID, className)}
+    aria-invalid={invalid || undefined}
+    {...rest}
+  />
+)
+
+export type TextareaProps = Omit<ComponentProps<'textarea'>, 'className'> & {
+  invalid?: boolean
+  className?: string
+}
+
+export const Textarea = ({
+  invalid = false,
+  className,
+  rows = 6,
+  ...rest
+}: TextareaProps) => (
+  <textarea
+    rows={rows}
+    className={cn(
+      CONTROL_BASE,
+      invalid && INVALID,
+      // A textarea with a fixed height fights the user; vertical only, so it
+      // cannot be dragged out of the layout sideways.
+      'resize-y',
+      className,
+    )}
+    aria-invalid={invalid || undefined}
+    {...rest}
+  />
+)
+
+export type SelectProps = Omit<ComponentProps<'select'>, 'className'> & {
+  invalid?: boolean
+  className?: string
+}
+
+export const Select = ({
+  invalid = false,
+  className,
+  ...rest
+}: SelectProps) => (
+  <select
+    className={cn(CONTROL_BASE, invalid && INVALID, className)}
+    aria-invalid={invalid || undefined}
+    {...rest}
+  />
+)
+
+export type CheckboxProps = Omit<
+  ComponentProps<'input'>,
+  'className' | 'type'
+> & {
+  id: string
+  /** The full consent sentence. Never truncated — it is the record. */
+  label: ReactNode
+  error?: string | undefined
+  className?: string
+}
+
+/**
+ * A checkbox with its label beside it.
+ *
+ * The box itself stays 20px because a 44px checkbox looks broken — the 44px
+ * target is met by the padding on the surrounding label, which is what the
+ * pointer actually hits.
+ */
+export const Checkbox = ({
+  id,
+  label,
+  error,
+  className,
+  ...rest
+}: CheckboxProps) => {
+  const errorId = error ? `${id}-error` : undefined
+
+  return (
+    <div className="flex flex-col gap-1">
+      <label
+        htmlFor={id}
+        className="flex min-h-11 items-start gap-3 py-2 text-body-sm text-ink"
+      >
+        <input
+          id={id}
+          type="checkbox"
+          className={cn(
+            'mt-0.5 size-5 shrink-0 rounded-input border border-border-strong',
+            'accent-brand',
+            className,
+          )}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={errorId}
+          {...rest}
+        />
+        <span>{label}</span>
+      </label>
+
+      {error ? (
+        <p id={errorId} role="alert" className="text-body-sm text-result-loss">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  )
+}

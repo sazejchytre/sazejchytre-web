@@ -1,138 +1,362 @@
 @import 'tailwindcss';
 
 /* ===========================================================================
-   DESIGN TOKENS — structural only.
+   DESIGN TOKENS
    ---------------------------------------------------------------------------
-   Tailwind v4 generates utilities directly from the custom properties in
-   `@theme`. A token defined here becomes a utility class automatically:
-   `--color-neutral-700` produces `bg-neutral-700`, `text-neutral-700`, etc.
+   Tailwind v4 generates utilities from the custom properties below, so a
+   token here becomes a class automatically: `--color-ink` produces
+   `text-ink`, `bg-ink`, `border-ink`.
 
-   Scope of this step: spacing, radii, a neutral ramp, and a type scale.
-   NO brand colours yet — see the TODO block at the bottom.
+   THE COLOURS ARE SEMANTIC, NOT A HUE RAMP. There is no `green-500`. A
+   component says what a colour is FOR — `surface-raised`, `ink-muted`,
+   `result-loss` — which is what makes the dark theme a value swap rather than
+   a second set of components.
+
+   The same values exist as data in `src/lib/design/tokens.ts`, and
+   `contrast.test.ts` reads this file to prove the two have not drifted. Edit
+   both or the build fails, which is the point.
    =========================================================================== */
+
+/* ---------------------------------------------------------------------------
+   LIGHT THEME VALUES
+   ---------------------------------------------------------------------------
+   Declared as plain custom properties rather than inside `@theme` so the dark
+   theme can redefine them. `@theme inline` below points the utilities at
+   these, so a single media query re-themes the whole site.
+   --------------------------------------------------------------------------- */
+
+:root {
+  /* Surfaces. `brand` and `accent` are surfaces too — see the note below. */
+  --sc-surface-page: #ffffff;
+  --sc-surface-raised: #f8fbf7;
+  --sc-surface-accent: #c5f0d8;
+
+  /* ─────────────────────────────────────────────────────────────────────────
+     Borders.
+
+     `subtle` is DECORATIVE ONLY — 1.26:1 against the page. It separates
+     things that are already distinguishable; it never carries meaning.
+
+     `strong` is for CONTROL borders and must reach 3:1 against every surface
+     it can land on. It does:
+
+                     page    raised   accent
+         light       3.91     3.75     3.13
+         dark        5.30     4.19     3.32
+
+     The value before this one was #7e9a87, which reached 3.06:1 on white and
+     was therefore declared fine — while measuring 2.94:1 on `surface-raised`
+     and 2.45:1 on `surface-accent`. Checking a border against one background
+     is how that happens, which is why the test now multiplies every
+     foreground across every surface in both themes.
+     ───────────────────────────────────────────────────────────────────────── */
+  --sc-border-subtle: #dde8e0;
+  --sc-border-strong: #6d8775;
+
+  /* Text. */
+  --sc-ink: #1a2e1f;
+  --sc-ink-muted: #4a5f50;
+
+  /* ─────────────────────────────────────────────────────────────────────────
+     THE CONTRAST RULE, NON-NEGOTIABLE
+
+     Text on `brand` or `accent` is ALWAYS one of these two, never white:
+
+       white on brand  (#5bc894) = 2.07:1
+       white on accent (#ffd93d) = 1.38:1
+
+     Both are far below the 4.5:1 floor, and both are the first thing anyone
+     reaches for on a saturated fill. These tokens are dark on purpose.
+     ───────────────────────────────────────────────────────────────────────── */
+  --sc-ink-on-brand: #1a2e1f;
+  --sc-ink-on-accent: #1a2e1f;
+
+  /* ─────────────────────────────────────────────────────────────────────────
+     Text on a FILLED result badge.
+
+     The "never white" rule above is scoped to `brand` and `accent`. White on
+     a solid result fill is fine — 5.33:1 on win, 7.30:1 on loss, 5.63:1 on
+     void — and is used.
+
+     It is a token rather than a literal because the DARK theme's result
+     values are light colours, meant as foregrounds on a dark surface. White
+     on those measures 1.77 / 2.58 / 2.32; dark ink measures 8.17 / 5.59 /
+     6.22. So this flips with the theme, exactly like --sc-ink-on-brand.
+     ───────────────────────────────────────────────────────────────────────── */
+  --sc-ink-on-result: #ffffff;
+
+  /* ─────────────────────────────────────────────────────────────────────────
+     `brand` IS A SURFACE COLOUR. It is never text on a light background:
+     #5bc894 on white is 1.95–2.07:1. `brand-text` is the green you may
+     WRITE with, and it is also the focus ring.
+     ───────────────────────────────────────────────────────────────────────── */
+  --sc-brand: #5bc894;
+  --sc-brand-text: #27714e;
+  --sc-accent: #ffd93d;
+
+  /* Results. Never the ONLY signal — always paired with text or a glyph, or
+     a colour-blind reader loses the meaning entirely. */
+  --sc-result-win: #1e7a4c;
+  --sc-result-loss: #9e2f1c;
+  --sc-result-void: #5c6b60;
+
+  /* Shadows are TINTED, never pure black: a neutral black shadow over a green
+     page reads as grey dirt rather than as depth. */
+  --sc-shadow-ambient: rgba(26, 46, 31, 0.06);
+  --sc-shadow-direct: rgba(26, 46, 31, 0.1);
+  --sc-shadow-strong: rgba(26, 46, 31, 0.16);
+
+  /* Reserved for the sticky header, so page offsets are computed once. */
+  --sc-header-h: 4rem; /* 64px */
+}
+
+/* ---------------------------------------------------------------------------
+   DARK THEME VALUES
+   ---------------------------------------------------------------------------
+   Follows the system by default. `[data-theme]` is an override hook for a
+   future toggle; no UI sets it today, and nothing depends on one existing.
+
+   Because the VALUES flip, Tailwind's `dark:` variant is not needed for
+   colour — and should not be used for it. Two mechanisms for one decision is
+   how a component ends up correct in one theme only.
+   --------------------------------------------------------------------------- */
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --sc-surface-page: #0f1711;
+    --sc-surface-raised: #1a2e1f;
+    --sc-surface-accent: #22402c;
+    --sc-border-subtle: #2c4634;
+    --sc-border-strong: #71927b;
+    --sc-ink: #f2f8f3;
+    --sc-ink-muted: #a8bfaf;
+    --sc-ink-on-brand: #1a2e1f;
+    --sc-ink-on-accent: #1a2e1f;
+    /* Dark, because the dark result values are light colours. */
+    --sc-ink-on-result: #1a2e1f;
+    --sc-brand: #5bc894;
+    --sc-brand-text: #7fd9ac;
+    --sc-accent: #ffd93d;
+    --sc-result-win: #6ed79f;
+    --sc-result-loss: #ee8468;
+    --sc-result-void: #9bafa1;
+
+    /* A tinted shadow over a dark page is invisible; depth there comes from
+       the raised surface instead, so these go almost flat. */
+    --sc-shadow-ambient: rgba(0, 0, 0, 0.3);
+    --sc-shadow-direct: rgba(0, 0, 0, 0.4);
+    --sc-shadow-strong: rgba(0, 0, 0, 0.5);
+  }
+}
+
+:root[data-theme='dark'] {
+  --sc-surface-page: #0f1711;
+  --sc-surface-raised: #1a2e1f;
+  --sc-surface-accent: #22402c;
+  --sc-border-subtle: #2c4634;
+  --sc-border-strong: #71927b;
+  --sc-ink: #f2f8f3;
+  --sc-ink-muted: #a8bfaf;
+  --sc-ink-on-brand: #1a2e1f;
+  --sc-ink-on-accent: #1a2e1f;
+  --sc-ink-on-result: #1a2e1f;
+  --sc-brand: #5bc894;
+  --sc-brand-text: #7fd9ac;
+  --sc-accent: #ffd93d;
+  --sc-result-win: #6ed79f;
+  --sc-result-loss: #ee8468;
+  --sc-result-void: #9bafa1;
+  --sc-shadow-ambient: rgba(0, 0, 0, 0.3);
+  --sc-shadow-direct: rgba(0, 0, 0, 0.4);
+  --sc-shadow-strong: rgba(0, 0, 0, 0.5);
+}
+
+@theme inline {
+  /* --- Colours ----------------------------------------------------------- */
+  --color-surface-page: var(--sc-surface-page);
+  --color-surface-raised: var(--sc-surface-raised);
+  --color-surface-accent: var(--sc-surface-accent);
+  --color-border-subtle: var(--sc-border-subtle);
+  --color-border-strong: var(--sc-border-strong);
+  --color-ink: var(--sc-ink);
+  --color-ink-muted: var(--sc-ink-muted);
+  --color-ink-on-brand: var(--sc-ink-on-brand);
+  --color-ink-on-accent: var(--sc-ink-on-accent);
+  --color-ink-on-result: var(--sc-ink-on-result);
+  --color-brand: var(--sc-brand);
+  --color-brand-text: var(--sc-brand-text);
+  --color-accent: var(--sc-accent);
+  --color-result-win: var(--sc-result-win);
+  --color-result-loss: var(--sc-result-loss);
+  --color-result-void: var(--sc-result-void);
+
+  /* --- Fonts -------------------------------------------------------------
+     Supplied by next/font in `layout.tsx`, which self-hosts the files. No
+     <link> to Google: a third-party font request on every page is a
+     third-party dependency on every page, and it leaks visitor IPs.
+     ---------------------------------------------------------------------- */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display:
+    var(--font-barlow), var(--font-inter), ui-sans-serif, sans-serif;
+}
 
 @theme {
   /* --- Spacing -----------------------------------------------------------
-     Tailwind v4 derives its entire dynamic spacing scale from this one value,
-     so `p-1` = 4px, `p-2` = 8px, `p-3` = 12px … `p-14` = 56px, and any
-     integer works (`p-23` = 92px). Everything lands on a 4px grid by
-     construction; there is no separate list to keep in sync.
+     THE GRID IS 8px. The base unit stays 4px so that `2` = 8px and `6` =
+     24px, which is the scale every Tailwind reader already knows — changing
+     the base to 0.5rem would make `gap-3` mean 24px and confuse every future
+     reader for no gain.
+
+     So the grid is a rule, not an arithmetic impossibility: use EVEN steps
+     (2, 4, 6, 8, 12, 16). The odd ones exist for one purpose only, the 4px
+     gap between an icon and its label, where 8px reads as a gap rather than
+     as a pair.
      ---------------------------------------------------------------------- */
   --spacing: 0.25rem; /* 4px */
 
-  /* --- Radii -------------------------------------------------------------- */
-  --radius-none: 0;
-  --radius-xs: 0.125rem; /*  2px */
-  --radius-sm: 0.25rem; /*  4px */
-  --radius-md: 0.375rem; /*  6px */
-  --radius-lg: 0.5rem; /*  8px */
-  --radius-xl: 0.75rem; /* 12px */
-  --radius-2xl: 1rem; /* 16px */
-  --radius-3xl: 1.5rem; /* 24px */
-  --radius-full: 9999px;
-
-  /* --- Neutral ramp -------------------------------------------------------
-     OKLCH, chroma 0 — a true neutral. Perceptually even steps, so contrast
-     behaves predictably when a hue is introduced later.
-
-     Contrast guidance (against `--color-neutral-50` as the page ground):
-       body text        -> 700 or darker
-       secondary text   -> 600 (meets 4.5:1)
-       borders/dividers -> 200-300
-       disabled text    -> 400 (decorative only, never load-bearing)
+  /* --- Radii -------------------------------------------------------------
+     Named by purpose, and NOTHING BELOW 6px EXISTS. That is deliberate:
+     "nothing below 6" is enforced by the absence of a token rather than by a
+     line in a document nobody reads, so a 2px corner is not reachable
+     without adding one here on purpose.
      ---------------------------------------------------------------------- */
-  --color-neutral-50: oklch(0.985 0 0);
-  --color-neutral-100: oklch(0.967 0 0);
-  --color-neutral-200: oklch(0.922 0 0);
-  --color-neutral-300: oklch(0.87 0 0);
-  --color-neutral-400: oklch(0.708 0 0);
-  --color-neutral-500: oklch(0.556 0 0);
-  --color-neutral-600: oklch(0.439 0 0);
-  --color-neutral-700: oklch(0.371 0 0);
-  --color-neutral-800: oklch(0.269 0 0);
-  --color-neutral-900: oklch(0.205 0 0);
-  --color-neutral-950: oklch(0.145 0 0);
+  --radius-input: 0.375rem; /*  6px — inputs, selects, checkboxes */
+  --radius-badge: 0.375rem; /*  6px — badges, result chips */
+  --radius-button: 0.5rem; /*  8px */
+  --radius-card: 1rem; /* 16px */
+  --radius-modal: 1.5rem; /* 24px */
+  --radius-pill: 999px;
+
+  /* --- Shadows ------------------------------------------------------------ */
+  --shadow-raised: 0 1px 2px var(--sc-shadow-ambient);
+  --shadow-card:
+    0 1px 3px var(--sc-shadow-ambient), 0 4px 12px var(--sc-shadow-direct);
+  --shadow-modal: 0 8px 32px var(--sc-shadow-strong);
+
+  /* --- Layout ------------------------------------------------------------- */
+  --container-page: 80rem; /* 1280px */
 
   /* --- Type scale ---------------------------------------------------------
-     Unitless line heights so they scale with the font size. Ratios tighten as
-     the size grows, which is what keeps large headings from looking airy.
+     Absolute line heights, not ratios: a 56px heading at 60px leading is a
+     specific decision, and a unitless 1.07 invites drift the first time
+     someone changes the size.
+
+     Weight is part of the token so that `text-heading` is the whole style and
+     a caller cannot get the size right and the weight wrong.
      ---------------------------------------------------------------------- */
-  --text-xs: 0.75rem; /* 12px */
-  --text-xs--line-height: 1.5;
-  --text-sm: 0.875rem; /* 14px */
-  --text-sm--line-height: 1.5;
-  --text-base: 1rem; /* 16px */
-  --text-base--line-height: 1.6;
-  --text-lg: 1.125rem; /* 18px */
-  --text-lg--line-height: 1.55;
-  --text-xl: 1.25rem; /* 20px */
-  --text-xl--line-height: 1.45;
-  --text-2xl: 1.5rem; /* 24px */
-  --text-2xl--line-height: 1.35;
-  --text-3xl: 1.875rem; /* 30px */
-  --text-3xl--line-height: 1.25;
-  --text-4xl: 2.25rem; /* 36px */
-  --text-4xl--line-height: 1.2;
-  --text-5xl: 3rem; /* 48px */
-  --text-5xl--line-height: 1.1;
-  --text-6xl: 3.75rem; /* 60px */
-  --text-6xl--line-height: 1.05;
+  --text-display-xl: 3.5rem; /* 56 */
+  --text-display-xl--line-height: 3.75rem; /* 60 */
+  --text-display-xl--font-weight: 700;
 
-  /* ========================================================================
-     TODO(brand): brand palette — NOT YET DEFINED.
-     ------------------------------------------------------------------------
-     Deliberately left empty. Picking brand colours before the visual
-     direction exists produces tokens nobody honours, and every component
-     built against them has to be revisited.
+  --text-display-lg: 2.25rem; /* 36 */
+  --text-display-lg--line-height: 2.5rem; /* 40 */
+  --text-display-lg--font-weight: 700;
 
-     When the brand step lands, define here and nowhere else:
+  --text-heading: 1.375rem; /* 22 */
+  --text-heading--line-height: 1.75rem; /* 28 */
+  --text-heading--font-weight: 600;
 
-       --color-brand-50 … --color-brand-950     primary hue ramp
-       --color-accent-50 … --color-accent-950   secondary / CTA hue
+  --text-body: 1rem; /* 16 */
+  --text-body--line-height: 1.5rem; /* 24 */
+  --text-body--font-weight: 400;
 
-     Semantic tokens, mapped onto the ramps above (never raw hex in
-     components):
+  --text-body-sm: 0.875rem; /* 14 */
+  --text-body-sm--line-height: 1.25rem; /* 20 */
+  --text-body-sm--font-weight: 400;
 
-       --color-background        --color-foreground
-       --color-surface           --color-surface-muted
-       --color-border            --color-border-strong
-       --color-primary           --color-primary-foreground
-       --color-muted-foreground  --color-ring
+  --text-label: 0.75rem; /* 12 */
+  --text-label--line-height: 1rem; /* 16 */
+  --text-label--font-weight: 600;
 
-     Status colours. `success` and `danger` must not be the only signal for
-     anything — pair them with an icon or text, or colour-blind users lose the
-     meaning entirely:
+  /* The data styles. Every one of these is tabular — see the rule below. */
+  --text-data-xl: 2rem; /* 32 */
+  --text-data-xl--line-height: 2.25rem; /* 36 */
+  --text-data-xl--font-weight: 600;
 
-       --color-success  --color-warning  --color-danger  --color-info
+  --text-data: 1rem; /* 16 */
+  --text-data--line-height: 1.25rem; /* 20 */
+  --text-data--font-weight: 500;
 
-     Rules for whoever does this:
-       - OKLCH, consistent lightness steps across every ramp.
-       - Verify 4.5:1 for body text and 3:1 for large text and UI boundaries
-         against the actual surfaces used, not against white.
-       - Define the dark-mode overrides at the same time, not later.
-     ======================================================================== */
+  --text-data-sm: 0.8125rem; /* 13 */
+  --text-data-sm--line-height: 1.125rem; /* 18 */
+  --text-data-sm--font-weight: 500;
 }
 
-/* --- Base ----------------------------------------------------------------- */
+/* ===========================================================================
+   BASE
+   =========================================================================== */
 
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
+    /* Reserves the scrollbar's width at all times, so a page that grows past
+       one screen does not shift horizontally when the bar appears. */
+    scrollbar-gutter: stable;
   }
 
   body {
-    background-color: var(--color-neutral-50);
-    color: var(--color-neutral-900);
-    font-size: var(--text-base);
-    line-height: var(--text-base--line-height);
+    background-color: var(--color-surface-page);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
     -webkit-font-smoothing: antialiased;
   }
 
-  /* Never remove focus rings — replace them if the default is not wanted. */
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+  }
+
+  /* ───────────────────────────────────────────────────────────────────────
+     TABULAR FIGURES ON EVERY DATA STYLE
+
+     Not cosmetic. Odds, money, dates and percentages sit in columns, and
+     proportional digits make a column ragged enough that comparing two rows
+     means reading them rather than glancing — which is the entire job of the
+     track-record page.
+
+     Applied by selector so that choosing the data style is enough; a caller
+     cannot pick the size and forget the figures.
+     ─────────────────────────────────────────────────────────────────────── */
+  .text-data-xl,
+  .text-data,
+  .text-data-sm {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ───────────────────────────────────────────────────────────────────────
+     THE FOCUS RING
+
+     2px in `brand-text` at 2px offset, on everything interactive. Never
+     removed — replaced if the default is unwanted.
+
+     `brand-text` rather than `brand`: the ring has to reach 3:1 against the
+     surface behind it, and the surface green does not (2.07:1 on white).
+     ─────────────────────────────────────────────────────────────────────── */
   :focus-visible {
-    outline: 2px solid var(--color-neutral-900);
+    outline: 2px solid var(--color-brand-text);
     outline-offset: 2px;
+    border-radius: var(--radius-input);
+  }
+
+  /* A visible ring is useless if it is clipped by an ancestor's overflow. */
+  :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Anything tappable is at least 44px in its smaller dimension. Declared
+     once here rather than remembered per component. */
+  :where(button, a[role='button'], [type='button'], [type='submit']) {
+    min-height: 2.75rem; /* 44px */
+  }
+
+  ::selection {
+    background-color: var(--color-surface-accent);
+    color: var(--color-ink);
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -144,5 +368,248 @@
       transition-duration: 0.01ms !important;
       scroll-behavior: auto !important;
     }
+  }
+}
+
+/* ===========================================================================
+   UTILITIES
+   =========================================================================== */
+
+@layer utilities {
+  /* The page gutter, in one place. 64 desktop / 48 tablet / 24 mobile. A
+     component that needs the page edge uses this rather than guessing. */
+  .page-gutter {
+    padding-inline: 1.5rem; /* 24px */
+  }
+
+  @media (min-width: 48rem) {
+    .page-gutter {
+      padding-inline: 3rem; /* 48px */
+    }
+  }
+
+  @media (min-width: 64rem) {
+    .page-gutter {
+      padding-inline: 4rem; /* 64px */
+    }
+  }
+
+  /* Centred content column: 1280px max, with the gutter above. */
+  .page-shell {
+    margin-inline: auto;
+    width: 100%;
+    max-width: var(--container-page);
+  }
+
+  /* ─────────────────────────────────────────────────────────────────────────
+     LONG-FORM PROSE, FOR THE LEGAL DOCUMENTS
+
+     The terms, the privacy policy and the methodology come out of Payload as
+     rich text, so their markup is whatever the editor produced — `h2`, `p`,
+     `ul`, `a`, `strong`. Those elements have no classes to hang utilities on,
+     which is the one case Tailwind cannot address directly.
+
+     Written by hand rather than adding `@tailwindcss/typography`: the plugin
+     brings its own type scale and its own colours, both of which would have
+     to be overridden token by token to match this design system. Twenty lines
+     here, against a dependency whose defaults fight ours.
+
+     The measure is capped at 68ch. A privacy policy set across 1280px is
+     physically hard to read — the eye loses the line on the way back — and
+     this is the one page type whose whole job is being readable.
+     ───────────────────────────────────────────────────────────────────────── */
+  .prose-sc {
+    max-width: 68ch;
+    color: var(--color-ink);
+  }
+
+  .prose-sc > * + * {
+    margin-block-start: 1rem;
+  }
+
+  .prose-sc h2 {
+    font-family: var(--font-display);
+    font-size: var(--text-heading);
+    line-height: var(--text-heading--line-height);
+    font-weight: var(--text-heading--font-weight);
+    margin-block-start: 2rem;
+  }
+
+  .prose-sc h3 {
+    font-family: var(--font-display);
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
+    font-weight: 600;
+    margin-block-start: 1.5rem;
+  }
+
+  .prose-sc p,
+  .prose-sc li {
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
+  }
+
+  .prose-sc ul,
+  .prose-sc ol {
+    padding-inline-start: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .prose-sc ul {
+    list-style: disc;
+  }
+
+  .prose-sc ol {
+    list-style: decimal;
+  }
+
+  .prose-sc a {
+    color: var(--color-brand-text);
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
+
+  .prose-sc strong {
+    font-weight: 600;
+  }
+
+  .prose-sc blockquote {
+    border-inline-start: 2px solid var(--color-border-strong);
+    padding-inline-start: 1rem;
+    color: var(--color-ink-muted);
+  }
+
+  .prose-sc hr {
+    border: none;
+    border-block-start: 1px solid var(--color-border-subtle);
+    margin-block: 2rem;
+  }
+
+  /* ─────────────────────────────────────────────────────────────────────────
+     THE DATA TABLE, AND WHAT IT DOES ON A PHONE
+
+     Nine columns of track record. On a narrow screen there are three ways to
+     handle that and two of them are wrong:
+
+       - HORIZONTAL SCROLL. Explicitly not acceptable. A reader has to scroll
+         right to find out whether a tip won, then left again for the date,
+         and comparing two rows becomes impossible.
+       - A SECOND, SEPARATE CARD LIST. Works, but it means every row exists
+         twice in the DOM, both copies have to be kept in step, and a
+         `display: none` list is still downloaded and still parsed.
+       - THIS. One semantic `<table>`, re-laid-out below 768px so each row
+         becomes a card and each cell carries its own label from
+         `data-label`. One DOM, real table semantics, no duplication.
+
+     The labels come from `data-label` on each `<td>`, which the component
+     sets from the same strings it puts in the `<th>`s — so a column cannot
+     be renamed in one place and not the other.
+     ───────────────────────────────────────────────────────────────────────── */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    /* Figures line up: see the tabular-nums rule in the base layer. */
+    font-variant-numeric: tabular-nums;
+  }
+
+  .data-table caption {
+    text-align: start;
+    padding-block-end: 0.75rem;
+    color: var(--color-ink-muted);
+    font-size: var(--text-body-sm);
+    line-height: var(--text-body-sm--line-height);
+  }
+
+  .data-table th,
+  .data-table td {
+    text-align: start;
+    padding: 0.5rem 0.75rem;
+    border-block-end: 1px solid var(--color-border-subtle);
+    vertical-align: top;
+  }
+
+  .data-table thead th {
+    font-size: var(--text-label);
+    line-height: var(--text-label--line-height);
+    font-weight: 600;
+    color: var(--color-ink-muted);
+    white-space: nowrap;
+    border-block-end: 1px solid var(--color-border-strong);
+  }
+
+  .data-table tbody tr:hover {
+    background-color: var(--color-surface-raised);
+  }
+
+  /* Numeric columns right-align, so the digits form a column rather than a
+     ragged edge. Set per cell by the component via `data-align`. */
+  .data-table [data-align='end'] {
+    text-align: end;
+  }
+
+  @media (max-width: 47.999rem) {
+    .data-table thead {
+      /* Hidden visually, kept for the accessibility tree. */
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+
+    .data-table tr {
+      display: block;
+      border: 1px solid var(--color-border-subtle);
+      border-radius: var(--radius-card);
+      padding: 0.75rem;
+      margin-block-end: 0.75rem;
+      background-color: var(--color-surface-page);
+    }
+
+    .data-table td {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 1rem;
+      padding: 0.25rem 0;
+      border-block-end: none;
+    }
+
+    /* The column heading, repeated per cell. `attr()` rather than duplicated
+       markup, so there is still only one copy of the text in the DOM. */
+    .data-table td::before {
+      content: attr(data-label);
+      flex: 0 0 auto;
+      color: var(--color-ink-muted);
+      font-size: var(--text-label);
+      line-height: var(--text-label--line-height);
+      font-weight: 600;
+    }
+
+    /* A cell with nothing in it would show a lonely label. */
+    .data-table td:empty {
+      display: none;
+    }
+
+    .data-table [data-align='end'] {
+      text-align: end;
+    }
+  }
+
+  /* Visible only to screen readers. Used by skip links and by labels that
+     would be redundant on screen but are needed in the accessibility tree. */
+  .sr-only-focusable:not(:focus):not(:focus-within) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border-width: 0;
   }
 }

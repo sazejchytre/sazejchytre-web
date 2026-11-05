@@ -304,6 +304,60 @@ const serverEnvSchema = z.object({
       return Object.freeze([...new Set(codes)]) as readonly string[]
     }),
 
+  /* --- Cloudflare Turnstile (public form bot defence) --------------------- */
+  /**
+   * The widget's site key.
+   *
+   * World-readable — it identifies the widget and authorises nothing — so it
+   * could have gone in `env.public.ts` as a `NEXT_PUBLIC_*` name. It is here
+   * instead because `NEXT_PUBLIC_*` values are inlined at BUILD time, and
+   * rotating a Turnstile widget should not require a rebuild. The server
+   * component that renders a form reads it here and passes it to the widget
+   * as a prop, which puts the same string in the same HTML.
+   */
+  TURNSTILE_SITE_KEY: z
+    .string()
+    .min(1, { error: 'must be set — the widget cannot render without it' }),
+
+  /**
+   * Server-side verification key for Turnstile.
+   *
+   * This is the one that makes the check real: the site key proves nothing on
+   * its own, and a form that renders the widget without verifying the token
+   * server-side is protected by nothing at all. Required rather than
+   * optional, because a missing secret must fail the boot rather than quietly
+   * disable the defence while the widget keeps spinning reassuringly.
+   *
+   * Cloudflare publishes always-pass and always-fail test keys for local use;
+   * see .env.example.
+   */
+  TURNSTILE_SECRET_KEY: secret(1),
+
+  /* --- Ecomail (newsletter) ----------------------------------------------- */
+  /**
+   * API key for Ecomail, sent in the `key` header.
+   *
+   * Required rather than optional for the same reason as every other
+   * integration here: a newsletter form that silently does nothing because a
+   * variable was never set is worse than a deploy that refuses to start. The
+   * consent record is written to our own database either way, so a failed
+   * Ecomail call never loses the consent — see `src/lib/forms/newsletter.ts`.
+   */
+  ECOMAIL_API_KEY: secret(1),
+
+  /**
+   * The list subscribers are added to. A numeric list id, not a list name.
+   *
+   * Checked for digits because the id goes straight into the request path,
+   * and a name there produces a 404 that reads like an auth failure.
+   */
+  ECOMAIL_LIST_ID: z
+    .string()
+    .min(1, { error: 'must be set' })
+    .refine((value) => /^\d+$/.test(value.trim()), {
+      error: 'must be a numeric Ecomail list id, e.g. "7"',
+    }),
+
   /* --- NOT WIRED YET ------------------------------------------------------
    * Add these to the schema in the step that actually consumes them, so a
    * deploy never demands a secret the code cannot use.
@@ -312,10 +366,11 @@ const serverEnvSchema = z.object({
    * STRIPE_PRICE_ID_MONTHLY because price ids live in the `prices` table and
    * are reconciled into Stripe by `pnpm sync:prices`, not configured by hand.
    *
-   *   TURNSTILE_SECRET_KEY
-   *   NEXT_PUBLIC_TURNSTILE_SITE_KEY       <- goes in env.public.ts
-   *   ECOMAIL_API_KEY
-   *   ECOMAIL_LIST_ID
+   * Turnstile and Ecomail landed with the public site. The browser half of
+   * Turnstile — NEXT_PUBLIC_TURNSTILE_SITE_KEY — lives in env.public.ts,
+   * because only `NEXT_PUBLIC_*` names are inlined into the client bundle.
+   *
+   * Nothing is pending here today.
    * ---------------------------------------------------------------------- */
 })
 
