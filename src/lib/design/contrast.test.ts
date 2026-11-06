@@ -599,3 +599,48 @@ describe('global-error.tsx uses palette values, not invented ones', () => {
     assert.match(globalError, /Nepřijímáme sázky/)
   })
 })
+
+/* -------------------------------------------------------------------------- */
+/* The brand marks must not depend on a font                                  */
+/* -------------------------------------------------------------------------- */
+
+describe('the brand marks are outlines, not text', () => {
+  const marks = readFileSync(
+    path.join(process.cwd(), 'src/components/brand/Marks.tsx'),
+    'utf8',
+  )
+
+  /**
+   * The whole point of `Marks.tsx` is that the logo does not wait for, or
+   * change shape with, a webfont. Barlow is deliberately NOT preloaded any
+   * more, so a mark set in live text would visibly swap on every first
+   * visit. These assertions are what stop someone "simplifying" the paths
+   * back into a styled `<span>`.
+   */
+  it('contains no text element and no font-family', () => {
+    assert.equal(/<text[\s>]/.test(marks), false)
+    assert.equal(/font-family/i.test(marks), false)
+    assert.equal(/font-display|font-barlow/.test(marks), false)
+  })
+
+  it('draws both marks as path data', () => {
+    const paths = marks.match(/<path d="/g) ?? []
+
+    assert.equal(paths.length, 2, 'expected a wordmark and a monogram')
+  })
+
+  it('inherits colour instead of hard-coding one', () => {
+    // `currentColor` is what lets the marks sit on any surface and follow the
+    // theme without a second variant per mark.
+    assert.match(marks, /fill="currentColor"/)
+    assert.equal(/fill="#/.test(marks), false)
+  })
+
+  it('carries an accessible name from the caller, not a hard-coded string', () => {
+    // The brand name is a catalogue string like any other, so it stays under
+    // the copy-rule test rather than being frozen into a component.
+    assert.match(marks, /aria-label=\{label\}/)
+    assert.match(marks, /role="img"/)
+    assert.equal(marks.includes('aria-label="Sázej'), false)
+  })
+})

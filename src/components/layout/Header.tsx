@@ -24,6 +24,7 @@
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 
+import { Monogram, Wordmark } from '../brand/Marks'
 import { Button } from '../ui/Button'
 import { NavLinks, type NavItem } from './NavLinks'
 
@@ -43,12 +44,32 @@ export const Header = async () => {
         <div className="flex items-center gap-3">
           <Link
             href="/"
-            // `min-h-11`: measured at 28px in a tab-through — `text-heading`
-            // is a 28px line box with no padding, and the wordmark is the
-            // most-tapped link on the site.
-            className="inline-flex min-h-11 items-center font-display text-heading font-bold text-ink"
+            // `min-h-11`: measured at 28px in a tab-through — the mark itself
+            // is 24px tall and this is the most-tapped link on the site.
+            className="inline-flex min-h-11 items-center text-ink"
           >
-            {t('brand')}
+            {/*
+              Outlines, not live text — see `brand/Marks.tsx`.
+
+              The monogram below 480px is a COMFORT decision, not a fit
+              necessity, and it is worth being precise about that because the
+              first version of this comment claimed otherwise. Measured at
+              360px: the brand block is 189px with the wordmark against 109px
+              with the monogram, the sign-in button is 98px, and the row has
+              312px of space — so the wordmark does fit, with about 25px to
+              spare. What the monogram buys is slack rather than rescue.
+              There is no horizontal overflow at any width either way.
+
+              (The navigation taking its own row below 768px is deliberate —
+              `order-last w-full` — and has nothing to do with the mark.)
+
+              Only one mark is in the accessibility tree at a time, because
+              `display: none` removes the other: verified via CDP, the link's
+              accessible name is exactly "Sázej chytře" at 360px and at
+              768px, and the whole tree holds one image node, not two.
+            */}
+            <Wordmark label={t('brand')} className="hidden min-[480px]:block" />
+            <Monogram label={t('brand')} className="min-[480px]:hidden" />
           </Link>
 
           {/* The marker. `title`-free on purpose — a tooltip is not an

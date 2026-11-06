@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 
+import { Wordmark } from '@/components/brand/Marks'
 import { fontVariables } from '@/lib/design/fonts'
 import { HTML_LANG } from '@/i18n/config'
 import { pageMetadata } from '@/lib/seo/metadata'
@@ -72,11 +73,16 @@ export default async function GlobalNotFound() {
             deliberately depends on as little as possible. */}
         <header className="border-b border-border-subtle">
           <div className="page-shell page-gutter flex items-center gap-3 py-4">
+            {/*
+              The outlined mark matters most here. This page bypasses the
+              layout, so it is the page least able to rely on anything having
+              loaded — and the mark now needs no font at all.
+            */}
             <Link
               href="/"
-              className="inline-flex min-h-11 items-center font-display text-heading font-bold text-ink"
+              className="inline-flex min-h-11 items-center text-ink"
             >
-              {common('brand')}
+              <Wordmark label={common('brand')} />
             </Link>
             <span className="inline-flex items-center rounded-pill border border-border-strong px-2 py-0.5 text-label text-ink-muted">
               {common('ageMarker')}
