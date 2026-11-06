@@ -142,7 +142,10 @@ export const buildArchiveRows = (
       sportCode: tip.sportCode,
       sportName: tip.sportName || tip.sportCode,
       publishedAt: tip.publishedAt,
-      eventName: tip.selections[0]?.eventName ?? tip.title,
+      // `||`, not `??`: an unresolved fixture name is an EMPTY STRING, not
+      // null, so `??` let it through and the table rendered a link with no
+      // text in it. The tip title is the fallback that always has something.
+      eventName: tip.selections[0]?.eventName || tip.title,
       selectionLabel: selectionLabel(tip.selections),
       legs: tip.selections.length,
       oddsThousandths: combinedOddsThousandths(tip.selections),

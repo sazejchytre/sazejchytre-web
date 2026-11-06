@@ -25,7 +25,7 @@
  * away, and — more to the point — an email containing a pick is the one place
  * the copy rules are hardest to hold.
  */
-import { useActionState } from 'react'
+import { useActionState, useState } from 'react'
 import { useTranslations } from 'next-intl'
 
 import { Button } from '@/components/ui/Button'
@@ -46,8 +46,28 @@ export const NewsletterForm = ({ siteKey }: { siteKey: string }) => {
 
   const sent = state.status === 'success'
 
+  /**
+   * Has the visitor touched the form?
+   *
+   * Turnstile's script is ~1.7 MB of challenge platform and it is not
+   * fetched until this is true — see the header of `Turnstile.tsx` for the
+   * measurement that motivated it. `onFocus` on the form captures focus from
+   * any field in it (focus events bubble in React), so one handler covers
+   * every control, including arriving by keyboard.
+   *
+   * It only ever goes from false to true. A visitor who clicks away has still
+   * engaged, and tearing the widget back down would throw away a token they
+   * are about to need.
+   */
+  const [engaged, setEngaged] = useState(false)
+
   return (
-    <form action={action} className="flex flex-col gap-4" noValidate>
+    <form
+      action={action}
+      className="flex flex-col gap-4"
+      noValidate
+      onFocus={() => setEngaged(true)}
+    >
       <HoneypotField />
 
       <Field
@@ -79,7 +99,11 @@ export const NewsletterForm = ({ siteKey }: { siteKey: string }) => {
         required
       />
 
-      <Turnstile siteKey={siteKey} reset={state.resetChallenge ?? false} />
+      <Turnstile
+        siteKey={siteKey}
+        active={engaged}
+        reset={state.resetChallenge ?? false}
+      />
 
       <div>
         <Button type="submit" variant="primary" disabled={pending}>

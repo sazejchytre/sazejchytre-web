@@ -43,7 +43,10 @@ export const Header = async () => {
         <div className="flex items-center gap-3">
           <Link
             href="/"
-            className="font-display text-heading font-bold text-ink"
+            // `min-h-11`: measured at 28px in a tab-through — `text-heading`
+            // is a 28px line box with no padding, and the wordmark is the
+            // most-tapped link on the site.
+            className="inline-flex min-h-11 items-center font-display text-heading font-bold text-ink"
           >
             {t('brand')}
           </Link>

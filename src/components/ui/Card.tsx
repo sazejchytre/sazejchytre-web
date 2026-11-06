@@ -194,6 +194,23 @@ const FIGURE_TONES = {
  *
  * The value uses `text-data-xl`, which carries tabular figures — so a row of
  * these lines up rather than wobbling by a digit width.
+ *
+ * ──────────────────────────────────────────────────────────────────────────
+ * THE FOOTNOTE LIVES INSIDE THE `<dd>`
+ *
+ * It used to be a `<p>` beside the `<dt>`/`<dd>` pair, and that is invalid:
+ * a `<dl>` may contain only `<dt>`, `<dd>`, `<div>`, `<script>` and
+ * `<template>`, and a `<div>` wrapper may hold only dt/dd groups. A stray
+ * `<p>` in there breaks the association between the term and its
+ * description, which is the one thing a description list is for.
+ *
+ * Caught by Lighthouse's `definition-list` audit on both pages that use
+ * these figures. Worth noting that the markup looked perfectly reasonable
+ * and type-checked fine — the rule is about the DOM, not the components.
+ *
+ * Inside the `<dd>` the note is still announced as part of the value, which
+ * is where it belongs: "Vsazeno — 15 jednotek, bez zrušených tipů" is one
+ * fact, not two.
  */
 export const Figure = ({
   label,
@@ -204,7 +221,11 @@ export const Figure = ({
 }: FigureProps) => (
   <div className={cn('flex flex-col gap-1', className)}>
     <dt className="text-label text-ink-muted">{label}</dt>
-    <dd className={cn('text-data-xl', FIGURE_TONES[tone])}>{value}</dd>
-    {foot ? <p className="text-body-sm text-ink-muted">{foot}</p> : null}
+    <dd className="flex flex-col gap-1">
+      <span className={cn('text-data-xl', FIGURE_TONES[tone])}>{value}</span>
+      {foot ? (
+        <span className="text-body-sm text-ink-muted">{foot}</span>
+      ) : null}
+    </dd>
   </div>
 )

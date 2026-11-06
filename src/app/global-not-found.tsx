@@ -74,7 +74,7 @@ export default async function GlobalNotFound() {
           <div className="page-shell page-gutter flex items-center gap-3 py-4">
             <Link
               href="/"
-              className="font-display text-heading font-bold text-ink"
+              className="inline-flex min-h-11 items-center font-display text-heading font-bold text-ink"
             >
               {common('brand')}
             </Link>

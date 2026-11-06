@@ -5,6 +5,8 @@ import type { ReactNode } from 'react'
 
 import { Footer } from '@/components/layout/Footer'
 import { Header } from '@/components/layout/Header'
+import { pickClientMessages } from '@/i18n/client-messages'
+import type { Messages } from '@/i18n/messages/cs'
 import { loadSiteSettings } from '@/lib/content/loaders'
 import { fontVariables } from '@/lib/design/fonts'
 import { HTML_LANG, resolveLocale } from '@/i18n/config'
@@ -110,7 +112,33 @@ export default async function FrontendLayout({
    * wiring the plumbing up while there is nothing to translate.
    */
   const locale = resolveLocale(await getLocale())
-  const messages = await getMessages()
+
+  /**
+   * Only the namespaces a CLIENT component reads.
+   *
+   * `NextIntlClientProvider` serialises whatever it is given into the HTML of
+   * every page. Given the whole catalogue it shipped all of it everywhere —
+   * a Lighthouse run found a contact-form error string in the markup of
+   * `/historie`, which has no form on it. Server components resolve their
+   * text through `getTranslations` and need none of this.
+   *
+   * `client-messages.test.ts` scans every `'use client'` file and fails if one
+   * asks for a namespace this does not include, because in production a
+   * missing namespace renders the key instead of the text, silently.
+   */
+  const messages = pickClientMessages(
+    // One narrow cast, at the boundary. `getMessages()` is typed
+    // `Record<string, any>` because next-intl cannot know our catalogue;
+    // `pickClientMessages` wants the real shape so that a renamed namespace
+    // is a type error rather than an empty object in the browser.
+    //
+    // The alternative is next-intl's global `IntlMessages` augmentation,
+    // which would type this properly AND start checking every `t()` key.
+    // That is worth doing, and it is not a one-line change: keys built from
+    // template literals (`features.${key}`) and `t.raw()` calls would all
+    // need revisiting. Its own piece of work.
+    (await getMessages()) as Messages,
+  )
   const settings = await loadSiteSettings(locale)
   const t = await getTranslations('common')
 
@@ -126,7 +154,9 @@ export default async function FrontendLayout({
         */}
         <a
           href="#obsah"
-          className="sr-only-focusable absolute start-4 top-4 z-10 rounded-button bg-brand px-4 py-2 text-body font-semibold text-ink-on-brand"
+          // `min-h-11` + `inline-flex`: a real tab-through measured this at
+          // 40px, under the 44px floor. `py-2` on 24px type is 40, not 44.
+          className="sr-only-focusable absolute start-4 top-4 z-10 inline-flex min-h-11 items-center rounded-button bg-brand px-4 py-2 text-body font-semibold text-ink-on-brand"
         >
           {t('skipToContent')}
         </a>

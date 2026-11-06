@@ -104,6 +104,69 @@ const nextConfig: NextConfig = {
   },
 }
 
-export default withPayload(withNextIntl(nextConfig), {
+const composed = withPayload(withNextIntl(nextConfig), {
   devBundleServerPackages: false,
 })
+
+/**
+ * Keep Payload's colour-scheme client hint on the admin panel only.
+ *
+ * ──────────────────────────────────────────────────────────────────────────
+ * WHAT withPayload DOES, AND WHY IT COSTS THE PUBLIC SITE
+ *
+ * `withPayload` appends a header block of
+ *
+ *     Accept-CH:   Sec-CH-Prefers-Color-Scheme
+ *     Vary:        Sec-CH-Prefers-Color-Scheme
+ *     Critical-CH: Sec-CH-Prefers-Color-Scheme
+ *
+ * at `source: '/:path*'` — every route on the site. It is there so the admin
+ * panel can render in the right theme on the server, which is a real feature
+ * and worth having AT `/admin`.
+ *
+ * `Critical-CH` is the expensive part. It tells the browser that the hint is
+ * critical, so on a first visit the browser ABANDONS the response and
+ * restarts the request with the hint attached. A Lighthouse run on the home
+ * page reported it as "Avoid multiple page redirects — 608 ms", listing the
+ * same URL twice, and the extra navigation also produced an intermittent
+ * CLS of 0.104 that appeared on some runs and not others.
+ *
+ * Nothing on the public site reads the hint: the theme there is a CSS
+ * `prefers-color-scheme` media query, resolved in the browser with no server
+ * involvement at all. So every public visitor was paying a round trip for a
+ * header only the admin panel uses.
+ *
+ * ──────────────────────────────────────────────────────────────────────────
+ * WHY IT IS DONE BY REWRITING THE COMPOSED CONFIG
+ *
+ * Because `withPayload` appends its block AFTER ours and offers no option to
+ * scope it. The block is identified by its source rather than by position,
+ * so if Payload reorders or renames things this stops matching and the
+ * header simply returns to being site-wide — degrading to the previous
+ * behaviour rather than silently dropping our own security headers.
+ *
+ * Revisit on a Payload upgrade: if `withPayload` ever scopes this itself,
+ * this wrapper becomes dead weight.
+ */
+const PAYLOAD_GLOBAL_SOURCE = '/:path*'
+const ADMIN_ONLY_SOURCE = '/admin/:path*'
+
+const isPayloadClientHintBlock = (block: {
+  source: string
+  headers: { key: string }[]
+}): boolean =>
+  block.source === PAYLOAD_GLOBAL_SOURCE &&
+  block.headers.some((header) => header.key === 'Critical-CH')
+
+export default {
+  ...composed,
+  async headers() {
+    const blocks = (await composed.headers?.()) ?? []
+
+    return blocks.map((block) =>
+      'source' in block && isPayloadClientHintBlock(block)
+        ? { ...block, source: ADMIN_ONLY_SOURCE }
+        : block,
+    )
+  },
+} satisfies NextConfig

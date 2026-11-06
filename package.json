@@ -29,6 +29,7 @@
     "generate:types": "cross-env NODE_OPTIONS=--no-deprecation payload generate:types",
     "generate:importmap": "cross-env NODE_OPTIONS=--no-deprecation payload generate:importmap",
     "seed": "cross-env NODE_OPTIONS=--no-deprecation payload run src/seed/billing.ts",
+    "seed:content": "cross-env NODE_OPTIONS=--no-deprecation payload run src/seed/content.ts",
     "sync:prices": "cross-env NODE_OPTIONS=--no-deprecation payload run src/scripts/sync-stripe-prices.ts",
     "sync:prices:apply": "cross-env APPLY=1 NODE_OPTIONS=--no-deprecation payload run src/scripts/sync-stripe-prices.ts",
     "reconcile:subscriptions": "cross-env NODE_OPTIONS=--no-deprecation payload run src/scripts/reconcile-subscriptions.ts",

@@ -342,6 +342,32 @@
     border-radius: var(--radius-input);
   }
 
+  /* ───────────────────────────────────────────────────────────────────────
+     AND THE SAME RING FOR A CONTROL WHOSE FOCUS IS INSIDE ITS SHADOW ROOT
+
+     `<input type="date">` is not one tab stop in Chrome — it is several. The
+     day, month and year segments each take focus inside the input's shadow
+     tree, and while focus is in there the HOST matches `:focus-within` but
+     NOT `:focus-visible`. Measured directly: `fv: false, fw: true,
+     outline: none`.
+
+     So a real keyboard tab-through of the history filter found two of the
+     eight date stops with no ring from us at all. Chrome draws its own
+     indicator on the segment, but the field itself was unoutlined, which on
+     a page of controls is exactly the moment a keyboard user loses their
+     place.
+
+     Scoped to `input` deliberately. `:focus-within` on anything else would
+     outline every ancestor of a focused control — the form, the card, the
+     page — and an `<input>` cannot contain another focusable element except
+     its own internal parts, which is precisely the case being covered.
+     ─────────────────────────────────────────────────────────────────────── */
+  input:focus-within {
+    outline: 2px solid var(--color-brand-text);
+    outline-offset: 2px;
+    border-radius: var(--radius-input);
+  }
+
   /* A visible ring is useless if it is clipped by an ancestor's overflow. */
   :where(a, button, input, select, textarea, [tabindex]):focus-visible {
     position: relative;
@@ -525,7 +551,11 @@
   .data-table th,
   .data-table td {
     text-align: start;
-    padding: 0.5rem 0.75rem;
+    /* 4px block padding, not 8px: the tip link in the event cell carries a
+       44px minimum height for touch, and without trimming here every row
+       would grow by 20px. This keeps the growth to 4px, so the table stays
+       dense enough to scan while its links stay tappable. */
+    padding: 0.25rem 0.75rem;
     border-block-end: 1px solid var(--color-border-subtle);
     vertical-align: top;
   }
@@ -597,6 +627,29 @@
     .data-table [data-align='end'] {
       text-align: end;
     }
+  }
+
+  /* ─────────────────────────────────────────────────────────────────────────
+     THE TURNSTILE SLOT
+
+     Cloudflare's normal widget is 300x65 CSS pixels, and it arrives in an
+     iframe some time after the page does. Without a reserved box it pushed
+     everything below it down — on the home page a Lighthouse run measured
+     CLS 0.104, over the 0.1 threshold, and named the FOOTER as the shifting
+     element, because the footer was what moved.
+
+     So the slot holds the space from first paint. The numbers are the
+     widget's documented size and are therefore magic numbers; they live here,
+     once, next to the reason, rather than as an arbitrary utility at a call
+     site.
+
+     `max-width: 100%` so the fixed 300px cannot cause horizontal overflow
+     inside a narrower container at 320px viewport width.
+     ───────────────────────────────────────────────────────────────────────── */
+  .turnstile-slot {
+    min-height: 65px;
+    width: 300px;
+    max-width: 100%;
   }
 
   /* Visible only to screen readers. Used by skip links and by labels that

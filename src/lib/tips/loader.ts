@@ -101,6 +101,36 @@ const relatedName = (value: unknown, field = 'name'): string => {
 }
 
 /**
+ * A fixture's display name: `Pardubice – Sparta`.
+ *
+ * `sporting-events` has NO `name` field — it has `homeName` and `awayName`,
+ * because a fixture is two sides and storing a joined string would mean
+ * reformatting it to sort or filter by either one. So the name is composed
+ * here.
+ *
+ * This was `relatedName(event)` reading a `.name` that does not exist, which
+ * returned an empty string: the history table rendered fourteen links with no
+ * text in them. Lighthouse caught it as `link-name` — a type check could not,
+ * because `relatedName` is correctly typed and the field it reads is simply
+ * absent at runtime.
+ *
+ * An en dash with spaces, which is the Czech convention for a fixture, not a
+ * hyphen and not an em dash.
+ */
+const eventDisplayName = (value: unknown): string => {
+  const home = relatedName(value, 'homeName')
+  const away = relatedName(value, 'awayName')
+
+  if (home !== '' && away !== '') {
+    return `${home} – ${away}`
+  }
+
+  // One side is better than none, and an empty string is better than a
+  // dangling dash.
+  return home || away
+}
+
+/**
  * One selection row into the shape settlement expects.
  *
  * `outcome` and `oddsAtPublication` are what the arithmetic needs;
@@ -123,7 +153,7 @@ const toSelection = (row: Record<string, unknown>): PublicSelection => {
     market: typeof row.market === 'string' ? row.market : '',
     selection: typeof row.selection === 'string' ? row.selection : '',
     line: typeof row.line === 'string' && row.line !== '' ? row.line : null,
-    eventName: relatedName(event),
+    eventName: eventDisplayName(event),
     eventStartsAt:
       typeof event === 'object' && event !== null
         ? (((event as Related).startsAt as string | null) ?? null)

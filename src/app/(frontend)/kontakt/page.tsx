@@ -70,7 +70,9 @@ export default async function ContactPage() {
           <Card className="flex flex-col gap-2">
             <a
               href={`mailto:${settings.contactEmail}`}
-              className="text-body font-semibold text-brand-text underline underline-offset-4"
+              // A standalone link in a card, not a link inside a sentence,
+              // so the 44px floor applies to it. Measured at 24px.
+              className="inline-flex min-h-11 items-center text-body font-semibold text-brand-text underline underline-offset-4"
             >
               {settings.contactEmail}
             </a>

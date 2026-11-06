@@ -30,7 +30,7 @@
  * because the instinct is to add `key={...}` or controlled values, and both
  * would throw the text away.
  */
-import { useActionState } from 'react'
+import { useActionState, useState } from 'react'
 import { useTranslations } from 'next-intl'
 
 import { Button } from '@/components/ui/Button'
@@ -51,8 +51,28 @@ export const ContactForm = ({ siteKey }: { siteKey: string }) => {
 
   const sent = state.status === 'success'
 
+  /**
+   * Has the visitor touched the form?
+   *
+   * Turnstile's script is ~1.7 MB of challenge platform and it is not
+   * fetched until this is true — see the header of `Turnstile.tsx` for the
+   * measurement that motivated it. `onFocus` on the form captures focus from
+   * any field in it (focus events bubble in React), so one handler covers
+   * every control, including arriving by keyboard.
+   *
+   * It only ever goes from false to true. A visitor who clicks away has still
+   * engaged, and tearing the widget back down would throw away a token they
+   * are about to need.
+   */
+  const [engaged, setEngaged] = useState(false)
+
   return (
-    <form action={action} className="flex flex-col gap-6" noValidate>
+    <form
+      action={action}
+      className="flex flex-col gap-6"
+      noValidate
+      onFocus={() => setEngaged(true)}
+    >
       <HoneypotField />
 
       <Field
@@ -128,7 +148,11 @@ export const ContactForm = ({ siteKey }: { siteKey: string }) => {
         )}
       </Field>
 
-      <Turnstile siteKey={siteKey} reset={state.resetChallenge ?? false} />
+      <Turnstile
+        siteKey={siteKey}
+        active={engaged}
+        reset={state.resetChallenge ?? false}
+      />
 
       <div className="flex flex-wrap items-center gap-4">
         <Button type="submit" variant="primary" size="lg" disabled={pending}>

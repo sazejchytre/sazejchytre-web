@@ -221,9 +221,19 @@ export const TipsTable = ({
           <td data-label={labels.columns.event}>
             {/* The tip page is where the analysis lives. A settled tip's
                 result is public there too, in every state. */}
+            {/*
+              `min-h-11`: a tab-through measured these at 24px. They are the
+              most-followed links on the site and the only way into a tip, so
+              the 44px floor applies — they are the cell's whole content, not
+              a link inside a sentence.
+
+              `.data-table` gives the cell less vertical padding to
+              compensate, so the row grows by 4px rather than by 20px and the
+              table stays dense enough to scan.
+            */}
             <Link
               href={`/tipy/${row.slug}`}
-              className="text-brand-text underline underline-offset-4"
+              className="inline-flex min-h-11 items-center text-brand-text underline underline-offset-4"
             >
               {row.eventName}
             </Link>
