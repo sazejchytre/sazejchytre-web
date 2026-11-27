@@ -1,16 +1,18 @@
 /**
- * The configured launch mode, for server components.
+ * The launch gate for server components.
  *
- * Navigation reads this to leave out links to areas the mode closes, so the
+ * Navigation and calls to action ask this before rendering a link, so the
  * public site has no dead ends. That is presentation only: the proxy refuses
- * those areas whether or not a link points at them.
+ * closed areas whether or not a link points at them.
  */
 import { env } from '../env.ts'
 
-import { isSurfaceOpen, type GatedSurface, type LaunchMode } from './modes'
+import { isLinkServedInMode } from './links'
 
-export const launchMode = (): LaunchMode => env.LAUNCH_MODE
-
-/** Is this surface served in the configured mode? */
-export const isSurfaceServed = (surface: GatedSurface): boolean =>
-  isSurfaceOpen(env.LAUNCH_MODE, surface)
+/**
+ * Would the gate serve this root-relative link in the configured mode?
+ * It asks the gate about the actual destination (`links.ts`), so it cannot
+ * drift from the route table.
+ */
+export const isLinkServed = (href: string): boolean =>
+  isLinkServedInMode(env.LAUNCH_MODE, href)

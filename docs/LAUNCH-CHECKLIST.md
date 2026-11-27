@@ -25,7 +25,7 @@ production only after the Phase B sign-off below.
 - [ ] SC-022 merged: fixture and test data cannot reach the production record
 - [ ] SC-023 merged: the published-record invariants hold at the database level
 - [ ] SC-024 merged: one projection drives every public output, and the public history is complete
-- [ ] Pricing page has no buy button and says when subscriptions open. `/predplatne` answers 404 in `INFORMATIONAL` (SC-017), but the buy buttons on `/` and `/cenik` (`src/components/pricing/TierCards.tsx`) still link to it and must be removed before launch
+- [ ] Pricing page has no buy button and says when subscriptions open. SC-017: `/predplatne` answers 404 in `INFORMATIONAL` and the buy buttons on `/` and `/cenik` (`src/components/pricing/TierCards.tsx`) are not rendered outside `FULL`. Still open: the copy saying when subscriptions open, and the payment wording on `/` ("Platba kartou." in `home.tiers.body`), both in `src/i18n/messages/cs.ts`
 - [ ] Homepage and history show an honest empty state if no tip is settled yet
 - [ ] Legal pages (VOP, GDPR, cookies) reviewed by the operator; responsible-gambling notice wording approved
 
@@ -38,7 +38,7 @@ production only after the Phase B sign-off below.
 - [ ] Turnstile widget for the production domain; Ecomail list id set
 - [ ] Stripe **test** keys in Phase A; `ACCOUNTING_PROVIDER=FAKE`
 - [ ] Image built in CI, pulled on server, `/healthz` 200 on staging and production
-- [ ] Launch gate verified on the server (SC-009, `docs/DEPLOYMENT.md` "Launch gate"): proxy forwards every path, no cache or cache purged after a mode change, access restriction in front of staging; `verify-launch-gate.ts` summary with 0 mismatches for staging and production: ____
+- [ ] Launch gate verified on the server (SC-009, `docs/DEPLOYMENT.md` "Launch gate"): proxy forwards every path, no cache or cache purged after a mode change, access restriction in front of staging; `/admin` and `/api` restricted at the proxy and the first administrator created before the host is reachable; `verify-launch-gate.ts` summary with 0 mismatches for staging and production (with `--expect-admin-restricted` from outside the allowlist, and `--check-links` in `INFORMATIONAL`): ____
 - [ ] Production switched from `PRIVATE` to `INFORMATIONAL` only after every other Phase A box is ticked; verification re-run after the switch: ____
 - [ ] TLS valid, HTTP redirects to HTTPS, HSTS header present
 - [ ] Client-address handling behind the proxy verified on staging (SC-004 test procedure)

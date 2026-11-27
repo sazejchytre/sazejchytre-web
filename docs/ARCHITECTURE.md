@@ -57,12 +57,20 @@ which areas a deployment serves. Enforcement points, in request order:
 2. `src/app/(payload)/api/[...slug]/route.ts` wraps Payload's REST handlers:
    in `PRIVATE` mode only an administrator session or an administrator
    sign-in operation reaches Payload.
-3. `src/components/layout/Header.tsx` leaves out navigation to areas the mode
-   closes. Presentation only; points 1 and 2 are the control.
+3. `src/components/layout/Header.tsx` (sign-in) and
+   `src/components/pricing/TierCards.tsx` (purchase) render a link only when
+   `isLinkServed(href)` (`src/lib/launch-gate/server.ts`) says the gate would
+   serve its destination; that helper asks `decide()` itself, so links and
+   gate cannot disagree. Presentation only; points 1 and 2 are the control.
 
 A new route file under `src/app` fails `src/lib/launch-gate/routes.test.ts`
-until it is classified in both `routes.ts` and `test-fixtures.ts`. Operations
-and deployment controls: `docs/DEPLOYMENT.md`, "Launch gate".
+until it is classified in both `routes.ts` and `test-fixtures.ts`. A
+component or public page that links into an area `INFORMATIONAL` closes
+without asking `isLinkServed` fails `src/lib/launch-gate/link-guard.test.ts`.
+The `PRIVATE` 503 page is Czech HTML defined in
+`src/lib/launch-gate/responses.ts`, outside the message catalogue because the
+proxy answers before any page renders. Operations and deployment controls:
+`docs/DEPLOYMENT.md`, "Launch gate".
 
 ## Boundaries
 

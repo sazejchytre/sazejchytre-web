@@ -6,7 +6,7 @@ import { NextRequest } from 'next/server.js'
 
 import { LAUNCH_MODES, type LaunchMode } from './modes.ts'
 import { NOT_FOUND_PATH, runLaunchGate } from './proxy-handler.ts'
-import { PRIVATE_ROBOTS_TXT } from './responses.ts'
+import { PRIVATE_MAINTENANCE_HTML, PRIVATE_ROBOTS_TXT } from './responses.ts'
 import { discoverAppRoutes } from './route-inventory.ts'
 import { HTTP_METHODS, type HttpMethod } from './routes.ts'
 import { EXPECTED_ROUTES, type ExpectedRoute } from './test-fixtures.ts'
@@ -259,6 +259,20 @@ describe('PRIVATE mode', () => {
     }
 
     assert.equal(bodies.size, 1, 'every refusal must look the same')
+    assert.deepEqual([...bodies], [PRIVATE_MAINTENANCE_HTML])
+  })
+
+  it('answers with the Czech maintenance page, as HTML', () => {
+    for (const path of ['/', '/cenik', '/registrace', '/does-not-exist']) {
+      const response = gate(path, 'GET', 'PRIVATE')
+      assert.equal(response.status, 503, path)
+      assert.equal(
+        response.headers.get('content-type'),
+        'text/html; charset=utf-8',
+        path,
+      )
+      assert.equal(response.headers.get('content-language'), 'cs', path)
+    }
   })
 
   it('answers robots.txt with disallow-everything', async () => {

@@ -2,7 +2,8 @@
  * Probe a running deployment and report what every route answers.
  *
  *   node src/scripts/verify-launch-gate.ts --base-url <origin> --mode <MODE>
- *        [--build-dir .next] [--include-unsafe-methods]
+ *        [--build-dir .next] [--include-unsafe-methods] [--check-links]
+ *        [--expect-admin-restricted]
  *
  * The expected outcome of each request comes from the launch gate's own
  * decision (`src/lib/launch-gate/decide.ts`) for the mode the deployment is
@@ -17,7 +18,19 @@
  *   - other spellings of closed paths, sent RAW (not normalised by a URL
  *     parser) so the reverse proxy and the server see exactly these bytes;
  *   - the Payload REST API's PRIVATE-mode rule (one content read, one
- *     administrator sign-in read).
+ *     administrator sign-in read);
+ *   - with `--check-links`, the HTML of every public page the gate serves:
+ *     each root-relative `href` in it must be a path the gate also serves in
+ *     this mode, so no rendered link or call to action leads to a refusal;
+ *   - always, the administrative surface (`/admin`, the Payload sign-in
+ *     endpoints) as this client sees it, printed so the reader can tell
+ *     whether it is reachable from where the script runs. The application
+ *     serves it in every mode by design; whether the internet can reach it
+ *     is a reverse-proxy decision (SC-009). With `--expect-admin-restricted`
+ *     each of those requests must be refused IN FRONT of the application
+ *     (401, 403 or 404 without the gate's header), and the health check must
+ *     still answer, or the run fails. Use it from a client outside the
+ *     allowlist.
  *
  * Methods: GET, HEAD and OPTIONS everywhere. POST, PUT, PATCH and DELETE only
  * with `--include-unsafe-methods`, and only against a local or staging
@@ -49,7 +62,12 @@ type Observation = {
   status: number
   gate: string | null
   location: string | null
+  contentType: string | null
+  /** Only when asked for, and only up to `MAX_BODY_BYTES`. */
+  body: string | null
 }
+
+const MAX_BODY_BYTES = 4 * 1024 * 1024
 type Expectation =
   | { pass: true }
   /** `gate: null` = refused by the framework itself, before any handler. */
@@ -96,7 +114,8 @@ const usage = (message: string): never => {
   console.error(message)
   console.error(
     'usage: node src/scripts/verify-launch-gate.ts --base-url <origin> ' +
-      `--mode <${LAUNCH_MODES.join('|')}> [--build-dir .next] [--include-unsafe-methods]`,
+      `--mode <${LAUNCH_MODES.join('|')}> [--build-dir .next] [--include-unsafe-methods] ` +
+      '[--check-links] [--expect-admin-restricted]',
   )
   process.exit(2)
 }
@@ -107,6 +126,8 @@ const { values } = parseArgs({
     mode: { type: 'string' },
     'build-dir': { type: 'string' },
     'include-unsafe-methods': { type: 'boolean', default: false },
+    'check-links': { type: 'boolean', default: false },
+    'expect-admin-restricted': { type: 'boolean', default: false },
   },
 })
 
@@ -229,7 +250,10 @@ const expectationFor = ({ method, path }: Probe): Expectation => {
   return { pass: true }
 }
 
-const send = ({ method, path }: Probe): Promise<Observation> =>
+const send = (
+  { method, path }: Probe,
+  { withBody = false }: { withBody?: boolean } = {},
+): Promise<Observation> =>
   new Promise((resolve, reject) => {
     const base = new URL(baseUrl)
     const request = base.protocol === 'https:' ? httpsRequest : httpRequest
@@ -245,13 +269,23 @@ const send = ({ method, path }: Probe): Promise<Observation> =>
         timeout: 15_000,
       },
       (response) => {
-        response.resume()
+        const chunks: Buffer[] = []
+        let size = 0
+
+        response.on('data', (chunk: Buffer) => {
+          if (withBody && size < MAX_BODY_BYTES) {
+            chunks.push(chunk)
+            size += chunk.length
+          }
+        })
         response.on('end', () => {
           const gate = response.headers[GATE_HEADER]
           resolve({
             status: response.statusCode ?? 0,
             gate: typeof gate === 'string' ? gate : null,
             location: response.headers.location ?? null,
+            contentType: response.headers['content-type'] ?? null,
+            body: withBody ? Buffer.concat(chunks).toString('utf8') : null,
           })
         })
       },
@@ -337,9 +371,186 @@ for (const probe of probes) {
 
 console.log(rows.join('\n'))
 console.log('')
+
+/* -------------------------------------------------------------------------- */
+/* Rendered links                                                             */
+/* -------------------------------------------------------------------------- */
+
+/** Root-relative `href`s in an HTML document, entity-decoded, deduplicated. */
+const internalLinks = (html: string): string[] => {
+  const found = new Set<string>()
+
+  for (const match of html.matchAll(/\shref="(\/(?![/\\])[^"]*)"/g)) {
+    found.add((match[1] ?? '').replaceAll('&amp;', '&'))
+  }
+
+  return [...found].sort()
+}
+
+let deadLinks = 0
+let pagesChecked = 0
+
+if (values['check-links']) {
+  const pages = [
+    ...new Set(
+      routes
+        .filter((route) => route.kind === 'page')
+        .flatMap((route) => route.samples),
+    ),
+  ].filter((path) => {
+    const decision = decide({
+      mode,
+      method: 'GET',
+      pathname: path,
+      development: false,
+    })
+    return decision.action === 'pass' && decision.rule?.area === 'public'
+  })
+
+  console.log(
+    `Rendered links on ${pages.length} public pages served in ${mode}:`,
+  )
+
+  for (const path of pages) {
+    let observed: Observation
+
+    try {
+      observed = await send(
+        { method: 'GET', path, origin: 'links' },
+        { withBody: true },
+      )
+    } catch (error) {
+      deadLinks += 1
+      console.log(`  MISMATCH ${path}  request failed: ${String(error)}`)
+      continue
+    }
+
+    if (
+      observed.status !== 200 ||
+      !observed.contentType?.includes('text/html')
+    ) {
+      // Not a rendered page (a missing tip slug answers 404, a page whose
+      // data is missing may answer 500); nothing to check, but say so.
+      console.log(
+        `  skipped  ${path.padEnd(28)} ungated ${observed.status}, no page to read`,
+      )
+      continue
+    }
+
+    pagesChecked += 1
+    const links = internalLinks(observed.body ?? '')
+    const refused = links.filter((href) => {
+      const pathname = new URL(`http://verification.invalid${href}`).pathname
+      return (
+        decide({ mode, method: 'GET', pathname, development: false }).action ===
+        'refuse'
+      )
+    })
+
+    deadLinks += refused.length
+    console.log(
+      `  ${refused.length === 0 ? 'ok      ' : 'MISMATCH'} ${path.padEnd(28)} ` +
+        `${links.length} internal links` +
+        (refused.length === 0
+          ? ''
+          : `, refused by the gate: ${refused.join(', ')}`),
+    )
+  }
+
+  console.log('')
+}
+
+/* -------------------------------------------------------------------------- */
+/* Administrative surface                                                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * What the application serves to anyone in every mode, because the
+ * administrator has to be able to sign in. Whether "anyone" means the whole
+ * internet is decided in front of the application.
+ */
+const ADMIN_SURFACE = [
+  '/admin',
+  '/admin/login',
+  '/api/users/init',
+  '/api/users/me',
+  '/api/access',
+] as const
+
+/** Refused before the application: a proxy answer, not one of ours. */
+const restrictedInFront = (observed: Observation): boolean =>
+  observed.gate === null && [401, 403, 404].includes(observed.status)
+
+let adminProblems = 0
+
 console.log(
-  `Summary: ${probes.length} probes, ${probes.length - mismatches} as expected, ` +
-    `${mismatches} mismatches, ${buildProblems.length} unclassified build routes`,
+  'Administrative surface as seen from this client ' +
+    (values['expect-admin-restricted']
+      ? '(expected: refused in front of the application):'
+      : '(reported only; pass --expect-admin-restricted to require a restriction):'),
 )
 
-process.exit(mismatches === 0 && buildProblems.length === 0 ? 0 : 1)
+for (const path of ADMIN_SURFACE) {
+  let observed: Observation
+
+  try {
+    observed = await send({ method: 'GET', path, origin: 'admin surface' })
+  } catch (error) {
+    // A connection refused or reset by a firewall is also "not reachable".
+    console.log(
+      `  ${'unreachable'.padEnd(11)} GET ${path.padEnd(18)} ${String(error)}`,
+    )
+    continue
+  }
+
+  const reachable = !restrictedInFront(observed)
+  const label = reachable ? 'REACHABLE' : 'restricted'
+  if (values['expect-admin-restricted'] && reachable) adminProblems += 1
+
+  console.log(
+    `  ${label.padEnd(11)} GET ${path.padEnd(18)} ${observed.status}` +
+      (observed.gate === null ? '' : ` ${observed.gate}`),
+  )
+}
+
+if (values['expect-admin-restricted']) {
+  // The uptime monitor must still get through.
+  try {
+    const health = await send({
+      method: 'GET',
+      path: '/healthz',
+      origin: 'health',
+    })
+    const healthy = health.gate === null && [200, 503].includes(health.status)
+    if (!healthy) adminProblems += 1
+    console.log(
+      `  ${(healthy ? 'ok' : 'MISMATCH').padEnd(11)} GET /healthz            ${health.status} (must stay reachable)`,
+    )
+  } catch (error) {
+    adminProblems += 1
+    console.log(`  MISMATCH    GET /healthz            ${String(error)}`)
+  }
+}
+
+console.log('')
+console.log(
+  `Summary: ${probes.length} probes, ${probes.length - mismatches} as expected, ` +
+    `${mismatches} mismatches, ${buildProblems.length} unclassified build routes` +
+    (values['check-links']
+      ? `, ${pagesChecked} pages link-checked, ${deadLinks} links to refused paths`
+      : '') +
+    (values['expect-admin-restricted']
+      ? `, ${adminProblems} admin-restriction problems`
+      : ''),
+)
+
+process.exit(
+  mismatches === 0 &&
+    buildProblems.length === 0 &&
+    deadLinks === 0 &&
+    // Asked to check links and read no page: nothing was verified.
+    !(values['check-links'] && pagesChecked === 0 && mode !== 'PRIVATE') &&
+    adminProblems === 0
+    ? 0
+    : 1,
+)

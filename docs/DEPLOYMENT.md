@@ -88,7 +88,7 @@ restarting the container, not rebuilding the image.
 
 | Mode            | Serves                                                                                                                                              | Refuses                                                                                                                                                                                  |
 | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PRIVATE`       | `/healthz`, `/api/cron/*` (bearer), `/admin` and `/api/*` (Payload; anonymous API reads refused, administrator session and sign-in only)            | every page and public output, known or not: **503**; `robots.txt` answers `Disallow: /`                                                                                                  |
+| `PRIVATE`       | `/healthz`, `/api/cron/*` (bearer), `/admin` and `/api/*` (Payload; anonymous API reads refused, administrator session and sign-in only)            | every page and public output, known or not: **503** with a short Czech "temporarily unavailable" page; `robots.txt` answers `Disallow: /`                                                |
 | `INFORMATIONAL` | the above, plus `/`, `/historie`, `/metodika`, `/cenik`, `/kontakt`, the three legal pages, `/tipy/<slug>`, `robots.txt`, `sitemap.xml`, `llms.txt` | registration, sign-in, password and email flows, `/ucet/*`, `/auth/*`, `/predplatne`, `/webhooks/*`, and any path not in the route table: **404** (the site's own 404 page for GET/HEAD) |
 | `FULL`          | everything, unchanged behaviour                                                                                                                     | nothing                                                                                                                                                                                  |
 
@@ -111,13 +111,23 @@ Rules that hold in every mode:
   account action cannot be run through an open page.
 - **Refusals are `Cache-Control: no-store`, `X-Robots-Tag: noindex`** and
   carry `x-launch-gate: <reason>` so the verification script can tell them
-  from the application's own 404s.
+  from the application's own 404s. The `PRIVATE` page is self-contained
+  HTML (no script, stylesheet or image) defined in
+  `src/lib/launch-gate/responses.ts`; its copy is checked against the copy
+  rules by `responses.test.ts`.
+- **No link into a closed area.** The header's sign-in button and the
+  pricing cards' purchase button are rendered only when the gate would serve
+  their destination (`isLinkServed` in `src/lib/launch-gate/server.ts`, which
+  asks `decide()` itself). Outside `FULL` the pricing cards are a price list
+  without a purchase button. `link-guard.test.ts` fails when a component or
+  public page links into a closed area without that check, and
+  `--check-links` checks the rendered pages of a running deployment.
 
 ### Value per environment
 
 | Environment             | `LAUNCH_MODE`                                                                                                                                                                        |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Local development       | `FULL` in your `.env` (unset gives `PRIVATE`, which closes every page)                                                                                                               |
+| Local development       | `.env.example` ships `PRIVATE`; set `FULL` (or `INFORMATIONAL`) in your own `.env` and restart `pnpm dev`                                                                            |
 | CI build and unit tests | unset; the build does not read it and the tests set it themselves                                                                                                                    |
 | Staging                 | `PRIVATE` by default. `INFORMATIONAL` for pre-launch review **only behind the reverse-proxy access restriction below**. `FULL` only for Phase B verification (SC-010) with test keys |
 | Production              | `PRIVATE` until every Phase A item in `docs/LAUNCH-CHECKLIST.md` is ticked (D-012 fallback), then `INFORMATIONAL`. `FULL` only after the owner approves Phase B                      |
@@ -141,7 +151,46 @@ trailing slashes): 352 of 352 probes as expected in `PRIVATE` (variable
 unset), `INFORMATIONAL` and `FULL`. A registration Server Function posted to
 an open page ran in `FULL` and did not run in `INFORMATIONAL`. In `PRIVATE`
 the Payload API answered an administrator session and refused anonymous and
-cross-origin requests. An invalid value answered 500 everywhere.
+cross-origin requests, and every page answered the Czech 503 page. An
+invalid value answered 500 everywhere. Against `next dev` with a priced tier
+in the database, `--check-links` found no link to a refused path on any of
+the 9 public pages in `INFORMATIONAL`, and the purchase and sign-in buttons
+rendered in `FULL`. (Under `next start` the public pages currently answer
+500 until the operator identity is filled in, SC-015, so the link check was
+run against the development server.)
+
+These are guarantees of the application only. They say nothing about what
+the internet can reach on a real host; that is the list below.
+
+### The administrative surface
+
+The application serves `/admin` and the Payload REST API in **every** mode,
+`PRIVATE` included, because the administrator must be able to sign in to
+prepare content before launch. The application side, verified locally in
+`PRIVATE`:
+
+- Anonymous REST requests for content are refused (503) except the sign-in
+  operations listed in `src/lib/launch-gate/payload-api.ts`.
+- Anonymous calls to the admin panel's own Server Functions are refused by
+  Payload's access checks (`render-list` and `render-document` answer
+  "Unauthorized"; `table-state` and `form-state` return no data). The gate
+  adds nothing here; it relies on Payload.
+- Reachable anonymously **by design**: the sign-in page, login, logout,
+  token refresh, password reset, unlock and verification, `/api/users/me`
+  (answers `null`), `/api/users/init` (says whether an administrator
+  exists), `/api/access` (the permission map: names of the fields of the
+  publicly readable collections, no documents), and
+  `/api/users/first-register`, which creates the first administrator **when
+  the database has none**. Admin sign-in is locked for 10 minutes after 5
+  failed attempts (`src/collections/Users.ts`).
+
+So the application does not, and cannot by itself, keep the admin panel off
+the public internet. The verification script prints this surface on every
+run ("Administrative surface as seen from this client"); with
+`--expect-admin-restricted` it fails unless each of those requests is
+refused in front of the application (401, 403 or 404 without the gate's
+header) while `/healthz` still answers. Run locally without a proxy, it
+reports all five as reachable and exits 1, as it should.
 
 **Requires SC-009 verification on staging and production** (none of this is
 done yet):
@@ -156,20 +205,39 @@ done yet):
    switch to `PRIVATE`.
 3. While staging (or production in `PRIVATE`) is not public, an access
    restriction at VPS Centrum in front of the whole host (HTTP basic auth or
-   an IP allowlist), with `/healthz` exempt for the uptime monitor. Where
-   feasible, restrict `/admin` and `/api` to known addresses in every mode.
-4. The proxy strips framework-internal request headers (for example
+   an IP allowlist), with `/healthz` exempt for the uptime monitor. A
+   content-review staging in `INFORMATIONAL` is allowed **only** behind this
+   restriction, verified independently (from a client outside it) before
+   anyone is given the address.
+4. `/admin` and `/api/*` restricted at the proxy to the operator's addresses
+   (or a VPN, or basic auth) in `PRIVATE` mode, and wherever feasible in
+   every mode. `/api/cron/*` must stay reachable for the scheduler, either
+   through the same allowlist or by calling the container on `127.0.0.1`.
+   Verified with `--expect-admin-restricted` from a client outside the
+   allowlist, and without it from an allowed client.
+5. The first administrator is created **before** the host is reachable from
+   outside, and `/api/users/init` answers `{"initialized":true}` before the
+   proxy is opened. Until then, whoever reaches `/admin` first can create it.
+6. Rate limiting at the proxy for `/api/users/login` and
+   `/api/users/forgot-password`, which are anonymous by design.
+7. The proxy strips framework-internal request headers (for example
    `x-middleware-subrequest`) from client requests. The framework version in
    use already ignores them; this is defence in depth.
-5. The container port is bound to `127.0.0.1` only. Direct access would not
+8. The container port is bound to `127.0.0.1` only. Direct access would not
    bypass the gate, but it would bypass the proxy controls above.
-6. After every deploy and every mode change, run the verification against the
+9. After every deploy and every mode change, run the verification against the
    host and keep its summary line with the deploy record:
    `node src/scripts/verify-launch-gate.ts --base-url https://<host> --mode <MODE>`.
-   Add `--include-unsafe-methods` only on staging: it sends anonymous empty
-   POST/PUT/PATCH/DELETE requests, which reach open handlers.
-7. Monitoring: in `PRIVATE` mode `/` answers 503 by design, so the uptime
-   monitor must watch `/healthz`, or expect 503 on `/`.
+   Add `--check-links` in `INFORMATIONAL` (it fails if no public page could
+   be read), and `--expect-admin-restricted` from a client outside the admin
+   allowlist. Add `--include-unsafe-methods` only on staging: it sends
+   anonymous empty POST/PUT/PATCH/DELETE requests, which reach open handlers.
+10. Monitoring: in `PRIVATE` mode `/` answers 503 by design, so the uptime
+    monitor must watch `/healthz`, or expect 503 on `/`.
+
+Until each of these is done and recorded by SC-009, the launch gate's
+guarantees hold for the application only; none of the controls above is
+verified.
 
 Not covered by the gate: the public R2 media bucket is served by the CDN
 directly and stays reachable in every mode. It holds images uploaded for the
