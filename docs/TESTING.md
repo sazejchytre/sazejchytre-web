@@ -2,13 +2,20 @@
 
 ## Suites
 
-| Command               | Files                                      | Needs                                                    | In CI today                                |
-| --------------------- | ------------------------------------------ | -------------------------------------------------------- | ------------------------------------------ |
-| `pnpm test`           | `src/**/*.test.ts`                         | nothing (Node native type stripping)                     | yes                                        |
-| `pnpm test:db`        | `src/**/*.db-test.ts` (6 files, 121 tests) | a Postgres with migrations + seed                        | **no** (SC-011)                            |
-| `pnpm test:stripe`    | `*.stripe-test.ts`                         | Stripe **test** keys                                     | no, manual                                 |
-| `pnpm test:fakturoid` | `*.fakturoid-test.ts`                      | a Fakturoid **sandbox** account, `FAKTUROID_LIVE_TEST=1` | no, manual, never against the real account |
-| Playwright e2e        | none yet                                   | running app + test DB                                    | no (SC-011)                                |
+| Command               | Files                                      | Needs                                                                              | In CI today                           |
+| --------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------- | ------------------------------------- |
+| `pnpm test`           | `src/**/*.test.ts`                         | nothing (Node native type stripping)                                               | yes                                   |
+| `pnpm test:db`        | `src/**/*.db-test.ts` (6 files, 121 tests) | a Postgres with migrations + seed                                                  | **no** (SC-011)                       |
+| `pnpm test:stripe`    | `*.stripe-test.ts`                         | Stripe **test** keys                                                               | no, manual                            |
+| `pnpm test:fakturoid` | `*.fakturoid-test.ts`                      | `FAKTUROID_LIVE_TEST=1` plus whatever Fakturoid credentials are in the environment | no, manual. **See the warning below** |
+| Playwright e2e        | none yet                                   | running app + test DB                                                              | no (SC-011)                           |
+
+**`pnpm test:fakturoid` has no technical safeguard.** The flag is only an
+opt-in; the command uses the credentials it finds in the environment and can
+create real, permanently numbered accounting documents. Nothing in the code
+verifies that the target is a sandbox. The separation is procedural: run it
+only with credentials of an account created for testing, and keep
+`ACCOUNTING_PROVIDER=FAKE` (the default) or an HTTP stub for ordinary QA.
 
 ## Running DB tests locally (verified 2026-11-27)
 

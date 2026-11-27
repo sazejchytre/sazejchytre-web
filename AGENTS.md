@@ -81,7 +81,8 @@ visible as wins. Details: `docs/SPEC.md`.
 ## Conventions already in the codebase (keep them)
 
 - `src/proxy.ts`, never `src/middleware.ts` (Next 16).
-- Payload owns `/api/*`. Health check is `/healthz`. Stripe webhook is
+- Payload owns `/api/*` (REST only; GraphQL is disabled). Health check is
+  `/healthz`. Stripe webhook is
   `/webhooks/stripe`. Cron routes are `/api/cron/*`, bearer-authorised.
 - Env vars are validated at boot in `src/lib/env.ts` (server) and
   `src/lib/env.public.ts` (client). A missing variable fails the boot. Adding

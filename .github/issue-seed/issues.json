@@ -126,5 +126,77 @@
     "agent": "Owner (PM prepares runbook)",
     "phase": "A",
     "deps": []
+  },
+  {
+    "id": "SC-017",
+    "title": "Phase A surface gate: serve only what the launch scope includes",
+    "prio": "P0",
+    "agent": "Claude Code",
+    "phase": "A",
+    "deps": ["SC-003"]
+  },
+  {
+    "id": "SC-018",
+    "title": "One contract for client address and country",
+    "prio": "P0",
+    "agent": "Claude Code",
+    "phase": "A",
+    "deps": ["SC-003"]
+  },
+  {
+    "id": "SC-019",
+    "title": "Administrator account security",
+    "prio": "P1",
+    "agent": "Claude Code",
+    "phase": "A",
+    "deps": ["SC-003"]
+  },
+  {
+    "id": "SC-020",
+    "title": "Public form resilience and consent evidence",
+    "prio": "P2",
+    "agent": "Claude Code",
+    "phase": "A",
+    "deps": ["SC-018"]
+  },
+  {
+    "id": "SC-021",
+    "title": "Customer authentication hardening",
+    "prio": "P0",
+    "agent": "Claude Code",
+    "phase": "A",
+    "deps": ["SC-017", "SC-018"]
+  },
+  {
+    "id": "SC-022",
+    "title": "Fixture and test-data isolation",
+    "prio": "P1",
+    "agent": "Codex",
+    "phase": "A",
+    "deps": ["SC-003"]
+  },
+  {
+    "id": "SC-023",
+    "title": "Complete the published-record invariants",
+    "prio": "P1",
+    "agent": "Codex",
+    "phase": "A",
+    "deps": ["SC-022"]
+  },
+  {
+    "id": "SC-024",
+    "title": "One public projection for analyses",
+    "prio": "P1",
+    "agent": "Claude Code",
+    "phase": "A",
+    "deps": ["SC-023"]
+  },
+  {
+    "id": "SC-025",
+    "title": "Billing and accounting integrity",
+    "prio": "P1",
+    "agent": "Codex",
+    "phase": "B",
+    "deps": ["SC-010"]
   }
 ]

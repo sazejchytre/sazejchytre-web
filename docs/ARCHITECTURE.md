@@ -9,7 +9,7 @@ in `docs/DECISIONS.md` says otherwise.
 ```
 Browser ── HTTPS ── reverse proxy (VPS) ── Next.js server (node, port 3000)
                                               ├─ App Router pages  src/app/(frontend)
-                                              ├─ Payload admin/API src/app/(payload)  /admin, /api/*
+                                              ├─ Payload admin/REST src/app/(payload)  /admin, /api/*  (no GraphQL)
                                               ├─ better-auth       /auth/[...all]
                                               ├─ Stripe webhook    /webhooks/stripe
                                               ├─ Cron endpoints    /api/cron/*  (bearer CRON_SECRET)
@@ -23,7 +23,7 @@ External: Neon Postgres · Cloudflare R2 (media + private documents bucket)
 | Path                      | Contents                                                                                                                                                              |
 | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `src/app/(frontend)`      | Czech public pages: `/`, `historie`, `metodika`, `cenik`, `predplatne` (stub), `tipy/[slug]`, `kontakt`, auth pages, `ucet` (+ `doklady`, `zabezpeceni`), legal pages |
-| `src/app/(payload)`       | Payload admin and REST/GraphQL                                                                                                                                        |
+| `src/app/(payload)`       | Payload admin and its REST API. GraphQL is disabled in `src/payload.config.ts` and has no route of its own; `GET /api/graphql` answers 404                            |
 | `src/app/webhooks/stripe` | Stripe webhook route                                                                                                                                                  |
 | `src/app/api/cron/*`      | `sweep-lockouts`, `retry-document-delivery`                                                                                                                           |
 | `src/collections/*`       | Payload collections grouped by `auth`, `billing`, `content`, `tips`                                                                                                   |

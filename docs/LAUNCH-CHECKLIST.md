@@ -48,7 +48,7 @@ not a tick.
 - [ ] SC-008 paid zone merged, leak tests green (HTML, RSC payload, metadata, OG, sitemap, llms.txt, cache)
 - [ ] SC-014 checkout, cancel, change plan, payment method UI merged
 - [ ] SC-010 test-mode run recorded: checkout, renewal, failed payment, recovery, cancel at period end, immediate cancel, refund, dispute, webhook replay, out-of-order events
-- [ ] Fakturoid: one test document flow verified in a sandbox account, never the real numbering series; then one real low-value purchase by the operator, invoice checked by the accountant
+- [ ] Fakturoid: one test document flow verified against credentials of a separate test account (the command has no sandbox safeguard, see `docs/TESTING.md`), never the real numbering series; then one real low-value purchase by the operator, invoice checked by the accountant
 - [ ] Access removed on expiry verified with a real subscription
 - [ ] CSP in place (SC-012)
 - [ ] Support email monitored, response process agreed

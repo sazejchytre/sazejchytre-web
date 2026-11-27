@@ -14,9 +14,16 @@ What matters most, in order:
 ## Controls that exist (keep them)
 
 - **Access:** every Payload collection declares every access rule. Tips and
-  selections are `isAdmin` for read, so `/api/tips` and GraphQL return
-  nothing to the public. Public pages read through loaders with
-  `overrideAccess` and then pass data through `tipDisclosure`.
+  selections are `isAdmin` for read: an anonymous `GET /api/tips`,
+  `/api/tip-selections` and `/api/invoices` each answer 403 (verified
+  2026-11-27 against a production build), and GraphQL is disabled.
+- **Disclosure:** the tip detail and the home page read through loaders with
+  `overrideAccess` and then pass data through `tipDisclosure`. Other public
+  outputs (history, archive, sitemap, page metadata, `llms.txt`) derive their
+  data by their own paths and do not all share that one control today.
+  **One projection per viewer and point in time, driving detail, history,
+  archive, metadata and machine-readable outputs alike, is a condition of the
+  paid launch** (SC-024, then SC-008).
 - **Immutability:** Postgres triggers (see `docs/DATABASE.md`).
 - **Webhooks:** Stripe signature verified on the raw body; 400 on failure;
   claim table plus per-handler idempotency; concurrent replay tested.

@@ -73,3 +73,26 @@ avoid merge conflicts between parallel agent branches.
 Details of unfixed security vulnerabilities are kept out of the public
 repository and its issues; they are tracked privately by the product owner.
 Removing text after publication is not treated as removing it from history.
+
+## D-012 · 2026-11-27 · Needs owner
+
+Scope of the Monday 2026-11-30 launch. The independent review does not
+recommend opening the current revision to the public before its three P0
+items are closed or the surface they affect is disabled. The three options
+and this agent's recommendation (option 3: staging on Monday, public launch a
+few days later with the record) are in `docs/TASKS.md`, "Launch scope
+options".
+
+## D-013 · 2026-11-27 · Needs owner
+
+How the administration area gets its second factor: inside the application,
+or at an identity gateway in front of it. SC-019 delivers the comparison;
+a gateway may be a paid service, which needs owner approval either way.
+
+## D-014 · 2026-11-27 · Proposed
+
+Sprint 2 assigns database and invariant work (SC-022, SC-023, SC-025) to
+Codex and application, routing and interface work to Claude Code, with the
+other agent reviewing. This inverts the default reviewer role for those three
+packages, because the reviewer that produced the findings already holds the
+context, and it keeps two tracks running without shared files.
