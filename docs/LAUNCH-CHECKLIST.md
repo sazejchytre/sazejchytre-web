@@ -3,20 +3,29 @@
 Tick only with evidence (command output, screenshot, link). "Should work" is
 not a tick.
 
-## Phase A: public site, no payments
+## Phase A: public site with the track record, no payments
+
+Target 2026-11-30 (D-012). If any box below is unticked on the day, the site
+stays private (SC-017 private mode) and the launch moves.
 
 ### Code
 
 - [ ] SC-003 merged: CI green on `rebuild/v2` (typecheck, lint, test, build, audit)
 - [ ] SC-015 merged: operator identity filled from the register, `OPERATOR_DETAILS_CONFIRMED = true`, footer renders in a production build
 - [ ] SC-004 Phase A items closed (details in the private tracker)
+- [ ] SC-017 merged: the launch-scope gate and the private mode both proven by tests
+- [ ] SC-019 merged: no production traffic without a verified administrator, at boot and at request time
+- [ ] SC-026 merged: the administration area requires a second factor (route named in D-015)
+- [ ] SC-022 merged: fixture and test data cannot reach the production record
+- [ ] SC-023 merged: the published-record invariants hold at the database level
+- [ ] SC-024 merged: one projection drives every public output, and the public history is complete
 - [ ] Pricing page has no buy button and says when subscriptions open; `/predplatne` stub reachable only by direct URL or removed from navigation
 - [ ] Homepage and history show an honest empty state if no tip is settled yet
 - [ ] Legal pages (VOP, GDPR, cookies) reviewed by the operator; responsible-gambling notice wording approved
 
 ### Infrastructure (SC-009, SC-016)
 
-- [ ] D-004 decided (which server)
+- [ ] D-004 capacity verified on the chosen server: container memory at rest and under load, host free memory with both workloads, behaviour at the memory limit, and whether a deploy fits. Numbers recorded here: - container at rest: ____ MB, under load: ____ MB - host free memory with both workloads: ____ MB - deploy overlap fits: yes / no - conclusion: ____
 - [ ] Neon production branch created, migrations applied with owner approval, billing seed applied
 - [ ] R2 media bucket and private documents bucket exist, no public access on documents
 - [ ] Resend domain verified (SPF, DKIM); test email received

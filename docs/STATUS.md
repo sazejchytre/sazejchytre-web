@@ -117,19 +117,21 @@ worth removing (see SC-005).
 | 17  | Customer authentication needs hardening before registration opens (details tracked privately)                                                                                                                                    | P0               | SC-021               |
 | 18  | First-administrator setup and administration access control (details tracked privately)                                                                                                                                          | P0               | SC-019               |
 | 24  | The administration area has no second factor (details tracked privately)                                                                                                                                                         | P1               | SC-026               |
-| 19  | Published-record invariants are not complete (details tracked privately)                                                                                                                                                         | P1               | SC-023               |
+| 19  | Published-record invariants are not complete (details tracked privately). **On the A1 path since D-012**                                                                                                                         | P1               | SC-023               |
 | 20  | Public outputs do not all share one disclosure projection, and the public history omits one terminal state, so the record is not complete (details tracked privately)                                                            | P1               | SC-024               |
 | 21  | Billing and accounting integrity gaps between individually correct steps (details tracked privately)                                                                                                                             | P1 (paid launch) | SC-025               |
 | 22  | Public forms degrade both protections together, and local consent evidence lacks a subscriber reference (details tracked privately)                                                                                              | P2               | SC-020               |
 | 23  | `pnpm test:fakturoid` has no technical sandbox safeguard and can create real accounting documents                                                                                                                                | P2               | SC-010               |
 
-## Launch scope (decision pending, D-012)
+## Launch scope (decided, D-012)
 
-**Proposed and awaiting the owner's confirmation:** internal staging on
-Monday 2026-11-30, public launch between 3 and 7 December once every A1
-condition is met. The independent review does not recommend opening the
-current revision to the public before its three P0 items are closed or the
-surface they affect is disabled. See `docs/TASKS.md`, "Launch scope options".
+**Target: public launch on Monday 2026-11-30 with the real track record.**
+The date does not waive any blocker: if an A1 item in `docs/TASKS.md` is
+open on the day, the site stays private through SC-017's private mode and the
+launch moves. SC-023 and SC-024 are therefore on the A1 critical path.
+
+Production runs on the existing VPS (D-004), conditional on the capacity
+measurements SC-009 has to record.
 
 ## Infrastructure observed (read-only, 2026-11-27)
 
