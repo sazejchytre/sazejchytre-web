@@ -1,0 +1,130 @@
+[
+  {
+    "id": "SC-001",
+    "title": "Repository audit and backup",
+    "prio": "P0",
+    "agent": "Cowork (PM) + owner",
+    "phase": "A",
+    "deps": []
+  },
+  {
+    "id": "SC-002",
+    "title": "Project documentation and agent instructions",
+    "prio": "P1",
+    "agent": "Cowork (PM)",
+    "phase": "A",
+    "deps": ["SC-001"]
+  },
+  {
+    "id": "SC-003",
+    "title": "Fix CI build and dependency audit",
+    "prio": "P0",
+    "agent": "Claude Code",
+    "phase": "A",
+    "deps": ["SC-001"]
+  },
+  {
+    "id": "SC-004",
+    "title": "Backend security and authorization audit",
+    "prio": "P0",
+    "agent": "Codex",
+    "phase": "A",
+    "deps": ["SC-001"]
+  },
+  {
+    "id": "SC-005",
+    "title": "Establish visual design system and homepage prototype",
+    "prio": "P1",
+    "agent": "Claude Code",
+    "phase": "A",
+    "deps": ["SC-003"]
+  },
+  {
+    "id": "SC-006",
+    "title": "Redesign homepage",
+    "prio": "P1",
+    "agent": "Claude Code",
+    "phase": "A",
+    "deps": ["SC-005"]
+  },
+  {
+    "id": "SC-007",
+    "title": "Redesign public track record",
+    "prio": "P2",
+    "agent": "Claude Code",
+    "phase": "A",
+    "deps": ["SC-005"]
+  },
+  {
+    "id": "SC-008",
+    "title": "Paid zone: analysis detail and subscriber area",
+    "prio": "P1",
+    "agent": "Claude Code",
+    "phase": "B",
+    "deps": ["SC-005", "SC-004"]
+  },
+  {
+    "id": "SC-009",
+    "title": "VPS deployment configuration",
+    "prio": "P0",
+    "agent": "Claude Code (build) + Codex (review)",
+    "phase": "A",
+    "deps": ["SC-003"]
+  },
+  {
+    "id": "SC-010",
+    "title": "Payment and invoicing verification (Stripe test mode, Fakturoid sandbox)",
+    "prio": "P1",
+    "agent": "Codex + owner",
+    "phase": "B",
+    "deps": ["SC-014"]
+  },
+  {
+    "id": "SC-011",
+    "title": "Database integration tests in CI and Playwright end-to-end suite",
+    "prio": "P1",
+    "agent": "Codex",
+    "phase": "A",
+    "deps": ["SC-003"]
+  },
+  {
+    "id": "SC-012",
+    "title": "Production readiness review",
+    "prio": "P1",
+    "agent": "Codex",
+    "phase": "A",
+    "deps": ["SC-004", "SC-009", "SC-011"]
+  },
+  {
+    "id": "SC-013",
+    "title": "Launch approval and deployment",
+    "prio": "P1",
+    "agent": "Owner (with PM)",
+    "phase": "A",
+    "deps": ["SC-012", "SC-015", "SC-016"]
+  },
+  {
+    "id": "SC-014",
+    "title": "Checkout, cancellation and payment-method UI",
+    "prio": "P1",
+    "agent": "Claude Code",
+    "phase": "B",
+    "deps": ["SC-008"]
+  },
+  {
+    "id": "SC-015",
+    "title": "Operator identity and legal data",
+    "prio": "P0",
+    "agent": "Owner + Claude Code",
+    "phase": "A",
+    "deps": []
+  },
+  {
+    "id": "SC-016",
+    "title": "Production services provisioning",
+    "prio": "P0",
+    "agent": "Owner (PM prepares runbook)",
+    "phase": "A",
+    "deps": []
+  }
+]
