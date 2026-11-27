@@ -157,6 +157,22 @@ describe('the (preview) route group', () => {
     }
   })
 
+  it('is disallowed in robots.txt and absent from the sitemap inventory', async () => {
+    // Relative `.ts` import so `node --test` can load it without the `@/`
+    // alias. `routes.ts` has no imports of its own.
+    const routes = await import('../../lib/seo/routes.ts')
+
+    assert.ok(
+      routes.DISALLOWED_PREFIXES.includes('/nahled'),
+      '/nahled is missing from DISALLOWED_PREFIXES',
+    )
+    assert.deepEqual(
+      routes.PUBLIC_ROUTES.filter((route) => route.path.startsWith('/nahled')),
+      [],
+      'a preview path is in the public route inventory (sitemap, llms.txt)',
+    )
+  })
+
   it('is rendered per request, so a build never prerenders it', () => {
     const layout = readFileSync(path.join(GROUP, 'layout.tsx'), 'utf8')
 

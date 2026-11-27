@@ -905,87 +905,128 @@ describe('global-error.tsx uses palette values, not invented ones', () => {
    * WHY THIS FILE IS A SPECIAL CASE
    *
    * `global-error.tsx` replaces the whole document when the ROOT LAYOUT
-   * fails, so the stylesheet may not be linked and the page styles itself
-   * inline with literal hex values. That is the only correct way to write
-   * it, and the one place a colour can drift from the palette unnoticed —
-   * hence this check.
+   * fails — a real scenario here, because the footer refuses to render in
+   * production while the operator's register data is a placeholder. The
+   * stylesheet may not have been linked, so the page styles itself inline
+   * with literal hex values. That is the only correct way to write it, and
+   * the one place a colour can drift from the palette without the CSS drift
+   * tests noticing — hence this block.
    *
-   * ────────────────────────────────────────────────────────────────────────
-   * THE PENDING MIGRATION, PINNED
-   *
-   * The file sits outside the SC-005 branch's ownership, so it still carries
-   * the PREVIOUS palette's values. Rather than either editing a file this
-   * branch may not touch or dropping the check, each old value is listed
-   * here with the token that replaces it, and the test holds three lines:
-   *
-   *   1. every hex in the file is a current palette value OR a listed legacy
-   *      value — an invented colour still fails;
-   *   2. every listed legacy value is still in the file — the moment the
-   *      file is migrated, a stale entry fails and must be deleted, so this
-   *      list can only shrink;
-   *   3. the text pairs the file actually draws still reach AA.
-   *
-   * The exact replacement is in the SC-005 PR description.
+   * Every hex must be a LIGHT palette value (the page cannot take part in
+   * the theme swap), every text pair it draws must reach AA, and each pair is
+   * pinned to the token it stands for, so a future palette change fails here
+   * until this file follows.
    */
-  const LEGACY_GLOBAL_ERROR_VALUES: Readonly<Record<string, ColourToken>> = {
-    '#1a2e1f': 'ink',
-    '#5bc894': 'brand',
-    '#6d8775': 'border-strong',
-    '#dde8e0': 'border-subtle',
-    '#4a5f50': 'ink-muted',
-    '#27714e': 'brand-text',
-  }
-
   const hexes = [...globalError.matchAll(/#[0-9a-fA-F]{3,8}\b/g)].map((match) =>
     match[0].toLowerCase(),
   )
 
+  /** `{ … backgroundColor: 'x', color: 'y' … }` style objects, as written. */
+  const styleValue = (key: string): readonly string[] =>
+    [
+      ...globalError.matchAll(
+        new RegExp(`\\b${key}: '(#[0-9a-fA-F]{3,6})'`, 'g'),
+      ),
+    ].map((match) => (match[1] as string).toLowerCase())
+
   it('contains some hex literals, or this test is vacuous', () => {
     assert.ok(
-      hexes.length >= 4,
+      hexes.length >= 6,
       `found only ${String(hexes.length)} hex literals`,
     )
   })
 
-  it('uses only light-palette values or a pinned legacy value', () => {
-    const allowed = new Set([
-      ...Object.values(PALETTE.light).map((value) => value.toLowerCase()),
-      ...Object.keys(LEGACY_GLOBAL_ERROR_VALUES),
-    ])
+  it('uses only light-palette values', () => {
+    const allowed = new Set(
+      Object.values(PALETTE.light).map((value) => value.toLowerCase()),
+    )
 
     for (const hex of hexes) {
       assert.ok(
         allowed.has(hex),
-        `${hex} in global-error.tsx is neither a light-theme palette value nor a pinned legacy value`,
+        `${hex} in global-error.tsx is not a light-theme palette value. ` +
+          `Allowed: ${[...allowed].sort().join(', ')}`,
       )
     }
   })
 
-  it('still contains every pinned legacy value, so the list only shrinks', () => {
-    for (const [legacy, token] of Object.entries(LEGACY_GLOBAL_ERROR_VALUES)) {
+  it('carries none of the pre-SC-005 palette', () => {
+    // The six values the file held before it was migrated. Pinned so a
+    // revert of this file fails loudly rather than passing as "palette".
+    for (const old of [
+      '#1a2e1f',
+      '#5bc894',
+      '#6d8775',
+      '#dde8e0',
+      '#4a5f50',
+      '#27714e',
+    ]) {
+      assert.equal(hexes.includes(old), false, `${old} is back`)
+    }
+  })
+
+  it('draws the page in the page tokens', () => {
+    assert.ok(
+      styleValue('backgroundColor').includes(PALETTE.light['surface-page']),
+      'the page background is not surface-page',
+    )
+    assert.ok(
+      styleValue('color').includes(PALETTE.light.ink),
+      'the body text is not ink',
+    )
+  })
+
+  it('puts ink-on-brand (white) on the brand fill, never the page ink', () => {
+    // The SC-005 fill is dark, so the rule is the reverse of the old one:
+    // white on #236344 is 7.14:1, the page ink on it 2.46:1.
+    const fill = PALETTE.light.brand
+    const button = new RegExp(
+      `backgroundColor: '${fill}',\\s*color: '(#[0-9a-fA-F]{3,6})'`,
+      'i',
+    ).exec(globalError)
+
+    assert.ok(button, 'the retry button is not filled with the brand green')
+    assert.equal(
+      (button[1] as string).toLowerCase(),
+      PALETTE.light['ink-on-brand'],
+    )
+    assert.ok(meetsAA(button[1] as string, fill))
+  })
+
+  it('draws only text pairs that reach AA on the page', () => {
+    // Every text colour in the file is drawn on the page background, except
+    // the button's, checked above.
+    const page = PALETTE.light['surface-page']
+    const buttonInk = PALETTE.light['ink-on-brand']
+
+    for (const fg of styleValue('color')) {
+      if (fg === buttonInk) continue
+
       assert.ok(
-        hexes.includes(legacy),
-        `${legacy} is no longer in global-error.tsx (migrated to ${token}?) — ` +
-          'remove it from LEGACY_GLOBAL_ERROR_VALUES',
+        meetsAA(fg, page),
+        `${fg} on ${page} is ${String(ratio(fg, page))}:1`,
       )
     }
   })
 
-  it('draws only text pairs that reach AA', () => {
-    // The pairs the file renders: body text, the retry button, the muted
-    // furniture line and the help-line link, each on its background.
-    const pairs: readonly [string, string][] = [
-      ['#1a2e1f', '#ffffff'],
-      ['#1a2e1f', '#5bc894'],
-      ['#4a5f50', '#ffffff'],
-      ['#27714e', '#ffffff'],
-    ]
+  it('gives the outlined link a control border that reaches 3:1', () => {
+    const border = /border: '1px solid (#[0-9a-fA-F]{3,6})'/.exec(globalError)
 
-    for (const [fg, bg] of pairs) {
-      if (!hexes.includes(fg) || !hexes.includes(bg)) continue
+    assert.ok(border, 'the home link has no border')
+    assert.equal(
+      (border[1] as string).toLowerCase(),
+      PALETTE.light['border-strong'],
+    )
+    assert.ok(
+      meetsAA(border[1] as string, PALETTE.light['surface-page'], 'non-text'),
+    )
+  })
 
-      assert.ok(meetsAA(fg, bg), `${fg} on ${bg} is ${String(ratio(fg, bg))}:1`)
-    }
+  it('uses the 6px radius and sentence-case labels', () => {
+    assert.equal(/borderRadius: '(?!6px)/.test(globalError), false)
+    assert.match(globalError, />\s*Zkusit znovu\s*</)
+    assert.match(globalError, />\s*Na úvod\s*</)
+    assert.equal(/ZKUSIT ZNOVU|NA ÚVOD/.test(globalError), false)
   })
 
   it('still carries the help line, because every page must', () => {

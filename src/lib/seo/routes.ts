@@ -139,4 +139,8 @@ export const DISALLOWED_PREFIXES: readonly string[] = [
   '/zapomenute-heslo',
   '/overeni-emailu',
   '/predplatne',
+  // The design previews (SC-005). They answer 404 outside a development
+  // server and are `noindex` everywhere; this is the polite third layer, for
+  // a crawler that reaches a preview server someone exposed by mistake.
+  '/nahled',
 ]

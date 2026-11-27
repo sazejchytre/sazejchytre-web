@@ -8,6 +8,8 @@
  */
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
 
 import { previewCopy } from './copy.ts'
 
@@ -33,7 +35,7 @@ const contains = (needle: string) =>
 
 describe('the prototype copy', () => {
   it('has strings, or every rule below passes trivially', () => {
-    assert.ok(STRINGS.length >= 10)
+    assert.ok(STRINGS.length >= 8)
   })
 
   it('never tells anyone to place a bet (catalogue rule 1)', () => {
@@ -90,25 +92,41 @@ describe('the prototype copy', () => {
     }
   })
 
-  it('writes buttons in sentence case, not ALL CAPS (DESIGN.md rule 70)', () => {
-    for (const [key, label] of Object.entries(previewCopy.cta)) {
-      assert.notEqual(label, label.toUpperCase(), `${key} is ALL CAPS`)
+  it('keeps no button labels of its own: they come from the catalogue', () => {
+    // Since SC-005 the catalogue's action labels are sentence case and held
+    // to that by cs.test.ts, so a second copy here could only drift.
+    assert.equal('cta' in previewCopy, false)
+
+    const page = readFileSync(
+      path.join(process.cwd(), 'src/app/(preview)/nahled/homepage/page.tsx'),
+      'utf8',
+    )
+
+    for (const label of [
+      'Zobrazit historii',
+      'Celá historie',
+      'Celá analýza',
+      'Celá metodika',
+      'Získat přístup',
+    ]) {
       assert.equal(
-        label.charAt(0),
-        label.charAt(0).toUpperCase(),
-        `${key} does not start with a capital`,
+        page.includes(label),
+        false,
+        `page.tsx hard-codes "${label}"`,
       )
-      assert.equal(
-        label.slice(1),
-        label.slice(1).toLowerCase(),
-        `${key} is not sentence case`,
-      )
+    }
+  })
+
+  it('has no ALL CAPS phrase (DESIGN.md rule 70)', () => {
+    const shouting = /(?:^|[^\p{L}])\p{Lu}{2,}(?:\s+\p{Lu}{2,})+(?=$|[^\p{L}])/u
+
+    for (const { path: key, value } of STRINGS) {
+      assert.ok(!shouting.test(value), `${key} is ALL CAPS`)
     }
   })
 
   it('keeps Czech diacritics (catalogue rule 4)', () => {
     for (const [stripped, correct] of [
-      ['Zobrazit historii', null],
       ['Ziskat', 'Získat'],
       ['pristup', 'přístup'],
       ['Cela ', 'Celá '],

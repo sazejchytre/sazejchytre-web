@@ -5,17 +5,12 @@
  * WHY THIS IS NOT IN `src/i18n/messages/cs.ts`
  *
  * Customer-facing Czech lives in `cs.ts` (AGENTS.md rule 15). This page is
- * not customer-facing — it answers 404 outside a development server — and
- * `cs.ts` is outside the SC-005 branch's file ownership. So the prototype
- * reads every string it can from the catalogue and keeps only two kinds
- * here:
- *
- *   1. SENTENCE-CASE versions of existing button labels. DESIGN.md rule 70
- *      replaces the catalogue's ALL CAPS buttons; `cs.ts` and its test still
- *      pin the uppercase forms, so the change is proposed in the PR as an
- *      exact diff rather than made here. The prototype shows the proposal.
- *   2. A few prototype-only sentences (the preview notice, the table
- *      caption, the small-sample warning).
+ * not customer-facing — it answers 404 outside a development server — so it
+ * reads every string it can from the catalogue, button labels included (they
+ * are sentence case there since SC-005), and keeps here only the few
+ * sentences that exist for the prototype alone: the preview notice, the
+ * table caption and time-zone line, the small-sample warning and DESIGN.md's
+ * thesis sentence as a heading.
  *
  * When SC-006 adopts the design, these move into `cs.ts` and this file goes.
  *
@@ -31,20 +26,6 @@ export const previewCopy = {
   /** The strip at the top of the page. For the reviewer, not for a visitor. */
   notice:
     'Náhled návrhu vzhledu ke schválení (rozhodnutí D-005). Mimo vývojový server tato adresa vrací 404. Všechna čísla jsou živá z databáze; kde data chybí, stránka to přizná.',
-
-  /** Sentence-case forms of existing catalogue labels (rule 70). */
-  cta: {
-    /** cs.home.hero.primaryCta, `ZOBRAZIT HISTORII`. */
-    showHistory: 'Zobrazit historii',
-    /** cs.home.record.cta, `CELÁ HISTORIE`. */
-    fullHistory: 'Celá historie',
-    /** cs.home.freeTip.cta, `CELÁ ANALÝZA`. */
-    fullAnalysis: 'Celá analýza',
-    /** cs.history.methodology.cta, `CELÁ METODIKA`. */
-    fullMethodology: 'Celá metodika',
-    /** cs.pricing.cta, `ZÍSKAT PŘÍSTUP`. */
-    getAccess: 'Získat přístup',
-  },
 
   record: {
     /** DESIGN.md's own sentence: the one the design has to prove. */

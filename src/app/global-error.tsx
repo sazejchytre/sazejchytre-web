@@ -59,8 +59,8 @@ export default function GlobalError({
           margin: 0,
           padding: '48px 24px',
           fontFamily: 'system-ui, sans-serif',
-          backgroundColor: '#ffffff',
-          color: '#1a2e1f',
+          backgroundColor: '#f8f9f6',
+          color: '#171a18',
           lineHeight: 1.5,
         }}
       >
@@ -82,18 +82,19 @@ export default function GlobalError({
               style={{
                 minHeight: '44px',
                 padding: '10px 20px',
-                borderRadius: '8px',
+                borderRadius: '6px',
                 border: 'none',
-                // #5bc894 with #1a2e1f on it: the contrast rule holds even
-                // here. White on this green is 2.07:1.
-                backgroundColor: '#5bc894',
-                color: '#1a2e1f',
+                // #236344 with #ffffff on it: the contrast rule holds even
+                // here. The brand fill is dark, so its ink is white (7.14:1);
+                // the page ink on it would be 2.46:1.
+                backgroundColor: '#236344',
+                color: '#ffffff',
                 fontWeight: 600,
                 fontSize: '1rem',
                 cursor: 'pointer',
               }}
             >
-              ZKUSIT ZNOVU
+              Zkusit znovu
             </button>
             {/*
               A plain `<a>`, not `next/link`, and deliberately so: the root
@@ -109,14 +110,14 @@ export default function GlobalError({
                 display: 'inline-flex',
                 alignItems: 'center',
                 padding: '10px 20px',
-                borderRadius: '8px',
-                border: '1px solid #6d8775',
-                color: '#1a2e1f',
+                borderRadius: '6px',
+                border: '1px solid #767c78',
+                color: '#171a18',
                 textDecoration: 'none',
                 fontWeight: 600,
               }}
             >
-              NA ÚVOD
+              Na úvod
             </a>
           </p>
 
@@ -128,15 +129,15 @@ export default function GlobalError({
           <hr
             style={{
               border: 'none',
-              borderTop: '1px solid #dde8e0',
+              borderTop: '1px solid #dfe3df',
               margin: '32px 0 16px',
             }}
           />
-          <p style={{ fontSize: '0.875rem', color: '#4a5f50', margin: 0 }}>
+          <p style={{ fontSize: '0.875rem', color: '#6b716e', margin: 0 }}>
             18+ · Informační a analytická služba o sportu. Nepřijímáme sázky a
             neprovozujeme hazardní hru. Máte problém s hazardem? Národní linka
             pro odvykání,{' '}
-            <a href="tel:800350000" style={{ color: '#27714e' }}>
+            <a href="tel:800350000" style={{ color: '#236344' }}>
               800 350 000
             </a>
             .

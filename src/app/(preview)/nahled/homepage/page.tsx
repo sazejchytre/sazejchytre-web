@@ -164,7 +164,7 @@ export default async function HomepagePreview() {
             </p>
             <div className="flex flex-wrap gap-3">
               <Button href="/historie" size="lg">
-                {previewCopy.cta.showHistory}
+                {home('hero.primaryCta')}
               </Button>
               <Button href="/metodika" variant="secondary" size="lg">
                 {history('methodology.heading')}
@@ -189,8 +189,8 @@ export default async function HomepagePreview() {
               smallSampleNote={previewCopy.record.smallSample}
               noValueLabel={previewCopy.record.noValueLabel}
               links={[
-                { href: '/historie', label: previewCopy.cta.fullHistory },
-                { href: '/metodika', label: previewCopy.cta.fullMethodology },
+                { href: '/historie', label: home('record.cta') },
+                { href: '/metodika', label: history('methodology.cta') },
               ]}
             />
           </div>
@@ -213,7 +213,7 @@ export default async function HomepagePreview() {
               <p className="text-body text-ink-muted">{home('record.body')}</p>
             </div>
             <Button href="/historie" variant="ghost">
-              {previewCopy.cta.fullHistory}
+              {home('record.cta')}
             </Button>
           </div>
 
@@ -252,7 +252,7 @@ export default async function HomepagePreview() {
                   tip={freeTip}
                   labels={{
                     delayNotice: home('freeTip.delayNotice'),
-                    cta: previewCopy.cta.fullAnalysis,
+                    cta: home('freeTip.cta'),
                     minimumOddsNote: tipCopy('minimumOddsNote'),
                     oddsColumn: tipCopy('oddsColumn'),
                   }}
@@ -307,7 +307,7 @@ export default async function HomepagePreview() {
                 yearlyEquivalent: (amount) =>
                   pricing('yearlyEquivalent', { amount }),
                 featuresHeading: pricing('featuresHeading'),
-                cta: previewCopy.cta.getAccess,
+                cta: pricing('cta'),
                 vatNote: pricing('vatNote'),
                 unavailable: pricing('unavailable'),
                 featureLabel: (key: FeatureKey) => pricing(`features.${key}`),
