@@ -3,23 +3,25 @@
 Subscription service providing AI-assisted sports betting **analysis**. The
 service is informational: it does not accept bets and does not broker gambling.
 
-> **Status: step 1 — foundation only.** Repository scaffold, validated config,
-> database, Payload core, health endpoint and CI. There are no real pages, no
-> auth flows, no payments, no i18n and no brand design yet.
+> **Status (2026-11-27):** backend complete and tested (auth, billing domain,
+> Stripe webhook, Fakturoid invoicing, tips with database-enforced
+> immutability, public site). Not yet built: paid zone, checkout UI, VPS
+> deployment. Current state, check results and blockers: `docs/STATUS.md`.
+> Rules for coding agents: `AGENTS.md`. All project docs: `docs/`.
 
 ## Stack
 
-| Concern     | Choice                                       |
-| ----------- | -------------------------------------------- |
-| Framework   | Next.js 16 (App Router, Turbopack), React 19 |
-| Language    | TypeScript, `strict` plus every extra check  |
-| Styling     | Tailwind CSS v4 (`@theme` tokens)            |
-| CMS         | Payload CMS 3, mounted inside the Next app   |
-| Database    | Neon Postgres via `@payloadcms/db-postgres`  |
-| Media       | Cloudflare R2 via `@payloadcms/storage-s3`   |
-| Cache       | Upstash Redis (configured, not yet used)     |
-| Hosting     | Vercel Pro                                   |
-| Package mgr | pnpm                                         |
+| Concern     | Choice                                                                                       |
+| ----------- | -------------------------------------------------------------------------------------------- |
+| Framework   | Next.js 16 (App Router, Turbopack), React 19                                                 |
+| Language    | TypeScript, `strict` plus every extra check                                                  |
+| Styling     | Tailwind CSS v4 (`@theme` tokens)                                                            |
+| CMS         | Payload CMS 3, mounted inside the Next app                                                   |
+| Database    | Neon Postgres via `@payloadcms/db-postgres`                                                  |
+| Media       | Cloudflare R2 via `@payloadcms/storage-s3`                                                   |
+| Cache       | Upstash Redis (rate limiting)                                                                |
+| Hosting     | Docker on a Váš Hosting VPS (planned, see `docs/DEPLOYMENT.md`); Vercel config still present |
+| Package mgr | pnpm                                                                                         |
 
 ## Getting started
 
@@ -476,7 +478,6 @@ Nothing in the application code disables a trigger.
 - `src/lib/legal/operator.ts` holds `TODO:` placeholders. Nothing public may
   ship until they are replaced and `OPERATOR_DETAILS_CONFIRMED` is `true`.
 - Responsible-gambling disclaimer wording is pending legal review.
-- Upstash Redis is validated at boot but not consumed.
 - **No checkout UI.** The Stripe adapter returns a client secret for the
   Payment Element; the page that confirms it is step 5.
 - **No checkout page**, so in practice nothing issues an invoice yet: the
