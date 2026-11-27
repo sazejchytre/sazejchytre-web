@@ -7,13 +7,50 @@ The state of each individual task lives in GitHub Issues
 primary source. Details of unfixed security findings are never written here
 (see `docs/SECURITY.md`, "Disclosure").
 
-Last updated: 2026-11-27 by the project-management agent (Claude).
-Baseline commit: `main` @ `466c542` (2026-11-06, "perf(fonts): outlined marks,
+Last updated: 2026-11-27 (evening, after PR #18) by the project-management agent (Claude).
+Integration branch: `rebuild/v2` @ `b12cbe1`. Baseline commit: `main` @ `466c542` (2026-11-06, "perf(fonts): outlined marks,
 variable Inter, and a smaller preload set").
 
 Every result below was produced by running the command on 2026-11-27 in a
 clean clone, Node 22.23, pnpm 11.1.1. Nothing here is copied from an older CI
 run.
+
+## Independent review (SC-004), 2026-11-27
+
+An independent security and authorization review of `rebuild/v2` @ `45c82d2`
+was delivered to the product owner privately, as `docs/SECURITY.md`
+("Disclosure") requires. Public summary:
+
+| Severity | P0  | P1  | P2  | P3  |
+| -------- | --- | --- | --- | --- |
+| Findings | 3   | 12  | 8   | 1   |
+
+**The reviewer does not recommend opening this revision to the public before
+the three P0 items are closed, or the surface they affect is disabled by an
+enforced control.** The findings are spread across customer authentication,
+first-administrator setup, the reverse-proxy trust boundary, the published
+record's invariants, public output projections, and the billing and
+accounting paths. Specifics stay in the owner's private tracker until each
+fix is deployed. The review also independently confirmed the database
+baseline (121/121) and re-ran the full local check suite.
+
+Work packages are SC-017 to SC-025 below. Which of them block which launch
+phase is in `docs/TASKS.md`.
+
+## SC-003 closed, 2026-11-27
+
+PR #18 was squash-merged into `rebuild/v2` as `b12cbe1` by the product owner.
+The four CI variables, the `undici` and `happy-dom` overrides and the
+`src/lib/env.ts` comment fix are in the integration branch. CI is green on all
+five steps.
+
+Independently reviewed by the second agent: **approved with non-blocking
+notes** ([review](https://github.com/sazejchytre/sazejchytre-web/pull/18#pullrequestreview-6092294052)).
+The review also closed the one acceptance criterion the implementer could not
+check: the rich-text editor in the administration panel was loaded and saved
+in a browser, with the reload, the database row and the formatting verified,
+and the database suite passed 121 of 121. Every SC-003 acceptance criterion is
+met.
 
 ## Check results on `main`
 
@@ -61,21 +98,40 @@ worth removing (see SC-005).
 
 | #   | Finding                                                                                                                                                                                                                          | Severity         | Issue                |
 | --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- | -------------------- |
-| 1   | CI build fails: 4 env vars missing in `ci.yml`                                                                                                                                                                                   | P0               | SC-003               |
-| 2   | CI audit fails: 6 high advisories                                                                                                                                                                                                | P0               | SC-003               |
+| 1   | ~~CI build fails: 4 env vars missing in `ci.yml`~~ **fixed, merged in #18**                                                                                                                                                      | P0               | SC-003 done          |
+| 2   | ~~CI audit fails: 6 high advisories~~ **fixed, merged in #18**                                                                                                                                                                   | P0               | SC-003 done          |
 | 3   | **Operator identity is placeholder.** `src/lib/legal/operator.ts` holds `TODO:` values and `OPERATOR_DETAILS_CONFIRMED = false`. In production the footer throws, so **every public page returns an error** until this is filled | P0               | SC-015               |
-| 4   | Client identity handling needs hardening for the VPS proxy setup (details tracked privately)                                                                                                                                     | P0 for VPS       | SC-004               |
+| 4   | Client identity handling needs hardening for the VPS proxy setup (details tracked privately)                                                                                                                                     | P0 for VPS       | SC-018               |
 | 5   | **No paid zone.** `tipy/[slug]` always calls `tipDisclosure(tip, [], now)`; no page ever renders FULL (pick, odds, stake, rationale) for a subscriber                                                                            | P1 (paid launch) | SC-008               |
 | 6   | **No checkout UI.** `/predplatne` is an explicit stub. No subscribe, cancel, change-plan or payment-method UI exists, although the port and adapter support them                                                                 | P1 (paid launch) | SC-014               |
 | 7   | Stripe adapter, price sync and invoice issuing have **never run against Stripe** (README, Known gaps)                                                                                                                            | P1 (paid launch) | SC-010               |
 | 8   | No Dockerfile, no compose, no VPS deploy; `vercel.json` holds the two cron schedules                                                                                                                                             | P0               | SC-009               |
 | 9   | DB integration tests are not in CI and are documented as running "against Neon"                                                                                                                                                  | P1               | SC-011               |
-| 10  | Operational safeguards around fixture scripts need review (details tracked privately)                                                                                                                                            | P1               | SC-004               |
+| 10  | Operational safeguards around fixture and test data (details tracked privately)                                                                                                                                                  | P1               | SC-022               |
 | 11  | No Content-Security-Policy (README, Known gaps)                                                                                                                                                                                  | P2               | SC-012               |
 | 12  | README describes "step 1, foundation only" and "Vercel Pro"                                                                                                                                                                      | P2               | SC-002 (done in #17) |
-| 13  | `env.ts` comment says the Turnstile site key lives in `env.public.ts`; `env.public.ts` says it deliberately does not                                                                                                             | P3               | SC-003               |
+| 13  | ~~`env.ts` comment contradicted `env.public.ts`~~ **fixed, merged in #18**                                                                                                                                                       | P3               | SC-003 done          |
 | 14  | `R2_DOCUMENTS_BUCKET` documented as not created yet; unverified                                                                                                                                                                  | P1 (paid launch) | SC-016               |
 | 15  | Fonts are Inter + Barlow via `next/font/google`; target design uses Geist                                                                                                                                                        | P2               | SC-005               |
+| 16  | The customer-account surface (registration, sign-in, 2FA, account pages, `/auth/*`) has no single enforced off switch, so a launch without accounts cannot be proven account-free                                                | P0               | SC-017               |
+| 17  | Customer authentication needs hardening before registration opens (details tracked privately)                                                                                                                                    | P0               | SC-021               |
+| 18  | First-administrator setup and administration access control (details tracked privately)                                                                                                                                          | P0               | SC-019               |
+| 24  | The administration area has no second factor (details tracked privately)                                                                                                                                                         | P1               | SC-026               |
+| 19  | Published-record invariants are not complete (details tracked privately). **On the A1 path since D-012**                                                                                                                         | P1               | SC-023               |
+| 20  | Public outputs do not all share one disclosure projection, and the public history omits one terminal state, so the record is not complete (details tracked privately)                                                            | P1               | SC-024               |
+| 21  | Billing and accounting integrity gaps between individually correct steps (details tracked privately)                                                                                                                             | P1 (paid launch) | SC-025               |
+| 22  | Public forms degrade both protections together, and local consent evidence lacks a subscriber reference (details tracked privately)                                                                                              | P2               | SC-020               |
+| 23  | `pnpm test:fakturoid` has no technical sandbox safeguard and can create real accounting documents                                                                                                                                | P2               | SC-010               |
+
+## Launch scope (decided, D-012)
+
+**Target: public launch on Monday 2026-11-30 with the real track record.**
+The date does not waive any blocker: if an A1 item in `docs/TASKS.md` is
+open on the day, the site stays private through SC-017's private mode and the
+launch moves. SC-023 and SC-024 are therefore on the A1 critical path.
+
+Production runs on the existing VPS (D-004), conditional on the capacity
+measurements SC-009 has to record.
 
 ## Infrastructure observed (read-only, 2026-11-27)
 
@@ -92,6 +148,8 @@ was changed on the server. See `docs/DEPLOYMENT.md` and D-004.
 | `archive/pre-rebuild`                                 | frozen copy of `main` @ `466c542`                     |
 | `rebuild/v2`                                          | integration branch, all PRs target it                 |
 | `docs/sc-002-project-docs`                            | documentation PR #17, squash-merged into `rebuild/v2` |
+| `fix/sc-003-ci-build-audit`                           | PR #18, squash-merged into `rebuild/v2` as `b12cbe1`  |
+| `docs/sc-002-corrections`                             | this documentation PR                                 |
 | older `feat/*`, `fix/*`, `chore/*`, `legacy-supabase` | kept, not deleted                                     |
 
 ## Coordination (maintained by Cowork)
@@ -100,7 +158,26 @@ Which open branch owns which files, so parallel agents never edit the same
 file. Each agent also lists its owned files in its PR description. Task
 state itself is in the linked issue.
 
-| Issue     | Branch                                           | Agent       | Owned files                                                                                         |
-| --------- | ------------------------------------------------ | ----------- | --------------------------------------------------------------------------------------------------- |
-| #3 SC-003 | `fix/sc-003-ci-build-audit`                      | Claude Code | `.github/workflows/ci.yml`, `pnpm-workspace.yaml`, `pnpm-lock.yaml`, `src/lib/env.ts` (one comment) |
-| #4 SC-004 | `audit/sc-004-security` (local only, not pushed) | Codex       | none in the repository; the report is kept privately                                                |
+| Issue     | Branch                               | Agent       | Owned files                                                                                         |
+| --------- | ------------------------------------ | ----------- | --------------------------------------------------------------------------------------------------- |
+| #3 SC-003 | `fix/sc-003-ci-build-audit` (PR #18) | Claude Code | `.github/workflows/ci.yml`, `pnpm-workspace.yaml`, `pnpm-lock.yaml`, `src/lib/env.ts` (one comment) |
+| #2 SC-002 | `docs/sc-002-corrections`            | Cowork      | `AGENTS.md`, `CLAUDE.md`, `docs/*`, `.github/issue-seed/*`                                          |
+
+Sprint 2 branches are listed in `docs/TASKS.md` with their owned files. They
+are not started yet.
+
+## File hotspots (read before starting any branch)
+
+These files are touched by several planned packages, so only one branch may
+own each at a time:
+
+| File                                                                                                      | Wanted by                                |
+| --------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| `src/lib/auth/config.ts`                                                                                  | SC-018, SC-021                           |
+| `src/lib/forms/contact.ts`, `src/lib/forms/newsletter.ts`                                                 | SC-018, SC-020                           |
+| `src/lib/tips/loader.ts`, `src/lib/tips/settlement.ts`                                                    | SC-023, SC-024                           |
+| `src/lib/tips/archive.ts`, `src/components/history/TipsTable.tsx`, `src/app/(frontend)/historie/page.tsx` | SC-024, SC-007                           |
+| `src/seed/tips.ts`                                                                                        | SC-022, SC-024                           |
+| `src/lib/billing/stripe/webhook.ts`, `src/app/webhooks/stripe/route.ts`                                   | SC-025 only (whole package is one chain) |
+| `src/components/ui/*`, `src/app/(frontend)/globals.css`                                                   | SC-005 only                              |
+| `package.json`, `pnpm-lock.yaml`                                                                          | SC-003 (open), then SC-005               |

@@ -8,24 +8,29 @@ removed in the same PR that adds the replacement.
 installs software, runs migrations or deploys to production without explicit
 product-owner approval.
 
-## Candidate server
+## The server (chosen in D-004, capacity check pending)
 
-The concrete server (hostname, address, plan, other workloads) is kept out of
-this public repository and recorded in the operator's private notes. What
-matters for the design, observed read-only on 2026-11-27:
+Production runs on the existing VPS. The concrete server (hostname, address,
+plan, other workloads) is kept out of this public repository and recorded in
+the operator's private notes. What matters for the design, observed read-only
+on 2026-11-27:
 
-- **Small, shared VPS.** The candidate server has 4 GB RAM, most of it already
-  in use by another workload, and is managed through the hosting provider's
-  VPS Centrum panel.
-- **Do not build images on the server.** `next build` for this app needs
-  more memory than is free. Build in GitHub Actions, push to GHCR, pull on the
-  server.
-- **Memory is the bottleneck.** A Next 16 + Payload server process typically
-  needs several hundred MB. Measure on staging before production; if free
-  memory stays under ~500 MB, upgrade RAM or use a separate server
-  (decision D-004).
-- **Ownership:** production for the operator's business should preferably run
-  on a server contracted by the operator (decision D-004).
+- **Small, shared VPS.** 4 GB RAM, most of it already in use by another
+  workload, managed through the hosting provider's VPS Centrum panel.
+- **Do not build images on the server.** `next build` for this application
+  needs more memory than is free. Build in GitHub Actions, push to GHCR, pull
+  on the server.
+- **Memory is the bottleneck, and the capacity check is a launch condition.**
+  D-004 accepted this server on the condition that SC-009 measures real
+  headroom rather than assuming it. Required measurements, recorded in
+  `docs/LAUNCH-CHECKLIST.md` with numbers: resident memory of the application
+  container at rest and under a short load test of the history page; free
+  memory on the host with both workloads running; what happens when the
+  container hits its memory limit; and whether a deploy, which runs the old
+  and the new container briefly together, fits. If headroom is thin, the
+  options are a hard memory limit plus swap, fewer server workers, a RAM
+  upgrade, or a separate server, and that choice goes back to the owner with
+  the numbers.
 - **Coolify is not recommended here.** It expects to own Docker, ports 80/443
   and its own proxy, which conflicts with VPS Centrum and the existing
   workload. Use Docker Compose bound to `127.0.0.1`, with VPS Centrum's web

@@ -23,14 +23,16 @@ Hosting moves from Vercel to a Váš Hosting VPS. Docker image built in CI,
 Compose on the server, existing VPS Centrum reverse proxy and TLS. Coolify
 not used (conflicts with VPS Centrum and the existing workload on the server).
 
-## D-004 · 2026-11-27 · Needs owner
+## D-004 · 2026-11-27 · Accepted (owner)
 
-Which server runs production. The only candidate today is a small shared VPS
-(4 GB RAM, mostly in use by another workload, not contracted by the operator).
-Details are in the operator's private notes, not in this public repository.
-Options: (a) separate VPS contracted by the operator (recommended),
-(b) upgrade the existing server's RAM and host both, (c) existing server for
-staging only. Paid service, needs owner approval.
+**Production runs on the existing VPS, conditional on verifying its
+capacity.** The server is small and already carries another workload, so the
+capacity check is part of the decision, not an afterthought: SC-009 has to
+measure real memory headroom under load and record it before production
+traffic is pointed at it. Images are built in CI and pulled, never built on
+the server. If the measurement shows the application cannot run there with
+room to spare, that comes back to the owner as a new decision with numbers,
+not as an assumption.
 
 ## D-005 · 2026-11-27 · Needs owner
 
@@ -48,11 +50,11 @@ exists at Phase B launch (likely one or two plans), add the rest later.
 Monitoring with free tiers first (external uptime check on `/healthz`,
 container logs with rotation). Paid error tracking only if needed.
 
-## D-008 · 2026-11-27 · Proposed
+## D-008 · 2026-11-27 · Accepted (owner, confirmed by D-012)
 
 Launch in two phases: Phase A public site without payments on 2026-11-30 if
-its checklist passes; Phase B paid service after Stripe written approval and
-SC-008/SC-010/SC-014 are done. Reason: checkout, paid zone and cancellation
+its checklist passes, and with the real track record (D-012); Phase B paid
+service after Stripe written approval and SC-008/SC-010/SC-014 are done. Reason: checkout, paid zone and cancellation
 UI do not exist; Stripe's restricted list names sports forecasting with a
 prize, so acceptance must be confirmed in writing rather than assumed.
 
@@ -73,3 +75,37 @@ avoid merge conflicts between parallel agent branches.
 Details of unfixed security vulnerabilities are kept out of the public
 repository and its issues; they are tracked privately by the product owner.
 Removing text after publication is not treated as removing it from history.
+
+## D-012 · 2026-11-27 · Accepted (owner)
+
+**Target: public launch on Monday 2026-11-30, including the real track
+record.** The date is a target, not permission to bypass a blocker. If the
+A1 conditions in `docs/TASKS.md` are not met by then, **the site stays
+private** and the launch moves; it does not go public with an open blocker.
+
+Consequences for the plan: SC-023 and SC-024 move into the A1 critical path,
+because publishing the record requires them. SC-017 therefore also has to
+provide a mode that keeps the whole site private, so the fallback is an
+enforced state and not an intention.
+
+## D-013 · 2026-11-27 · Accepted (owner)
+
+**Both routes to a second factor for the administration area stay on the
+table, and SC-019 produces the comparison.** Application-side and identity
+gateway are each acceptable to evaluate; the owner picks the technology once
+the comparison exists, which is recorded as D-015. SC-026 implements the
+chosen route and carries its own acceptance criteria.
+
+## D-014 · 2026-11-27 · Proposed
+
+Sprint 2 assigns database and invariant work (SC-022, SC-023, SC-025) to
+Codex and application, routing and interface work to Claude Code, with the
+other agent reviewing. This inverts the default reviewer role for those three
+packages, because the reviewer that produced the findings already holds the
+context, and it keeps two tracks running without shared files.
+
+## D-015 · open · technology for the administrator second factor
+
+Decided by the owner once SC-019's comparison is delivered, per D-013. SC-026
+does not start before this entry names the route. This is a scheduled
+decision point, not an open question to re-ask.
