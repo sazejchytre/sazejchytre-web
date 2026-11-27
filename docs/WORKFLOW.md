@@ -9,6 +9,17 @@
 | Implementer               | Claude Code                                                                                              | features, UI, design system, approved refactors, tests                                                 |
 | Reviewer and auditor      | OpenAI Codex                                                                                             | independent review, security, webhooks, DB invariants, Playwright, deploy review, fixes it is assigned |
 
+## Source of truth
+
+- **GitHub Issues** hold the state of every task (labels, assignee, comments,
+  linked PR). The project board, when created, mirrors them.
+- **`docs/STATUS.md`** is the project-level snapshot. Only Cowork edits it,
+  usually in a small docs PR after merges, so parallel agent branches never
+  conflict on it. The same applies to `docs/TASKS.md` and
+  `docs/DECISIONS.md`.
+- Security findings that are not fixed yet live only in the owner's private
+  tracker (`docs/SECURITY.md`, "Disclosure").
+
 ## Board
 
 Columns: **Backlog → Ready → In Progress → Review → Testing → Done**.
@@ -34,8 +45,9 @@ acceptance criteria, required tests, dependencies, priority, agent.
 
 ## Parallel work rules
 
-- One agent per file at a time. Owned files are listed in the
-  "Work in progress" table of `docs/STATUS.md`.
+- One agent per file at a time. Each PR description lists the files the
+  branch owns; Cowork mirrors that in the Coordination table of
+  `docs/STATUS.md`.
 - Separate git worktree, branch, dev port (Claude Code 3000, Codex 3001) and
   database (`sc_claude`, `sc_codex` locally, never shared).
 - Review work by Codex is read-only unless the issue assigns it a fix.

@@ -23,16 +23,16 @@ visible as wins. Details: `docs/SPEC.md`.
 
 ## Read before you change anything
 
-| You are touching                      | Read first                           |
-| ------------------------------------- | ------------------------------------ |
-| Anything                              | `docs/STATUS.md`, `docs/WORKFLOW.md` |
-| UI, copy, pages                       | `docs/DESIGN.md`                     |
-| Module boundaries, new code locations | `docs/ARCHITECTURE.md`               |
-| Collections, migrations, triggers     | `docs/DATABASE.md`                   |
-| Auth, access, payments, webhooks, IPs | `docs/SECURITY.md`                   |
-| Tests, CI                             | `docs/TESTING.md`                    |
-| Docker, VPS, cron, env vars           | `docs/DEPLOYMENT.md`                 |
-| Invoicing / Fakturoid                 | `docs/accounting-integration.md`     |
+| You are touching                      | Read first                                             |
+| ------------------------------------- | ------------------------------------------------------ |
+| Anything                              | the GitHub issue, `docs/STATUS.md`, `docs/WORKFLOW.md` |
+| UI, copy, pages                       | `docs/DESIGN.md`                                       |
+| Module boundaries, new code locations | `docs/ARCHITECTURE.md`                                 |
+| Collections, migrations, triggers     | `docs/DATABASE.md`                                     |
+| Auth, access, payments, webhooks, IPs | `docs/SECURITY.md`                                     |
+| Tests, CI                             | `docs/TESTING.md`                                      |
+| Docker, VPS, cron, env vars           | `docs/DEPLOYMENT.md`                                   |
+| Invoicing / Fakturoid                 | `docs/accounting-integration.md`                       |
 
 ## Hard rules
 
@@ -68,7 +68,14 @@ visible as wins. Details: `docs/SPEC.md`.
     data, render an honest empty state.
 12. **Operator identity** is read from `src/lib/legal/operator.ts`. Never type
     an IČO, name or address anywhere else, and never invent one.
-13. **Customer-facing text is Czech**, in `src/i18n/messages/cs.ts`. Code,
+13. **GitHub Issues are the source of truth** for task state. Report
+    progress and results on the issue and PR. Do not edit `docs/STATUS.md`,
+    `docs/TASKS.md` or `docs/DECISIONS.md`; Cowork maintains them. Propose a
+    decision in your PR description instead.
+14. **Security disclosure.** The repository is public. Never write details of
+    an unfixed vulnerability in an issue, PR, commit, comment or doc; give
+    them to the product owner privately (`docs/SECURITY.md`, "Disclosure").
+15. **Customer-facing text is Czech**, in `src/i18n/messages/cs.ts`. Code,
     comments, commits, PRs and docs are English.
 
 ## Conventions already in the codebase (keep them)
@@ -92,5 +99,6 @@ visible as wins. Details: `docs/SPEC.md`.
 - [ ] typecheck, lint, test, build, audit run locally, real output pasted.
 - [ ] DB tests run when DB-touching code changed (`docs/TESTING.md`).
 - [ ] Docs updated when behaviour, env vars or structure changed.
-- [ ] `docs/STATUS.md` line for the issue updated.
+- [ ] PR description lists the files this branch owns and links the issue.
+- [ ] Results posted on the GitHub issue (not in `docs/STATUS.md`).
 - [ ] PR targets `rebuild/v2`, is not merged by the author.

@@ -58,8 +58,7 @@ All of the above are exercised by `pnpm test:db` (121 tests, all passing on
    legitimate workarounds are in README, "Working around them legitimately".
 4. Production migrations run only after explicit product-owner approval, from
    the deploy procedure in `docs/DEPLOYMENT.md`, after a fresh backup.
-5. `pnpm seed:tips` writes fixture tips. Never run it against production
-   (a guard is SC-004 scope).
+5. `pnpm seed:tips` writes fixture tips. Never run it against production.
 
 ## Backups
 

@@ -9,7 +9,7 @@ not a tick.
 
 - [ ] SC-003 merged: CI green on `rebuild/v2` (typecheck, lint, test, build, audit)
 - [ ] SC-015 merged: operator identity filled from the register, `OPERATOR_DETAILS_CONFIRMED = true`, footer renders in a production build
-- [ ] SC-004 Phase A items fixed: client IP helper, seed guard
+- [ ] SC-004 Phase A items closed (details in the private tracker)
 - [ ] Pricing page has no buy button and says when subscriptions open; `/predplatne` stub reachable only by direct URL or removed from navigation
 - [ ] Homepage and history show an honest empty state if no tip is settled yet
 - [ ] Legal pages (VOP, GDPR, cookies) reviewed by the operator; responsible-gambling notice wording approved
@@ -24,7 +24,7 @@ not a tick.
 - [ ] Stripe **test** keys in Phase A; `ACCOUNTING_PROVIDER=FAKE`
 - [ ] Image built in CI, pulled on server, `/healthz` 200 on staging and production
 - [ ] TLS valid, HTTP redirects to HTTPS, HSTS header present
-- [ ] Proxy sets `X-Real-IP` / overwrites `X-Forwarded-For`; verified by a request with a forged header
+- [ ] Client-address handling behind the proxy verified on staging (SC-004 test procedure)
 - [ ] Cron jobs replaced on the server and one run of each logged
 - [ ] Uptime monitor alerting to a real phone/email
 - [ ] Nightly DB dump job ran once; **restore drill done** (date, duration: ____ )

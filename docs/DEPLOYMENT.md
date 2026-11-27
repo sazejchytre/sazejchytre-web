@@ -86,11 +86,11 @@ Cron output goes to a log file; a failed run must alert (see Monitoring).
 
 ## Reverse proxy and client IP
 
-The app must receive the real client IP in a header the proxy **overwrites**
-(not appends). Configure the proxy to set `X-Real-IP $remote_addr` and
-`X-Forwarded-For $remote_addr`, and land the SC-004 fix that stops trusting
-the left-most `X-Forwarded-For` value. If Cloudflare proxying is enabled in
-front, use `CF-Connecting-IP` and restrict origin access to Cloudflare ranges.
+The proxy must pass the real client address in headers it **overwrites**
+rather than appends (`X-Real-IP $remote_addr`, and `X-Forwarded-For
+$remote_addr`). How the application consumes them is in scope of SC-004 and
+must be verified on staging before production. If Cloudflare proxies the
+domain, restrict origin access to Cloudflare's address ranges.
 
 ## Health, monitoring, restart
 

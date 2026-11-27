@@ -33,13 +33,29 @@ What matters most, in order:
 
 ## Known gaps (must be closed before the phase noted)
 
-| Gap                                                                                                                                                                                                                                                                                                                                                                                                                                    | Before  | Issue           |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --------------- |
-| Client IP taken from first `X-Forwarded-For` entry in 5 files. Behind nginx with `proxy_add_x_forwarded_for` the first entry is whatever the client sent, so rate limits and lockouts can be bypassed or aimed at another user's IP. Fix: one `clientIp(headers)` helper that trusts only the header the VPS proxy overwrites (`X-Real-IP` set by our proxy, or the right-most `X-Forwarded-For` entry), configured by env, with tests | Phase A | SC-004          |
-| `seed:tips` / `seed:tips:purge` have no guard against a production database                                                                                                                                                                                                                                                                                                                                                            | Phase A | SC-004          |
-| No Content-Security-Policy. Needed before the Stripe Payment Element ships                                                                                                                                                                                                                                                                                                                                                             | Phase B | SC-012          |
-| Paid-content leak paths not yet tested end to end (HTML, RSC payload, `generateMetadata`, OG, sitemap, `llms.txt`, caches) because FULL is not rendered yet. Must be tested in the same PR that adds FULL                                                                                                                                                                                                                              | Phase B | SC-008 + SC-011 |
-| Payload admin exposed at `/admin` on the public domain. Consider IP allowlist or at least 2FA for admin users                                                                                                                                                                                                                                                                                                                          | Phase B | SC-012          |
+| Gap                                                                                                                                                                                                       | Before  | Issue           |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --------------- |
+| Client identity handling must be hardened for the VPS reverse-proxy setup (details tracked privately)                                                                                                     | Phase A | SC-004          |
+| Operational safeguards for fixture scripts (details tracked privately)                                                                                                                                    | Phase A | SC-004          |
+| No Content-Security-Policy. Needed before the Stripe Payment Element ships                                                                                                                                | Phase B | SC-012          |
+| Paid-content leak paths not yet tested end to end (HTML, RSC payload, `generateMetadata`, OG, sitemap, `llms.txt`, caches) because FULL is not rendered yet. Must be tested in the same PR that adds FULL | Phase B | SC-008 + SC-011 |
+| Admin surface hardening review                                                                                                                                                                            | Phase B | SC-012          |
+
+## Disclosure
+
+This repository is public. Until a vulnerability is fixed and deployed:
+
+- Its specifics (affected files, mechanism, exploit steps, proof of concept)
+  are never written in issues, PR titles or descriptions, commit messages,
+  code comments or docs. Public text uses neutral wording such as "harden
+  client identity handling".
+- Details live in the product owner's private tracker (a private repository
+  or GitHub private security advisories). Agents hand findings to the owner
+  directly, not through the public repo.
+- After the fix is deployed, the owner decides what, if anything, is
+  published.
+- Removing text does not remove it from git history, issue edit history,
+  PR diffs or CI logs. Treat anything once pushed as public.
 
 ## Rules for agents
 

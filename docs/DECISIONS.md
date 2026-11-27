@@ -61,3 +61,15 @@ prize, so acceptance must be confirmed in writing rather than assumed.
 Git workflow: `main` frozen, `rebuild/v2` integration branch, one branch and
 PR per issue, Codex reviews, owner merges. Replaces the earlier
 "commit straight to main" practice for this repository.
+
+## D-010 · 2026-11-27 · Accepted (owner)
+
+GitHub Issues are the primary source of task state. `docs/STATUS.md`,
+`docs/TASKS.md` and `docs/DECISIONS.md` are maintained by Cowork only, to
+avoid merge conflicts between parallel agent branches.
+
+## D-011 · 2026-11-27 · Accepted (owner)
+
+Details of unfixed security vulnerabilities are kept out of the public
+repository and its issues; they are tracked privately by the product owner.
+Removing text after publication is not treated as removing it from history.
