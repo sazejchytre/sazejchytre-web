@@ -145,11 +145,19 @@
   },
   {
     "id": "SC-019",
-    "title": "Administrator account security",
-    "prio": "P1",
+    "title": "First administrator and administration access control",
+    "prio": "P0",
     "agent": "Claude Code",
     "phase": "A",
     "deps": ["SC-003"]
+  },
+  {
+    "id": "SC-026",
+    "title": "Administrator second factor",
+    "prio": "P1",
+    "agent": "Claude Code",
+    "phase": "A",
+    "deps": ["SC-019"]
   },
   {
     "id": "SC-020",

@@ -74,9 +74,11 @@ Details of unfixed security vulnerabilities are kept out of the public
 repository and its issues; they are tracked privately by the product owner.
 Removing text after publication is not treated as removing it from history.
 
-## D-012 · 2026-11-27 · Needs owner
+## D-012 · 2026-11-27 · Proposed, awaiting owner confirmation
 
-Scope of the Monday 2026-11-30 launch. The independent review does not
+**Internal staging on Monday 2026-11-30, public launch between 3 and 7
+December**, once every A1 condition in `docs/TASKS.md` is met.
+Scope of the Monday 2026-11-30 date. The independent review does not
 recommend opening the current revision to the public before its three P0
 items are closed or the surface they affect is disabled. The three options
 and this agent's recommendation (option 3: staging on Monday, public launch a
@@ -96,3 +98,9 @@ Codex and application, routing and interface work to Claude Code, with the
 other agent reviewing. This inverts the default reviewer role for those three
 packages, because the reviewer that produced the findings already holds the
 context, and it keeps two tracks running without shared files.
+
+## D-013 · update 2026-11-27
+
+SC-019 delivers the comparison and the recommendation; **SC-026 implements
+whatever this entry settles on** and carries its own acceptance criteria. Do
+not start SC-026 until this entry says Accepted.
