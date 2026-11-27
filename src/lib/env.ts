@@ -366,9 +366,10 @@ const serverEnvSchema = z.object({
    * STRIPE_PRICE_ID_MONTHLY because price ids live in the `prices` table and
    * are reconciled into Stripe by `pnpm sync:prices`, not configured by hand.
    *
-   * Turnstile and Ecomail landed with the public site. The browser half of
-   * Turnstile — NEXT_PUBLIC_TURNSTILE_SITE_KEY — lives in env.public.ts,
-   * because only `NEXT_PUBLIC_*` names are inlined into the client bundle.
+   * Turnstile and Ecomail landed with the public site. Both Turnstile keys are
+   * declared above and there is no NEXT_PUBLIC_TURNSTILE_SITE_KEY: the server
+   * reads TURNSTILE_SITE_KEY and hands it to the widget as a prop, so nothing
+   * about it is inlined at build time (see env.public.ts).
    *
    * Nothing is pending here today.
    * ---------------------------------------------------------------------- */

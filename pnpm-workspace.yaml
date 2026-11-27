@@ -38,7 +38,15 @@ allowBuilds:
 #
 #   fast-uri        GHSA-qw65-cvwx-89v3 + 4 more (SSRF / host confusion)
 #   js-yaml         GHSA-2883-xcg3-v3hh (CPU exhaustion on merge keys)
-#   undici          GHSA-w293-vg96-wgc3 (TLS verification bypass) + 9 more
+#   undici          GHSA-w293-vg96-wgc3 (TLS verification bypass) + 9 more;
+#                   the 7.30.1 floor also clears GHSA-2m5v-pch6-74hx,
+#                   GHSA-4w7w-5xrc-9h26, GHSA-qrxm-fqhp-jwvm and
+#                   GHSA-xjj6-f33q-929c
+#   happy-dom       GHSA-834v-8h66-3h79, GHSA-c8p4-j97h-3vg8 and
+#                   GHSA-5fpq-26gf-qwcr. This forces a major version past what
+#                   @lexical/headless 0.50.0 asks for (^20.9.0); drop it once
+#                   Payload ships a Lexical release that requires ^21.0.4
+#                   itself, as @lexical/headless 0.53.0 does
 #   brace-expansion GHSA-6j4f-fj2g-mc7p, GHSA-qhr7-859c-m2p7 (ReDoS); both the
 #                   1.x and 5.x lines are present in the tree, so both are pinned
 #   source-map-js   GHSA-68fv-2mgg-jv7q (event-loop DoS)
@@ -49,7 +57,8 @@ allowBuilds:
 overrides:
   fast-uri: ^3.1.8
   js-yaml: ^4.3.2
-  undici: ^7.29.1
+  undici: ^7.30.1
+  happy-dom: ^21.0.4
   brace-expansion@1: ^1.1.21
   brace-expansion@>=4: ^5.0.12
   source-map-js: ^1.2.2

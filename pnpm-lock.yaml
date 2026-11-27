@@ -7,7 +7,8 @@ settings:
 overrides:
   fast-uri: ^3.1.8
   js-yaml: ^4.3.2
-  undici: ^7.29.1
+  undici: ^7.30.1
+  happy-dom: ^21.0.4
   brace-expansion@1: ^1.1.21
   brace-expansion@>=4: ^5.0.12
   source-map-js: ^1.2.2
@@ -2933,8 +2934,8 @@ packages:
     resolution: {integrity: sha512-Chq1s4CY7jmh8gO2qvLIJyfCDIN+EHLFW/9iShnp1z8FjBQMoodWP1kDC36VAMXXIvAjj4ARa7ntfAV2BrjsbA==}
     engines: {node: ^12.22.0 || ^14.16.0 || ^16.0.0 || >=17.0.0}
 
-  happy-dom@20.11.2:
-    resolution: {integrity: sha512-7MB+bJLkxu3SowAfBJbjW+c55kNz5tkR45gu2qzrxznezhLeN5YIlJbwUgSzlGc+qWoZ8Ykg71H5ezz69xixrw==}
+  happy-dom@21.0.4:
+    resolution: {integrity: sha512-tFm+GaLBgo6o0awHnvHaNoraVo27qJ+2tZEtZ+cIa08hXbeitrxAJajLI05hsUy/2/YTKcUjQYzHe5mCcraLBw==}
     engines: {node: '>=20.0.0'}
 
   has-bigints@1.1.0:
@@ -4236,8 +4237,8 @@ packages:
   undici-types@6.21.0:
     resolution: {integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==}
 
-  undici@7.30.0:
-    resolution: {integrity: sha512-dkrQXeHSaoamnItlYbmzG0wFYrM0ZwDxCIg0A7aKjTyyhh9svRzCNFEzV+Vm05/yehjCzjDZ31KXfGEjYSztDQ==}
+  undici@7.30.2:
+    resolution: {integrity: sha512-mLyPQnHwUxaM/rideoK/+KL8DaAJLRl4aBCfmX444aCSLnIaomqPLtNRe2jdCYcsk5wZzXrDIQC8ZeYNRAYyIA==}
     engines: {node: '>=20.18.1'}
 
   unist-util-is@6.0.1:
@@ -5365,7 +5366,7 @@ snapshots:
   '@lexical/headless@0.50.0(typescript@5.9.3)':
     dependencies:
       '@lexical/internal': 0.50.0(typescript@5.9.3)
-      happy-dom: 20.11.2
+      happy-dom: 21.0.4
       lexical: 0.50.0(typescript@5.9.3)
     optionalDependencies:
       typescript: 5.9.3
@@ -7355,7 +7356,7 @@ snapshots:
 
   graphql@16.14.2: {}
 
-  happy-dom@20.11.2:
+  happy-dom@21.0.4:
     dependencies:
       '@types/node': 22.20.1
       '@types/whatwg-mimetype': 3.0.2
@@ -8226,7 +8227,7 @@ snapshots:
       sax: 1.6.1
       ts-essentials: 10.0.3(typescript@5.9.3)
       tsx: 4.22.4
-      undici: 7.30.0
+      undici: 7.30.2
       uuid: 13.0.2
       ws: 8.21.3
     transitivePeerDependencies:
@@ -8883,7 +8884,7 @@ snapshots:
 
   undici-types@6.21.0: {}
 
-  undici@7.30.0: {}
+  undici@7.30.2: {}
 
   unist-util-is@6.0.1:
     dependencies:
