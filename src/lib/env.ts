@@ -26,6 +26,7 @@ import { z } from 'zod'
 
 import { BILLING_PROVIDERS } from './billing/constants.ts'
 import { formatEnvIssues } from './env-format.ts'
+import { DEFAULT_LAUNCH_MODE, LAUNCH_MODES } from './launch-gate/modes.ts'
 
 /* -------------------------------------------------------------------------- */
 /* Runtime guard                                                              */
@@ -63,6 +64,24 @@ const serverEnvSchema = z.object({
   NODE_ENV: z
     .enum(['development', 'test', 'production'])
     .default('development'),
+
+  /* --- Launch gate -------------------------------------------------------- */
+  /**
+   * Which parts of the application this deployment serves:
+   * PRIVATE, INFORMATIONAL or FULL. See `src/lib/launch-gate/modes.ts` and
+   * the "Launch gate" section of docs/DEPLOYMENT.md.
+   *
+   * Defaulted, unlike every secret here, and the default is the NARROWEST
+   * mode: an environment that forgets the variable serves no public page at
+   * all. That is the only safe direction for a default to err in, because
+   * the mistake shows up as a closed site the moment anybody opens it,
+   * instead of as an open one that nobody notices.
+   *
+   * A value that is set but not exactly one of the three — `full`, `FULL `,
+   * an empty string — fails the boot. A typo must cost an outage, never a
+   * wider surface.
+   */
+  LAUNCH_MODE: z.enum(LAUNCH_MODES).default(DEFAULT_LAUNCH_MODE),
 
   /* --- Database (Neon Postgres) ------------------------------------------ */
   DATABASE_URL: secret(1).refine((value) => /^postgres(ql)?:\/\//.test(value), {

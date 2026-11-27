@@ -74,10 +74,106 @@ from `.env`.
 `FAKTUROID_CLIENT_SECRET`, `FAKTUROID_SLUG`, `FAKTUROID_USER_AGENT`,
 `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`, `ECOMAIL_API_KEY`,
 `ECOMAIL_LIST_ID`. Defaults exist for `NODE_ENV`, `BILLING_PROVIDER`
-(STRIPE), `ACCOUNTING_PROVIDER` (FAKE), `SUPPORTED_BILLING_COUNTRIES` (CZ).
+(STRIPE), `ACCOUNTING_PROVIDER` (FAKE), `SUPPORTED_BILLING_COUNTRIES` (CZ),
+`LAUNCH_MODE` (PRIVATE, see "Launch gate" below).
 
 Phase A (no payments) still needs Stripe variables to boot: use `sk_test_` /
 `pk_test_` keys and keep `ACCOUNTING_PROVIDER=FAKE` until Phase B.
+
+## Launch gate (`LAUNCH_MODE`, SC-017)
+
+One run-time variable decides which parts of the application a deployment
+serves. It is read from `.env` when the process starts; changing it means
+restarting the container, not rebuilding the image.
+
+| Mode            | Serves                                                                                                                                              | Refuses                                                                                                                                                                                  |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PRIVATE`       | `/healthz`, `/api/cron/*` (bearer), `/admin` and `/api/*` (Payload; anonymous API reads refused, administrator session and sign-in only)            | every page and public output, known or not: **503**; `robots.txt` answers `Disallow: /`                                                                                                  |
+| `INFORMATIONAL` | the above, plus `/`, `/historie`, `/metodika`, `/cenik`, `/kontakt`, the three legal pages, `/tipy/<slug>`, `robots.txt`, `sitemap.xml`, `llms.txt` | registration, sign-in, password and email flows, `/ucet/*`, `/auth/*`, `/predplatne`, `/webhooks/*`, and any path not in the route table: **404** (the site's own 404 page for GET/HEAD) |
+| `FULL`          | everything, unchanged behaviour                                                                                                                     | nothing                                                                                                                                                                                  |
+
+Rules that hold in every mode:
+
+- **Default and errors fail closed.** Unset means `PRIVATE`. Any other value
+  than the three exact names (`full`, `FULL `, an empty string) is a
+  configuration error: every request, `/healthz` included, answers 500 and
+  the log names `LAUNCH_MODE` without echoing the value. The Docker
+  healthcheck therefore fails and a deploy must not be considered done.
+- **Only method, path and mode decide.** No header, cookie or query parameter
+  changes the answer. There is no preview bypass. In `PRIVATE` mode even a
+  valid administrator session does not open a page; it opens the Payload API
+  only.
+- **All methods.** A closed area refuses GET, HEAD, POST, PUT, PATCH, DELETE
+  and OPTIONS alike. An open page accepts GET, HEAD and POST (POST is how
+  forms invoke Server Functions); other methods get 405.
+- **Server Functions.** A Server Function invoked against a different page is
+  forwarded by Next to its owning page, which passes the gate again, so an
+  account action cannot be run through an open page.
+- **Refusals are `Cache-Control: no-store`, `X-Robots-Tag: noindex`** and
+  carry `x-launch-gate: <reason>` so the verification script can tell them
+  from the application's own 404s.
+
+### Value per environment
+
+| Environment             | `LAUNCH_MODE`                                                                                                                                                                        |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Local development       | `FULL` in your `.env` (unset gives `PRIVATE`, which closes every page)                                                                                                               |
+| CI build and unit tests | unset; the build does not read it and the tests set it themselves                                                                                                                    |
+| Staging                 | `PRIVATE` by default. `INFORMATIONAL` for pre-launch review **only behind the reverse-proxy access restriction below**. `FULL` only for Phase B verification (SC-010) with test keys |
+| Production              | `PRIVATE` until every Phase A item in `docs/LAUNCH-CHECKLIST.md` is ticked (D-012 fallback), then `INFORMATIONAL`. `FULL` only after the owner approves Phase B                      |
+
+### Why the gate is in the application
+
+The control that keeps the site private has to be provable before the VPS
+setup is (SC-009). In the application it is covered by the unit suite on
+every push, behaves identically on a laptop, in CI, on staging and in
+production, and fails closed when unset. A reverse-proxy rule cannot be
+tested in CI and depends on VPS Centrum configuration that is not verified
+yet. The reverse proxy is the second layer, not the only one.
+
+### Verified locally vs. to be verified on the server
+
+**Verified locally** (2026-11-27, production build of this branch, local
+Postgres): `node src/scripts/verify-launch-gate.ts` against `next start` in
+each mode, with every route of the build's route manifest, all seven methods
+and raw path spellings (encoded characters, dot segments, double and
+trailing slashes): 352 of 352 probes as expected in `PRIVATE` (variable
+unset), `INFORMATIONAL` and `FULL`. A registration Server Function posted to
+an open page ran in `FULL` and did not run in `INFORMATIONAL`. In `PRIVATE`
+the Payload API answered an administrator session and refused anonymous and
+cross-origin requests. An invalid value answered 500 everywhere.
+
+**Requires SC-009 verification on staging and production** (none of this is
+done yet):
+
+1. The reverse proxy forwards every path and method to the application and
+   does not serve anything itself for the application's host, so the gate
+   sees every request.
+2. No response cache at the proxy or a CDN in front of the application, or
+   one that honours `Cache-Control` and is **purged after every
+   `LAUNCH_MODE` change**. `llms.txt` and `sitemap.xml` are cacheable by
+   design while the site is public, and a cache would replay them after a
+   switch to `PRIVATE`.
+3. While staging (or production in `PRIVATE`) is not public, an access
+   restriction at VPS Centrum in front of the whole host (HTTP basic auth or
+   an IP allowlist), with `/healthz` exempt for the uptime monitor. Where
+   feasible, restrict `/admin` and `/api` to known addresses in every mode.
+4. The proxy strips framework-internal request headers (for example
+   `x-middleware-subrequest`) from client requests. The framework version in
+   use already ignores them; this is defence in depth.
+5. The container port is bound to `127.0.0.1` only. Direct access would not
+   bypass the gate, but it would bypass the proxy controls above.
+6. After every deploy and every mode change, run the verification against the
+   host and keep its summary line with the deploy record:
+   `node src/scripts/verify-launch-gate.ts --base-url https://<host> --mode <MODE>`.
+   Add `--include-unsafe-methods` only on staging: it sends anonymous empty
+   POST/PUT/PATCH/DELETE requests, which reach open handlers.
+7. Monitoring: in `PRIVATE` mode `/` answers 503 by design, so the uptime
+   monitor must watch `/healthz`, or expect 503 on `/`.
+
+Not covered by the gate: the public R2 media bucket is served by the CDN
+directly and stays reachable in every mode. It holds images uploaded for the
+public pages only; documents live in the private bucket.
 
 ## Cron replacement for `vercel.json`
 

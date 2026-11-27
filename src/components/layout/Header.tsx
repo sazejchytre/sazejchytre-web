@@ -2,6 +2,14 @@
  * The site header: wordmark, navigation, sign-in, and the 18+ marker.
  *
  * ──────────────────────────────────────────────────────────────────────────
+ * THE SIGN-IN BUTTON FOLLOWS THE LAUNCH MODE
+ *
+ * It is rendered only when the mode serves customer accounts. Outside FULL
+ * the sign-in page answers 404, and a button that leads to a 404 is a dead
+ * end. Leaving it out is presentation only: the proxy refuses the account
+ * area whether or not anything links to it (see `src/lib/launch-gate/`).
+ *
+ * ──────────────────────────────────────────────────────────────────────────
  * THE 18+ MARKER LIVES HERE AS WELL AS IN THE FOOTER
  *
  * Copy rule 5 requires it on every page. A footer-only marker satisfies that
@@ -24,12 +32,15 @@
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 
+import { isSurfaceServed } from '@/lib/launch-gate/server'
+
 import { Monogram, Wordmark } from '../brand/Marks'
 import { Button } from '../ui/Button'
 import { NavLinks, type NavItem } from './NavLinks'
 
 export const Header = async () => {
   const t = await getTranslations('common')
+  const accountsServed = isSurfaceServed('accounts')
 
   const items: readonly NavItem[] = [
     { href: '/', label: t('nav.home') },
@@ -87,11 +98,13 @@ export const Header = async () => {
           <NavLinks items={items} />
         </nav>
 
-        <div className="ms-auto flex items-center gap-3">
-          <Button href="/prihlaseni" variant="secondary" size="md">
-            {t('nav.signIn')}
-          </Button>
-        </div>
+        {accountsServed ? (
+          <div className="ms-auto flex items-center gap-3">
+            <Button href="/prihlaseni" variant="secondary" size="md">
+              {t('nav.signIn')}
+            </Button>
+          </div>
+        ) : null}
       </div>
     </header>
   )

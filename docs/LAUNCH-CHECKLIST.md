@@ -6,20 +6,26 @@ not a tick.
 ## Phase A: public site with the track record, no payments
 
 Target 2026-11-30 (D-012). If any box below is unticked on the day, the site
-stays private (SC-017 private mode) and the launch moves.
+stays private (`LAUNCH_MODE=PRIVATE`, SC-017) and the launch moves.
+
+`LAUNCH_MODE` per environment (details: `docs/DEPLOYMENT.md`, "Launch gate"):
+production `PRIVATE` until every box in this Phase A section is ticked, then
+`INFORMATIONAL`; staging `PRIVATE`, or `INFORMATIONAL` behind the
+reverse-proxy access restriction; local development `FULL`. `FULL` in
+production only after the Phase B sign-off below.
 
 ### Code
 
 - [ ] SC-003 merged: CI green on `rebuild/v2` (typecheck, lint, test, build, audit)
 - [ ] SC-015 merged: operator identity filled from the register, `OPERATOR_DETAILS_CONFIRMED = true`, footer renders in a production build
 - [ ] SC-004 Phase A items closed (details in the private tracker)
-- [ ] SC-017 merged: the launch-scope gate and the private mode both proven by tests
+- [ ] SC-017 merged: the launch-scope gate and the private mode both proven by tests (every route file, every method, every mode)
 - [ ] SC-019 merged: no production traffic without a verified administrator, at boot and at request time
 - [ ] SC-026 merged: the administration area requires a second factor (route named in D-015)
 - [ ] SC-022 merged: fixture and test data cannot reach the production record
 - [ ] SC-023 merged: the published-record invariants hold at the database level
 - [ ] SC-024 merged: one projection drives every public output, and the public history is complete
-- [ ] Pricing page has no buy button and says when subscriptions open; `/predplatne` stub reachable only by direct URL or removed from navigation
+- [ ] Pricing page has no buy button and says when subscriptions open. `/predplatne` answers 404 in `INFORMATIONAL` (SC-017), but the buy buttons on `/` and `/cenik` (`src/components/pricing/TierCards.tsx`) still link to it and must be removed before launch
 - [ ] Homepage and history show an honest empty state if no tip is settled yet
 - [ ] Legal pages (VOP, GDPR, cookies) reviewed by the operator; responsible-gambling notice wording approved
 
@@ -32,6 +38,8 @@ stays private (SC-017 private mode) and the launch moves.
 - [ ] Turnstile widget for the production domain; Ecomail list id set
 - [ ] Stripe **test** keys in Phase A; `ACCOUNTING_PROVIDER=FAKE`
 - [ ] Image built in CI, pulled on server, `/healthz` 200 on staging and production
+- [ ] Launch gate verified on the server (SC-009, `docs/DEPLOYMENT.md` "Launch gate"): proxy forwards every path, no cache or cache purged after a mode change, access restriction in front of staging; `verify-launch-gate.ts` summary with 0 mismatches for staging and production: ____
+- [ ] Production switched from `PRIVATE` to `INFORMATIONAL` only after every other Phase A box is ticked; verification re-run after the switch: ____
 - [ ] TLS valid, HTTP redirects to HTTPS, HSTS header present
 - [ ] Client-address handling behind the proxy verified on staging (SC-004 test procedure)
 - [ ] Cron jobs replaced on the server and one run of each logged
@@ -63,4 +71,5 @@ stays private (SC-017 private mode) and the launch moves.
 - [ ] Support email monitored, response process agreed
 - [ ] SC-012 readiness review by Codex: no open P0/P1
 - [ ] Live keys installed by the owner; `ACCOUNTING_PROVIDER=FAKTUROID`
+- [ ] `LAUNCH_MODE=FULL` set in production and the launch-gate verification re-run
 - [ ] Product owner approved enabling payments
