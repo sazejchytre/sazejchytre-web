@@ -217,7 +217,9 @@ done yet):
    allowlist, and without it from an allowed client.
 5. The first administrator is created **before** the host is reachable from
    outside, and `/api/users/init` answers `{"initialized":true}` before the
-   proxy is opened. Until then, whoever reaches `/admin` first can create it.
+   proxy is opened; until then the first-administrator form is open to any
+   client that reaches the host. The application-side guard for this is
+   SC-019.
 6. Rate limiting at the proxy for `/api/users/login` and
    `/api/users/forgot-password`, which are anonymous by design.
 7. The proxy strips framework-internal request headers (for example
