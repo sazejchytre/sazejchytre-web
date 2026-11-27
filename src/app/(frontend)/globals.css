@@ -1,7 +1,7 @@
 @import 'tailwindcss';
 
 /* ===========================================================================
-   DESIGN TOKENS
+   DESIGN TOKENS — SC-005 proposal for D-005 (see docs/DESIGN.md)
    ---------------------------------------------------------------------------
    Tailwind v4 generates utilities from the custom properties below, so a
    token here becomes a class automatically: `--color-ink` produces
@@ -12,109 +12,128 @@
    `result-loss` — which is what makes the dark theme a value swap rather than
    a second set of components.
 
-   The same values exist as data in `src/lib/design/tokens.ts`, and
-   `contrast.test.ts` reads this file to prove the two have not drifted. Edit
-   both or the build fails, which is the point.
+   THE NAMES ARE THE CODEBASE'S, THE VALUES ARE DESIGN.md's. Pages outside the
+   design system already write these class names, so the names stay and the
+   mapping to the DESIGN.md table lives in `DESIGN_SPEC_TOKENS`
+   (`src/lib/design/tokens.ts`):
+
+       DESIGN.md   code token        light value
+       bg          surface-page      #f8f9f6
+       surface     surface-raised    #ffffff
+       ink         ink               #171a18
+       ink-muted   ink-muted         #6b716e
+       border      border-subtle     #dfe3df
+       accent      brand             #236344   (as text: brand-text)
+       win         result-win        #18794e
+       loss        result-loss       #b42318
+       pending     result-pending    #8c6d28
+
+   The same values exist as data in `tokens.ts`, and `contrast.test.ts` reads
+   this file AND the DESIGN.md table to prove the three have not drifted.
    =========================================================================== */
 
 /* ---------------------------------------------------------------------------
    LIGHT THEME VALUES
    ---------------------------------------------------------------------------
-   Declared as plain custom properties rather than inside `@theme` so the dark
-   theme can redefine them. `@theme inline` below points the utilities at
-   these, so a single media query re-themes the whole site.
+   Plain custom properties rather than `@theme`, so the dark theme can
+   redefine them. `@theme inline` below points the utilities at these, so a
+   single media query re-themes the whole site.
    --------------------------------------------------------------------------- */
 
 :root {
-  /* Surfaces. `brand` and `accent` are surfaces too — see the note below. */
-  --sc-surface-page: #ffffff;
-  --sc-surface-raised: #f8fbf7;
-  --sc-surface-accent: #c5f0d8;
+  color-scheme: light dark;
+
+  /* Surfaces. The canvas is off-white and the data sits on white panels, so
+     a table reads as a sheet laid on the desk rather than a hole in it. */
+  --sc-surface-page: #f8f9f6;
+  --sc-surface-raised: #ffffff;
+  /* A barely-green callout panel. Light enough that muted text still reaches
+     AA on it (4.60:1); its edge comes from the border, not from the tint. */
+  --sc-surface-accent: #f2f7f3;
 
   /* ─────────────────────────────────────────────────────────────────────────
      Borders.
 
-     `subtle` is DECORATIVE ONLY — 1.26:1 against the page. It separates
-     things that are already distinguishable; it never carries meaning.
+     `subtle` is the DESIGN.md hairline and is DECORATIVE ONLY: 1.30:1 on
+     white. It separates rows and panels that are already distinguishable.
 
      `strong` is for CONTROL borders and must reach 3:1 against every surface
-     it can land on. It does:
+     it can land on (WCAG 1.4.11). It does:
 
-                     page    raised   accent
-         light       3.91     3.75     3.13
-         dark        5.30     4.19     3.32
-
-     The value before this one was #7e9a87, which reached 3.06:1 on white and
-     was therefore declared fine — while measuring 2.94:1 on `surface-raised`
-     and 2.45:1 on `surface-accent`. Checking a border against one background
-     is how that happens, which is why the test now multiplies every
-     foreground across every surface in both themes.
+                     raised   page    accent
+         light       4.26     4.04    3.93
+         dark        3.92     4.26    3.62
      ───────────────────────────────────────────────────────────────────────── */
-  --sc-border-subtle: #dde8e0;
-  --sc-border-strong: #6d8775;
+  --sc-border-subtle: #dfe3df;
+  --sc-border-strong: #767c78;
 
-  /* Text. */
-  --sc-ink: #1a2e1f;
-  --sc-ink-muted: #4a5f50;
+  /* Text. `ink-muted` reaches 4.5:1 on all three surfaces, so it is legal at
+     every size — DESIGN.md rule 31 asked for that to be measured, and
+     `contrast.test.ts` does. */
+  --sc-ink: #171a18;
+  --sc-ink-muted: #6b716e;
 
   /* ─────────────────────────────────────────────────────────────────────────
-     THE CONTRAST RULE, NON-NEGOTIABLE
+     THE CONTRAST RULE, INVERTED FROM THE OLD PALETTE
 
-     Text on `brand` or `accent` is ALWAYS one of these two, never white:
-
-       white on brand  (#5bc894) = 2.07:1
-       white on accent (#ffd93d) = 1.38:1
-
-     Both are far below the 4.5:1 floor, and both are the first thing anyone
-     reaches for on a saturated fill. These tokens are dark on purpose.
+     The brand fill is DARK now (#236344). White on it measures 7.14:1; ink
+     on it measures 2.46:1. So text on the brand fill is ALWAYS white — via
+     this token, never a literal, so the pairing cannot be got wrong.
      ───────────────────────────────────────────────────────────────────────── */
-  --sc-ink-on-brand: #1a2e1f;
-  --sc-ink-on-accent: #1a2e1f;
+  --sc-ink-on-brand: #ffffff;
 
-  /* ─────────────────────────────────────────────────────────────────────────
-     Text on a FILLED result badge.
-
-     The "never white" rule above is scoped to `brand` and `accent`. White on
-     a solid result fill is fine — 5.33:1 on win, 7.30:1 on loss, 5.63:1 on
-     void — and is used.
-
-     It is a token rather than a literal because the DARK theme's result
-     values are light colours, meant as foregrounds on a dark surface. White
-     on those measures 1.77 / 2.58 / 2.32; dark ink measures 8.17 / 5.59 /
-     6.22. So this flips with the theme, exactly like --sc-ink-on-brand.
-     ───────────────────────────────────────────────────────────────────────── */
+  /* Text on a FILLED result badge. White in light mode (5.41 / 6.57 / 4.99 /
+     4.85 on win / loss / void / pending); dark in dark mode, where the result
+     values are light colours meant as foregrounds on a dark surface. */
   --sc-ink-on-result: #ffffff;
 
-  /* ─────────────────────────────────────────────────────────────────────────
-     `brand` IS A SURFACE COLOUR. It is never text on a light background:
-     #5bc894 on white is 1.95–2.07:1. `brand-text` is the green you may
-     WRITE with, and it is also the focus ring.
-     ───────────────────────────────────────────────────────────────────────── */
-  --sc-brand: #5bc894;
-  --sc-brand-text: #27714e;
-  --sc-accent: #ffd93d;
+  /* Green, used selectively: the primary action, links, the focus ring. One
+     value serves as fill and as text in light mode; they part in dark mode,
+     where text needs a lighter green and the fill does not. */
+  --sc-brand: #236344;
+  --sc-brand-strong: #1a4b33;
+  --sc-brand-text: #236344;
 
-  /* Results. Never the ONLY signal — always paired with text or a glyph, or
-     a colour-blind reader loses the meaning entirely. */
-  --sc-result-win: #1e7a4c;
-  --sc-result-loss: #9e2f1c;
-  --sc-result-void: #5c6b60;
+  /* Results. Never the ONLY signal — always paired with a word and a shape,
+     or a colour-blind reader loses the meaning (DESIGN.md rule 3). */
+  --sc-result-win: #18794e;
+  --sc-result-loss: #b42318;
+  --sc-result-void: #6b716e;
+  --sc-result-pending: #8c6d28;
 
-  /* Shadows are TINTED, never pure black: a neutral black shadow over a green
-     page reads as grey dirt rather than as depth. */
-  --sc-shadow-ambient: rgba(26, 46, 31, 0.06);
-  --sc-shadow-direct: rgba(26, 46, 31, 0.1);
-  --sc-shadow-strong: rgba(26, 46, 31, 0.16);
+  /* `::selection`. Ink on it measures 13.2:1. */
+  --sc-highlight: #d3e6da;
 
-  /* Reserved for the sticky header, so page offsets are computed once. */
-  --sc-header-h: 4rem; /* 64px */
+  /* The one shadow level (DESIGN.md rule 43), for overlays only. Tinted with
+     the ink rather than pure black, which reads as grey dirt on off-white. */
+  --sc-shadow-overlay: rgba(23, 26, 24, 0.12);
+
+  /* Reserved for a sticky header, so page offsets are computed once. 56px:
+     DESIGN.md rule 95's ceiling on mobile. */
+  --sc-header-h: 3.5rem;
+
+  /* Page margins, mobile first: 16 / 24 / 32 px. */
+  --sc-page-margin: 1rem;
+}
+
+@media (min-width: 40rem) {
+  :root {
+    --sc-page-margin: 1.5rem;
+  }
+}
+
+@media (min-width: 64rem) {
+  :root {
+    --sc-page-margin: 2rem;
+  }
 }
 
 /* ---------------------------------------------------------------------------
    DARK THEME VALUES
    ---------------------------------------------------------------------------
-   Follows the system by default. `[data-theme]` is an override hook for a
-   future toggle; no UI sets it today, and nothing depends on one existing.
+   Not specified by DESIGN.md; derived from the same hues for D-005 so the
+   existing system-following theme keeps working. Follows the system by
+   default; `[data-theme]` is an override hook for a future toggle.
 
    Because the VALUES flip, Tailwind's `dark:` variant is not needed for
    colour — and should not be used for it. Two mechanisms for one decision is
@@ -123,52 +142,52 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
-    --sc-surface-page: #0f1711;
-    --sc-surface-raised: #1a2e1f;
-    --sc-surface-accent: #22402c;
-    --sc-border-subtle: #2c4634;
-    --sc-border-strong: #71927b;
-    --sc-ink: #f2f8f3;
-    --sc-ink-muted: #a8bfaf;
-    --sc-ink-on-brand: #1a2e1f;
-    --sc-ink-on-accent: #1a2e1f;
+    --sc-surface-page: #111412;
+    --sc-surface-raised: #191d1a;
+    --sc-surface-accent: #17261d;
+    --sc-border-subtle: #2a302c;
+    --sc-border-strong: #737b76;
+    --sc-ink: #eceeea;
+    --sc-ink-muted: #a1a8a3;
+    --sc-ink-on-brand: #ffffff;
     /* Dark, because the dark result values are light colours. */
-    --sc-ink-on-result: #1a2e1f;
-    --sc-brand: #5bc894;
-    --sc-brand-text: #7fd9ac;
-    --sc-accent: #ffd93d;
-    --sc-result-win: #6ed79f;
-    --sc-result-loss: #ee8468;
-    --sc-result-void: #9bafa1;
-
-    /* A tinted shadow over a dark page is invisible; depth there comes from
-       the raised surface instead, so these go almost flat. */
-    --sc-shadow-ambient: rgba(0, 0, 0, 0.3);
-    --sc-shadow-direct: rgba(0, 0, 0, 0.4);
-    --sc-shadow-strong: rgba(0, 0, 0, 0.5);
+    --sc-ink-on-result: #111412;
+    --sc-brand: #236344;
+    --sc-brand-strong: #2b7853;
+    --sc-brand-text: #6cc597;
+    --sc-result-win: #5cc591;
+    --sc-result-loss: #ff8f80;
+    --sc-result-void: #a1a8a3;
+    --sc-result-pending: #d6b264;
+    --sc-highlight: #28473a;
+    --sc-shadow-overlay: rgba(0, 0, 0, 0.5);
   }
 }
 
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
 :root[data-theme='dark'] {
-  --sc-surface-page: #0f1711;
-  --sc-surface-raised: #1a2e1f;
-  --sc-surface-accent: #22402c;
-  --sc-border-subtle: #2c4634;
-  --sc-border-strong: #71927b;
-  --sc-ink: #f2f8f3;
-  --sc-ink-muted: #a8bfaf;
-  --sc-ink-on-brand: #1a2e1f;
-  --sc-ink-on-accent: #1a2e1f;
-  --sc-ink-on-result: #1a2e1f;
-  --sc-brand: #5bc894;
-  --sc-brand-text: #7fd9ac;
-  --sc-accent: #ffd93d;
-  --sc-result-win: #6ed79f;
-  --sc-result-loss: #ee8468;
-  --sc-result-void: #9bafa1;
-  --sc-shadow-ambient: rgba(0, 0, 0, 0.3);
-  --sc-shadow-direct: rgba(0, 0, 0, 0.4);
-  --sc-shadow-strong: rgba(0, 0, 0, 0.5);
+  color-scheme: dark;
+  --sc-surface-page: #111412;
+  --sc-surface-raised: #191d1a;
+  --sc-surface-accent: #17261d;
+  --sc-border-subtle: #2a302c;
+  --sc-border-strong: #737b76;
+  --sc-ink: #eceeea;
+  --sc-ink-muted: #a1a8a3;
+  --sc-ink-on-brand: #ffffff;
+  --sc-ink-on-result: #111412;
+  --sc-brand: #236344;
+  --sc-brand-strong: #2b7853;
+  --sc-brand-text: #6cc597;
+  --sc-result-win: #5cc591;
+  --sc-result-loss: #ff8f80;
+  --sc-result-void: #a1a8a3;
+  --sc-result-pending: #d6b264;
+  --sc-highlight: #28473a;
+  --sc-shadow-overlay: rgba(0, 0, 0, 0.5);
 }
 
 @theme inline {
@@ -181,105 +200,132 @@
   --color-ink: var(--sc-ink);
   --color-ink-muted: var(--sc-ink-muted);
   --color-ink-on-brand: var(--sc-ink-on-brand);
-  --color-ink-on-accent: var(--sc-ink-on-accent);
   --color-ink-on-result: var(--sc-ink-on-result);
   --color-brand: var(--sc-brand);
+  --color-brand-strong: var(--sc-brand-strong);
   --color-brand-text: var(--sc-brand-text);
-  --color-accent: var(--sc-accent);
   --color-result-win: var(--sc-result-win);
   --color-result-loss: var(--sc-result-loss);
   --color-result-void: var(--sc-result-void);
+  --color-result-pending: var(--sc-result-pending);
+  --color-highlight: var(--sc-highlight);
 
   /* --- Fonts -------------------------------------------------------------
-     Supplied by next/font in `layout.tsx`, which self-hosts the files. No
-     <link> to Google: a third-party font request on every page is a
-     third-party dependency on every page, and it leaks visitor IPs.
+     Geist Sans and Geist Mono, from the `geist` npm package through
+     next/font/local (`src/lib/design/fonts.ts`): self-hosted, no request to
+     any third party at build time or at runtime. Two families, which is
+     DESIGN.md rule 23's ceiling. The variables already carry the generated
+     fallback faces; the stacks after them are a last resort only.
      ---------------------------------------------------------------------- */
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-display:
-    var(--font-barlow), var(--font-inter), ui-sans-serif, sans-serif;
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono:
+    var(--font-geist-mono), ui-monospace, 'SFMono-Regular', 'Courier New',
+    monospace;
 }
 
 @theme {
   /* --- Spacing -----------------------------------------------------------
-     THE GRID IS 8px. The base unit stays 4px so that `2` = 8px and `6` =
-     24px, which is the scale every Tailwind reader already knows — changing
-     the base to 0.5rem would make `gap-3` mean 24px and confuse every future
-     reader for no gain.
-
-     So the grid is a rule, not an arithmetic impossibility: use EVEN steps
-     (2, 4, 6, 8, 12, 16). The odd ones exist for one purpose only, the 4px
-     gap between an icon and its label, where 8px reads as a gap rather than
-     as a pair.
+     4px base (DESIGN.md: 4, 8, 12, 16, 24, 32, 48, 64). The base unit stays
+     0.25rem so `2` = 8px and `6` = 24px — the scale every Tailwind reader
+     already knows. Use the steps 1, 2, 3, 4, 6, 8, 12, 16; anything else is
+     off the rhythm (rule 37).
      ---------------------------------------------------------------------- */
   --spacing: 0.25rem; /* 4px */
 
   /* --- Radii -------------------------------------------------------------
-     Named by purpose, and NOTHING BELOW 6px EXISTS. That is deliberate:
-     "nothing below 6" is enforced by the absence of a token rather than by a
-     line in a document nobody reads, so a 2px corner is not reachable
-     without adding one here on purpose.
+     6px everywhere it applies (DESIGN.md rule 44), and NOTHING BELOW 6px
+     EXISTS AS A TOKEN: a 2px corner is not reachable without adding one here
+     on purpose. Table rows have no radius and need no token.
+
+     The names are kept so callers on other branches keep rendering. `pill`
+     is now a 6px chip like everything else — rule 44 removes pills — and
+     can be renamed when its last callers (outside this branch) are.
      ---------------------------------------------------------------------- */
-  --radius-input: 0.375rem; /*  6px — inputs, selects, checkboxes */
-  --radius-badge: 0.375rem; /*  6px — badges, result chips */
-  --radius-button: 0.5rem; /*  8px */
-  --radius-card: 1rem; /* 16px */
-  --radius-modal: 1.5rem; /* 24px */
-  --radius-pill: 999px;
+  --radius-input: 0.375rem; /* 6px */
+  --radius-badge: 0.375rem; /* 6px */
+  --radius-button: 0.375rem; /* 6px */
+  --radius-card: 0.375rem; /* 6px */
+  --radius-modal: 0.375rem; /* 6px */
+  --radius-pill: 0.375rem; /* 6px, see above */
 
-  /* --- Shadows ------------------------------------------------------------ */
-  --shadow-raised: 0 1px 2px var(--sc-shadow-ambient);
-  --shadow-card:
-    0 1px 3px var(--sc-shadow-ambient), 0 4px 12px var(--sc-shadow-direct);
-  --shadow-modal: 0 8px 32px var(--sc-shadow-strong);
+  /* --- Shadows ------------------------------------------------------------
+     Borders over shadows. One level, for overlays (dialogs, popovers) only.
+     ---------------------------------------------------------------------- */
+  --shadow-modal: 0 8px 24px var(--sc-shadow-overlay);
 
-  /* --- Layout ------------------------------------------------------------- */
-  --container-page: 80rem; /* 1280px */
+  /* --- Layout -------------------------------------------------------------
+     `max-w-page` is the 1200px content column; `max-w-reading` the 720px
+     measure for long text.
+     ---------------------------------------------------------------------- */
+  --container-page: 75rem; /* 1200px */
+  --container-reading: 45rem; /* 720px */
 
   /* --- Type scale ---------------------------------------------------------
-     Absolute line heights, not ratios: a 56px heading at 60px leading is a
-     specific decision, and a unitless 1.07 invites drift the first time
-     someone changes the size.
+     DESIGN.md's scale. Absolute line heights, not ratios: a 48px heading on
+     56px leading is a specific decision, and a unitless 1.17 invites drift.
 
-     Weight is part of the token so that `text-heading` is the whole style and
-     a caller cannot get the size right and the weight wrong.
+     Weight and tracking are part of the token, so `text-heading` is the whole
+     style and a caller cannot get the size right and the weight wrong.
+
+     The three stepped styles (H1, H2, figures) are written MOBILE FIRST here
+     and stepped up at 48rem below, so every page gets DESIGN.md's mobile H1
+     (32/40) without a responsive class at each call site.
      ---------------------------------------------------------------------- */
-  --text-display-xl: 3.5rem; /* 56 */
-  --text-display-xl--line-height: 3.75rem; /* 60 */
-  --text-display-xl--font-weight: 700;
+  --text-display-xl: 2rem; /* 32 → 48 */
+  --text-display-xl--line-height: 2.5rem; /* 40 → 56 */
+  --text-display-xl--font-weight: 600;
+  --text-display-xl--letter-spacing: -0.02em;
 
-  --text-display-lg: 2.25rem; /* 36 */
-  --text-display-lg--line-height: 2.5rem; /* 40 */
-  --text-display-lg--font-weight: 700;
+  --text-display-lg: 1.5rem; /* 24 → 32 */
+  --text-display-lg--line-height: 2rem; /* 32 → 40 */
+  --text-display-lg--font-weight: 600;
+  --text-display-lg--letter-spacing: -0.015em;
 
-  --text-heading: 1.375rem; /* 22 */
+  --text-heading: 1.25rem; /* 20 */
   --text-heading--line-height: 1.75rem; /* 28 */
   --text-heading--font-weight: 600;
+  --text-heading--letter-spacing: -0.01em;
 
   --text-body: 1rem; /* 16 */
-  --text-body--line-height: 1.5rem; /* 24 */
+  --text-body--line-height: 1.625rem; /* 26 */
   --text-body--font-weight: 400;
 
   --text-body-sm: 0.875rem; /* 14 */
   --text-body-sm--line-height: 1.25rem; /* 20 */
   --text-body-sm--font-weight: 400;
 
-  --text-label: 0.75rem; /* 12 */
-  --text-label--line-height: 1rem; /* 16 */
-  --text-label--font-weight: 600;
+  /* Form labels and column heads. Same size as small text, heavier. */
+  --text-label: 0.875rem; /* 14 */
+  --text-label--line-height: 1.25rem; /* 20 */
+  --text-label--font-weight: 500;
 
-  /* The data styles. Every one of these is tabular — see the rule below. */
-  --text-data-xl: 2rem; /* 32 */
-  --text-data-xl--line-height: 2.25rem; /* 36 */
+  /* The data styles. Every one is tabular; `data` and `data-sm` are Geist
+     Mono — see the rule in the base layer. */
+  --text-data-xl: 1.5rem; /* 24 → 32 */
+  --text-data-xl--line-height: 2rem; /* 32 → 40 */
   --text-data-xl--font-weight: 600;
+  --text-data-xl--letter-spacing: -0.01em;
 
   --text-data: 1rem; /* 16 */
-  --text-data--line-height: 1.25rem; /* 20 */
+  --text-data--line-height: 1.5rem; /* 24 */
   --text-data--font-weight: 500;
 
-  --text-data-sm: 0.8125rem; /* 13 */
-  --text-data-sm--line-height: 1.125rem; /* 18 */
+  --text-data-sm: 0.875rem; /* 14 */
+  --text-data-sm--line-height: 1.25rem; /* 20 */
   --text-data-sm--font-weight: 500;
+}
+
+/* The stepped type sizes. Overriding the theme variables, not the utilities,
+   so `text-display-xl` keeps being one class. */
+@media (min-width: 48rem) {
+  :root {
+    --text-display-xl: 3rem; /* 48 */
+    --text-display-xl--line-height: 3.5rem; /* 56 */
+    --text-display-lg: 2rem; /* 32 */
+    --text-display-lg--line-height: 2.5rem; /* 40 */
+    --text-data-xl: 2rem; /* 32 */
+    --text-data-xl--line-height: 2.5rem; /* 40 */
+  }
 }
 
 /* ===========================================================================
@@ -302,21 +348,34 @@
     font-size: var(--text-body);
     line-height: var(--text-body--line-height);
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
+  /* Headings balance their lines, so a two-line H1 does not end on a lone
+     word. Paragraphs avoid a one-word last line. Both are layout-only and
+     degrade to ordinary wrapping where unsupported. */
   h1,
   h2,
   h3 {
-    font-family: var(--font-display);
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
   }
 
   /* ───────────────────────────────────────────────────────────────────────
-     TABULAR FIGURES ON EVERY DATA STYLE
+     TABULAR FIGURES ON EVERY DATA STYLE, MONO ON THE TABLE ONES
 
      Not cosmetic. Odds, money, dates and percentages sit in columns, and
      proportional digits make a column ragged enough that comparing two rows
      means reading them rather than glancing — which is the entire job of the
      track-record page.
+
+     `data` and `data-sm` are set in Geist Mono (DESIGN.md: odds, units,
+     money, dates in tables). `data-xl` stays in Geist Sans with tabular
+     figures: a headline number in a monospace face reads as a terminal, not
+     as a publication.
 
      Applied by selector so that choosing the data style is enough; a caller
      cannot pick the size and forget the figures.
@@ -327,14 +386,18 @@
     font-variant-numeric: tabular-nums;
   }
 
+  .text-data,
+  .text-data-sm {
+    font-family: var(--font-mono);
+  }
+
   /* ───────────────────────────────────────────────────────────────────────
      THE FOCUS RING
 
      2px in `brand-text` at 2px offset, on everything interactive. Never
-     removed — replaced if the default is unwanted.
-
-     `brand-text` rather than `brand`: the ring has to reach 3:1 against the
-     surface behind it, and the surface green does not (2.07:1 on white).
+     removed — replaced if the default is unwanted. `brand-text` reaches
+     6.46:1 or better on every surface in both themes, against the 3:1 that
+     WCAG 1.4.11 asks of a focus indicator.
      ─────────────────────────────────────────────────────────────────────── */
   :focus-visible {
     outline: 2px solid var(--color-brand-text);
@@ -345,22 +408,12 @@
   /* ───────────────────────────────────────────────────────────────────────
      AND THE SAME RING FOR A CONTROL WHOSE FOCUS IS INSIDE ITS SHADOW ROOT
 
-     `<input type="date">` is not one tab stop in Chrome — it is several. The
-     day, month and year segments each take focus inside the input's shadow
-     tree, and while focus is in there the HOST matches `:focus-within` but
-     NOT `:focus-visible`. Measured directly: `fv: false, fw: true,
-     outline: none`.
-
-     So a real keyboard tab-through of the history filter found two of the
-     eight date stops with no ring from us at all. Chrome draws its own
-     indicator on the segment, but the field itself was unoutlined, which on
-     a page of controls is exactly the moment a keyboard user loses their
-     place.
-
-     Scoped to `input` deliberately. `:focus-within` on anything else would
-     outline every ancestor of a focused control — the form, the card, the
-     page — and an `<input>` cannot contain another focusable element except
-     its own internal parts, which is precisely the case being covered.
+     `<input type="date">` is several tab stops in Chrome: the day, month and
+     year segments take focus inside the input's shadow tree, and while focus
+     is in there the HOST matches `:focus-within` but NOT `:focus-visible`.
+     A real keyboard pass of the history filter found two of eight date stops
+     with no ring at all. Scoped to `input` deliberately: on anything else,
+     `:focus-within` would outline every ancestor of a focused control.
      ─────────────────────────────────────────────────────────────────────── */
   input:focus-within {
     outline: 2px solid var(--color-brand-text);
@@ -381,7 +434,7 @@
   }
 
   ::selection {
-    background-color: var(--color-surface-accent);
+    background-color: var(--color-highlight);
     color: var(--color-ink);
   }
 
@@ -402,50 +455,53 @@
    =========================================================================== */
 
 @layer utilities {
-  /* The page gutter, in one place. 64 desktop / 48 tablet / 24 mobile. A
-     component that needs the page edge uses this rather than guessing. */
+  /* The page margin, in one place: 16 / 24 / 32 px (see `--sc-page-margin`).
+     A component that needs the page edge uses this rather than guessing. */
   .page-gutter {
-    padding-inline: 1.5rem; /* 24px */
+    padding-inline: var(--sc-page-margin);
   }
 
-  @media (min-width: 48rem) {
-    .page-gutter {
-      padding-inline: 3rem; /* 48px */
-    }
-  }
-
-  @media (min-width: 64rem) {
-    .page-gutter {
-      padding-inline: 4rem; /* 64px */
-    }
-  }
-
-  /* Centred content column: 1280px max, with the gutter above. */
+  /* Centred content column: 1200px of CONTENT, so the shell is that plus the
+     margins on each side. */
   .page-shell {
     margin-inline: auto;
     width: 100%;
-    max-width: var(--container-page);
+    max-width: calc(var(--container-page) + 2 * var(--sc-page-margin));
+  }
+
+  /* ───────────────────────────────────────────────────────────────────────
+     THE GRID (DESIGN.md rule 36)
+
+     12 columns with a 24px gutter from 768px; 4 columns with 16px below, so
+     a mobile layout is still on a grid rather than a free-for-all.
+     ─────────────────────────────────────────────────────────────────────── */
+  .layout-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    column-gap: 1rem;
+  }
+
+  @media (min-width: 48rem) {
+    .layout-grid {
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      column-gap: 1.5rem;
+    }
   }
 
   /* ─────────────────────────────────────────────────────────────────────────
      LONG-FORM PROSE, FOR THE LEGAL DOCUMENTS
 
      The terms, the privacy policy and the methodology come out of Payload as
-     rich text, so their markup is whatever the editor produced — `h2`, `p`,
-     `ul`, `a`, `strong`. Those elements have no classes to hang utilities on,
-     which is the one case Tailwind cannot address directly.
+     rich text, so their markup is whatever the editor produced. Those
+     elements have no classes to hang utilities on, which is the one case
+     Tailwind cannot address directly. Written by hand rather than adding
+     `@tailwindcss/typography`, whose defaults would fight these tokens.
 
-     Written by hand rather than adding `@tailwindcss/typography`: the plugin
-     brings its own type scale and its own colours, both of which would have
-     to be overridden token by token to match this design system. Twenty lines
-     here, against a dependency whose defaults fight ours.
-
-     The measure is capped at 68ch. A privacy policy set across 1280px is
-     physically hard to read — the eye loses the line on the way back — and
-     this is the one page type whose whole job is being readable.
+     The measure is ~68 characters and never wider than the 720px reading
+     column (DESIGN.md rule 32).
      ───────────────────────────────────────────────────────────────────────── */
   .prose-sc {
-    max-width: 68ch;
+    max-width: min(68ch, var(--container-reading));
     color: var(--color-ink);
   }
 
@@ -454,15 +510,14 @@
   }
 
   .prose-sc h2 {
-    font-family: var(--font-display);
     font-size: var(--text-heading);
     line-height: var(--text-heading--line-height);
     font-weight: var(--text-heading--font-weight);
+    letter-spacing: var(--text-heading--letter-spacing);
     margin-block-start: 2rem;
   }
 
   .prose-sc h3 {
-    font-family: var(--font-display);
     font-size: var(--text-body);
     line-height: var(--text-body--line-height);
     font-weight: 600;
@@ -516,28 +571,21 @@
   /* ─────────────────────────────────────────────────────────────────────────
      THE DATA TABLE, AND WHAT IT DOES ON A PHONE
 
-     Nine columns of track record. On a narrow screen there are three ways to
-     handle that and two of them are wrong:
+     Restyled to the tokens here; its structure belongs to `TipsTable`
+     (SC-007). One semantic `<table>`, re-laid-out below 768px so each row
+     becomes a block and each cell carries its own label from `data-label`.
+     One DOM, real table semantics, no duplication, no horizontal scroll.
 
-       - HORIZONTAL SCROLL. Explicitly not acceptable. A reader has to scroll
-         right to find out whether a tip won, then left again for the date,
-         and comparing two rows becomes impossible.
-       - A SECOND, SEPARATE CARD LIST. Works, but it means every row exists
-         twice in the DOM, both copies have to be kept in step, and a
-         `display: none` list is still downloaded and still parsed.
-       - THIS. One semantic `<table>`, re-laid-out below 768px so each row
-         becomes a card and each cell carries its own label from
-         `data-label`. One DOM, real table semantics, no duplication.
-
-     The labels come from `data-label` on each `<td>`, which the component
-     sets from the same strings it puts in the `<th>`s — so a column cannot
-     be renamed in one place and not the other.
+     Editorial rules rather than a grid of boxes: a firm rule under the
+     header, hairlines between rows, no zebra striping, no radius on rows.
      ───────────────────────────────────────────────────────────────────────── */
   .data-table {
     width: 100%;
     border-collapse: collapse;
     /* Figures line up: see the tabular-nums rule in the base layer. */
     font-variant-numeric: tabular-nums;
+    font-size: var(--text-data-sm);
+    line-height: var(--text-data-sm--line-height);
   }
 
   .data-table caption {
@@ -551,10 +599,9 @@
   .data-table th,
   .data-table td {
     text-align: start;
-    /* 4px block padding, not 8px: the tip link in the event cell carries a
-       44px minimum height for touch, and without trimming here every row
-       would grow by 20px. This keeps the growth to 4px, so the table stays
-       dense enough to scan while its links stay tappable. */
+    /* 4px block padding: the tip link in the event cell carries a 44px
+       minimum height for touch, and without trimming here every row would
+       grow by 20px. */
     padding: 0.25rem 0.75rem;
     border-block-end: 1px solid var(--color-border-subtle);
     vertical-align: top;
@@ -563,20 +610,24 @@
   .data-table thead th {
     font-size: var(--text-label);
     line-height: var(--text-label--line-height);
-    font-weight: 600;
+    font-weight: var(--text-label--font-weight);
     color: var(--color-ink-muted);
     white-space: nowrap;
-    border-block-end: 1px solid var(--color-border-strong);
+    padding-block: 0.5rem;
+    border-block-end: 1px solid var(--color-ink);
   }
 
+  /* A tint of the ink rather than a surface token, so the hover reads on
+     whichever surface the table sits on, in both themes. Decorative only. */
   .data-table tbody tr:hover {
-    background-color: var(--color-surface-raised);
+    background-color: color-mix(in srgb, var(--color-ink) 4%, transparent);
   }
 
   /* Numeric columns right-align, so the digits form a column rather than a
      ragged edge. Set per cell by the component via `data-align`. */
   .data-table [data-align='end'] {
     text-align: end;
+    font-family: var(--font-mono);
   }
 
   @media (max-width: 47.999rem) {
@@ -592,11 +643,8 @@
 
     .data-table tr {
       display: block;
-      border: 1px solid var(--color-border-subtle);
-      border-radius: var(--radius-card);
-      padding: 0.75rem;
-      margin-block-end: 0.75rem;
-      background-color: var(--color-surface-page);
+      border-block-end: 1px solid var(--color-border-subtle);
+      padding-block: 0.75rem;
     }
 
     .data-table td {
@@ -604,7 +652,7 @@
       justify-content: space-between;
       align-items: baseline;
       gap: 1rem;
-      padding: 0.25rem 0;
+      padding: 0.125rem 0;
       border-block-end: none;
     }
 
@@ -614,9 +662,10 @@
       content: attr(data-label);
       flex: 0 0 auto;
       color: var(--color-ink-muted);
+      font-family: var(--font-sans);
       font-size: var(--text-label);
       line-height: var(--text-label--line-height);
-      font-weight: 600;
+      font-weight: var(--text-label--font-weight);
     }
 
     /* A cell with nothing in it would show a lonely label. */
@@ -632,19 +681,11 @@
   /* ─────────────────────────────────────────────────────────────────────────
      THE TURNSTILE SLOT
 
-     Cloudflare's normal widget is 300x65 CSS pixels, and it arrives in an
-     iframe some time after the page does. Without a reserved box it pushed
-     everything below it down — on the home page a Lighthouse run measured
-     CLS 0.104, over the 0.1 threshold, and named the FOOTER as the shifting
-     element, because the footer was what moved.
-
-     So the slot holds the space from first paint. The numbers are the
-     widget's documented size and are therefore magic numbers; they live here,
-     once, next to the reason, rather than as an arbitrary utility at a call
-     site.
-
-     `max-width: 100%` so the fixed 300px cannot cause horizontal overflow
-     inside a narrower container at 320px viewport width.
+     Cloudflare's normal widget is 300x65 CSS pixels and arrives in an iframe
+     after the page does. Without a reserved box it pushed the footer down
+     (CLS 0.104 measured on the home page). So the slot holds the space from
+     first paint. `max-width: 100%` so the fixed 300px cannot overflow a
+     narrower container at 320px viewport width.
      ───────────────────────────────────────────────────────────────────────── */
   .turnstile-slot {
     min-height: 65px;

@@ -12,19 +12,25 @@
  * WHY IT IS A CROSS PRODUCT AND NOT A LIST
  *
  * The first version of this file checked an explicit list of pairs, and the
- * list had a hole exactly where you would expect: `border-strong` was
- * verified against white, measured 3.06:1, and was declared fine. It was
- * 2.94:1 on `surface-raised` and 2.45:1 on `surface-accent` — wrong on two of
- * the three surfaces a control border can actually land on.
+ * list had a hole exactly where you would expect: a control border verified
+ * against white and declared fine, while failing on two of the three
+ * surfaces it could actually land on. So foregrounds declare which surfaces
+ * they may appear on, and this multiplies that out across both themes.
  *
- * The list was the bug. So foregrounds now declare which surfaces they may
- * appear on, and this multiplies that out across both themes. A shade change
- * is checked everywhere it can land rather than everywhere somebody
- * remembered to write down.
+ * ──────────────────────────────────────────────────────────────────────────
+ * THREE SOURCES THAT MUST AGREE
+ *
+ *   docs/DESIGN.md   the specification (token table, sizes, radius, widths)
+ *   tokens.ts        the same values as data, which this file can measure
+ *   globals.css      what the browser actually reads
+ *
+ * Each pair is checked below. A value changed in one place and not the
+ * others is a failing test, not a discovery made by a reader who cannot see
+ * the page.
  */
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import path from 'node:path'
 
 import {
@@ -37,19 +43,35 @@ import {
   thresholdFor,
 } from './contrast.ts'
 import {
+  DESIGN_SPEC_TOKENS,
   EXCLUDED_PLACEMENTS,
   FILLED_PAIRS,
   FOREGROUND_RULES,
   FORBIDDEN_PAIRS,
   LARGE_TEXT_TOKENS,
+  LAYOUT,
   PALETTE,
   RADII,
   SURFACE_TOKENS,
   TYPE_SCALE,
+  TYPE_STEP_MIN_WIDTH_REM,
+  type ColourToken,
   type ThemeMode,
 } from './tokens.ts'
 
 const MODES: readonly ThemeMode[] = ['light', 'dark']
+
+const read = (relative: string): string =>
+  readFileSync(path.join(process.cwd(), relative), 'utf8')
+
+const rem = (px: number): string => `${String(px / 16)}rem`
+
+/** Block, JSX and line comments removed, so a rule is checked against code. */
+const stripComments = (source: string): string =>
+  source
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(^|[^:'"])\/\/.*$/gm, '$1')
 
 /* -------------------------------------------------------------------------- */
 /* The arithmetic itself                                                      */
@@ -60,20 +82,19 @@ describe('contrast arithmetic', () => {
     // Black on white is 21:1 and a colour against itself is 1:1. If either of
     // these is wrong, nothing else in this file means anything.
     assert.equal(ratio('#000000', '#ffffff'), 21)
-    assert.equal(ratio('#5bc894', '#5bc894'), 1)
+    assert.equal(ratio('#236344', '#236344'), 1)
   })
 
   it('is symmetric in its arguments', () => {
     assert.equal(
-      contrastRatio('#1a2e1f', '#ffffff'),
-      contrastRatio('#ffffff', '#1a2e1f'),
+      contrastRatio('#171a18', '#ffffff'),
+      contrastRatio('#ffffff', '#171a18'),
     )
   })
 
   it('linearises the channels rather than averaging the encoded values', () => {
-    // The shortcut everyone takes. sRGB is gamma-encoded, so mid-grey has a
-    // relative luminance near 0.216, not 0.5 — and a checker built on the
-    // wrong one passes pairs that fail.
+    // sRGB is gamma-encoded, so mid-grey has a relative luminance near 0.216,
+    // not 0.5 — and a checker built on the wrong one passes pairs that fail.
     const midGrey = relativeLuminance(parseHex('#808080'))
 
     assert.ok(
@@ -86,8 +107,7 @@ describe('contrast arithmetic', () => {
     assert.deepEqual(parseHex('#fff'), { r: 255, g: 255, b: 255 })
 
     for (const bad of ['', '#gg0000', '#12345', 'rgb(0,0,0)', '#1234567']) {
-      // A silent fallback would read a typo as black and pass most checks,
-      // which is the worst available failure mode.
+      // A silent fallback would read a typo as black and pass most checks.
       assert.throws(() => parseHex(bad), RangeError, `accepted ${bad}`)
     }
   })
@@ -117,10 +137,30 @@ describe('every foreground reaches AA on every surface it may appear on', () => 
     }
   }
 
+  it('checks every TEXT token at the normal-text threshold', () => {
+    // A token cannot know its size at the call site, so none of the text
+    // rules may lean on the 3:1 large-text allowance.
+    const textTokens: readonly ColourToken[] = [
+      'ink',
+      'ink-muted',
+      'brand-text',
+      'result-win',
+      'result-loss',
+      'result-void',
+      'result-pending',
+    ]
+
+    for (const token of textTokens) {
+      const rule = FOREGROUND_RULES.find(
+        (candidate) => candidate.fg === token && candidate.level === 'normal',
+      )
+
+      assert.ok(rule, `${token} has no normal-text rule`)
+    }
+  })
+
   it('checks control borders against ALL surfaces, not just the page', () => {
-    // The assertion that would have caught the shade this palette replaced.
-    // Stated separately from the loop above so the intent survives even if
-    // somebody narrows `FOREGROUND_RULES`.
+    // The assertion that would have caught the shade an earlier palette had.
     const rule = FOREGROUND_RULES.find(
       (candidate) =>
         candidate.fg === 'border-strong' && candidate.level === 'non-text',
@@ -135,7 +175,6 @@ describe('every foreground reaches AA on every surface it may appear on', () => 
   })
 
   it('checks the focus ring against ALL surfaces', () => {
-    // The ring can appear over anything, including an accent callout.
     const rule = FOREGROUND_RULES.find(
       (candidate) =>
         candidate.fg === 'brand-text' && candidate.level === 'non-text',
@@ -145,9 +184,20 @@ describe('every foreground reaches AA on every surface it may appear on', () => 
     assert.deepEqual([...rule.on].sort(), [...SURFACE_TOKENS].sort())
   })
 
+  it('lets ink-muted sit on every surface, because callouts use it', () => {
+    // Pages outside the design system put muted text inside accent callouts
+    // (the methodology box on /historie, the locked-tip panel). The accent
+    // tint was chosen light enough for that; this keeps it so.
+    const rule = FOREGROUND_RULES.find(
+      (candidate) =>
+        candidate.fg === 'ink-muted' && candidate.level === 'normal',
+    )
+
+    assert.ok(rule)
+    assert.deepEqual([...rule.on].sort(), [...SURFACE_TOKENS].sort())
+  })
+
   it('covers every surface token in the palette', () => {
-    // So that adding a fourth surface is a failing test rather than a surface
-    // nothing was ever measured against.
     for (const surface of SURFACE_TOKENS) {
       assert.ok(
         PALETTE.light[surface] && PALETTE.dark[surface],
@@ -160,6 +210,13 @@ describe('every foreground reaches AA on every surface it may appear on', () => 
     for (const surface of SURFACE_TOKENS) {
       assert.ok(covered.has(surface), `nothing is checked against ${surface}`)
     }
+  })
+
+  it('declares the same tokens in both themes', () => {
+    assert.deepEqual(
+      Object.keys(PALETTE.light).sort(),
+      Object.keys(PALETTE.dark).sort(),
+    )
   })
 })
 
@@ -179,30 +236,34 @@ describe('filled controls', () => {
   }
 
   it('binds each fill to exactly one foreground', () => {
-    // The binding is the point: there is one legal foreground per fill.
     const fills = FILLED_PAIRS.map((pair) => pair.bg)
 
-    assert.deepEqual(fills, [
-      'brand',
-      'accent',
-      'result-win',
-      'result-loss',
-      'result-void',
-    ])
     assert.equal(
       new Set(fills).size,
       fills.length,
       'a fill has two foregrounds',
     )
   })
+
+  it('puts WHITE on the brand fill, because the fill is dark now', () => {
+    // The old palette's rule was the opposite ("never white on brand"). The
+    // SC-005 green is #236344, where white is 7.14:1 and ink is 2.46:1. The
+    // token, not the call site, carries that, so it is pinned here.
+    assert.equal(PALETTE.light['ink-on-brand'], '#ffffff')
+    assert.equal(PALETTE.dark['ink-on-brand'], '#ffffff')
+    assert.ok(!meetsAA(PALETTE.light.ink, PALETTE.light.brand, 'normal'))
+  })
 })
 
 describe('white on a filled result', () => {
-  const RESULT_FILLS = ['result-win', 'result-loss', 'result-void'] as const
+  const RESULT_FILLS = [
+    'result-win',
+    'result-loss',
+    'result-void',
+    'result-pending',
+  ] as const
 
-  it('is legal in light mode — the "never white" rule is not global', () => {
-    // Scoped to `brand` and `accent`. A blanket ban would have outlawed a
-    // badge that is perfectly legible: 5.33 / 7.30 / 5.63.
+  it('is legal in light mode', () => {
     for (const fill of RESULT_FILLS) {
       const measured = ratio('#ffffff', PALETTE.light[fill])
 
@@ -215,11 +276,7 @@ describe('white on a filled result', () => {
 
   it('is NOT legal in dark mode, which is why it is a token', () => {
     // The dark result values are LIGHT colours — foregrounds meant for a dark
-    // surface. Filling a chip with one and writing white on it inverts the
-    // intent: 1.77 / 2.58 / 2.32.
-    //
-    // This is the assertion that stops someone "simplifying" ink-on-result
-    // down to a literal #ffffff.
+    // surface. This is what stops ink-on-result being "simplified" to white.
     for (const fill of RESULT_FILLS) {
       const measured = ratio('#ffffff', PALETTE.dark[fill])
 
@@ -232,19 +289,13 @@ describe('white on a filled result', () => {
   })
 
   it('is covered by ink-on-result in both themes', () => {
-    // Which is what the cross product above already asserts; this names the
-    // reason so the two cannot be separated by a later edit.
     assert.equal(PALETTE.light['ink-on-result'], '#ffffff')
-    assert.equal(PALETTE.dark['ink-on-result'], '#1a2e1f')
+    assert.equal(PALETTE.dark['ink-on-result'], PALETTE.dark['surface-page'])
 
     for (const mode of MODES) {
       for (const fill of RESULT_FILLS) {
         assert.ok(
-          meetsAA(
-            PALETTE[mode]['ink-on-result'],
-            PALETTE[mode][fill],
-            'normal',
-          ),
+          meetsAA(PALETTE[mode]['ink-on-result'], PALETTE[mode][fill]),
           `${mode}: ink-on-result on ${fill} fails`,
         )
       }
@@ -259,9 +310,6 @@ describe('white on a filled result', () => {
 describe('placements that are excluded on purpose', () => {
   for (const excluded of EXCLUDED_PLACEMENTS) {
     it(`${excluded.fg} is not allowed on ${excluded.bg} (${excluded.basis})`, () => {
-      // Pinned rather than merely omitted. An absence from the rules says
-      // nothing about whether a combination was considered; this says it was,
-      // gives the number, and names what prevents it.
       const measured = MODES.map((mode) => ({
         mode,
         value: ratio(PALETTE[mode][excluded.fg], PALETTE[mode][excluded.bg]),
@@ -284,11 +332,8 @@ describe('placements that are excluded on purpose', () => {
         return
       }
 
-      // A POLICY exclusion passes the threshold and is still refused. There
-      // is nothing to assert about the ratio failing — the assertion is that
-      // the margin is thin enough to justify the refusal. If a palette change
-      // ever gave it real headroom, this says so rather than leaving a
-      // restriction with no remaining reason.
+      // A POLICY exclusion passes and is still refused. The assertion is that
+      // the margin is thin enough to justify the refusal.
       const floor = thresholdFor(excluded.level)
       const thinnest = Math.min(...measured.map((entry) => entry.value))
 
@@ -301,16 +346,12 @@ describe('placements that are excluded on purpose', () => {
         thinnest < floor + 0.5,
         `${excluded.fg} on ${excluded.bg} now clears ${String(floor)}:1 by ` +
           `${(thinnest - floor).toFixed(2)} (${String(thinnest)}:1). That is ` +
-          'real margin rather than luck, so the policy exclusion deserves ' +
-          're-deciding rather than inheriting.',
+          'real margin, so the policy exclusion deserves re-deciding.',
       )
     })
   }
 
   it('is not allowed by any rule at the same time', () => {
-    // A combination cannot be both excluded and permitted. Without this, a
-    // later edit could add the rule and leave the exclusion in place, and the
-    // suite would assert both and pass neither honestly.
     for (const excluded of EXCLUDED_PLACEMENTS) {
       const permitted = FOREGROUND_RULES.some(
         (rule) =>
@@ -331,40 +372,152 @@ describe('the pairs that must never be used', () => {
   for (const pair of FORBIDDEN_PAIRS) {
     it(`refuses ${pair.fg} on ${pair.bg} — ${pair.why}`, () => {
       const background = PALETTE.light[pair.bg]
-      const measured = contrastRatio(pair.fg, background)
+      const measured = ratio(pair.fg, background)
 
       // Asserted to FAIL. A suite that only checks the good pairs cannot stop
-      // anyone adding a bad one, and these are the specific mistakes the
-      // palette invites.
+      // anyone adding a bad one.
       assert.ok(
-        measured < AA_NORMAL_TEXT,
-        `${pair.fg} on ${pair.bg} now measures ${String(ratio(pair.fg, background))}:1 — ` +
+        !meetsAA(pair.fg, background, pair.level),
+        `${pair.fg} on ${pair.bg} now measures ${String(measured)}:1 — ` +
           'if that is intended, remove it from FORBIDDEN_PAIRS deliberately',
       )
     })
   }
 
-  it('keeps the brand green off light backgrounds as text', () => {
-    // The one mistake that looks right in a design tool and is unreadable on
-    // a phone in daylight.
-    assert.ok(contrastRatio('#5bc894', '#ffffff') < 3)
+  it('pins the hairline as decorative only', () => {
+    assert.equal(
+      FORBIDDEN_PAIRS.filter(
+        (pair) => pair.fg === PALETTE.light['border-subtle'],
+      ).length,
+      2,
+    )
   })
 })
 
 /* -------------------------------------------------------------------------- */
-/* The CSS and the data must agree                                            */
+/* docs/DESIGN.md and tokens.ts must agree                                    */
+/* -------------------------------------------------------------------------- */
+
+describe('tokens.ts implements the DESIGN.md specification', () => {
+  const spec = read('docs/DESIGN.md')
+
+  /** `| \`bg\` | \`#F8F9F6\` | …` rows of the token table. */
+  const specColours = new Map(
+    [
+      ...spec.matchAll(/^\|\s*`([a-z-]+)`\s*\|\s*`(#[0-9a-fA-F]{6})`\s*\|/gm),
+    ].map((match) => [match[1] as string, (match[2] as string).toLowerCase()]),
+  )
+
+  it('finds the token table, or this block is vacuous', () => {
+    assert.ok(specColours.size >= 9, `found ${String(specColours.size)} tokens`)
+  })
+
+  it('maps exactly the tokens the specification lists', () => {
+    assert.deepEqual(
+      [...specColours.keys()].sort(),
+      Object.keys(DESIGN_SPEC_TOKENS).sort(),
+    )
+  })
+
+  for (const [name, token] of Object.entries(DESIGN_SPEC_TOKENS)) {
+    it(`DESIGN.md \`${name}\` is the light \`${token}\``, () => {
+      assert.equal(PALETTE.light[token], specColours.get(name))
+    })
+  }
+
+  it('uses the specified sizes', () => {
+    // "H1 48/56, H2 32/40, H3 20/28, body 16/26, small 14/20, table 14/20",
+    // and "mobile H1 32/40".
+    const pair = (pattern: RegExp): [number, number] => {
+      const match = pattern.exec(spec)
+
+      assert.ok(match, `DESIGN.md no longer matches ${String(pattern)}`)
+
+      return [Number(match[1]), Number(match[2])]
+    }
+
+    const expected: readonly [string, [number, number], [number, number]][] = [
+      [
+        'H1',
+        pair(/\bH1 (\d+)\/(\d+)/),
+        [
+          TYPE_SCALE['display-xl'].desktop.size,
+          TYPE_SCALE['display-xl'].desktop.lineHeight,
+        ],
+      ],
+      [
+        'mobile H1',
+        pair(/mobile H1 (\d+)\/(\d+)/),
+        [TYPE_SCALE['display-xl'].size, TYPE_SCALE['display-xl'].lineHeight],
+      ],
+      [
+        'H2',
+        pair(/\bH2 (\d+)\/(\d+)/),
+        [
+          TYPE_SCALE['display-lg'].desktop.size,
+          TYPE_SCALE['display-lg'].desktop.lineHeight,
+        ],
+      ],
+      [
+        'H3',
+        pair(/\bH3 (\d+)\/(\d+)/),
+        [TYPE_SCALE.heading.size, TYPE_SCALE.heading.lineHeight],
+      ],
+      [
+        'body',
+        pair(/\bbody (\d+)\/(\d+)/),
+        [TYPE_SCALE.body.size, TYPE_SCALE.body.lineHeight],
+      ],
+      [
+        'small',
+        pair(/\bsmall (\d+)\/(\d+)/),
+        [TYPE_SCALE['body-sm'].size, TYPE_SCALE['body-sm'].lineHeight],
+      ],
+      [
+        'table',
+        pair(/\btable (\d+)\/(\d+)/),
+        [TYPE_SCALE['data-sm'].size, TYPE_SCALE['data-sm'].lineHeight],
+      ],
+    ]
+
+    for (const [name, specified, implemented] of expected) {
+      assert.deepEqual(implemented, specified, `${name} drifted from DESIGN.md`)
+    }
+  })
+
+  it('uses the specified radius and content widths', () => {
+    assert.match(spec, /\|\s*radius\s*\|\s*`6px`/)
+    assert.deepEqual(new Set(Object.values(RADII)), new Set([6]))
+
+    const widths = /(\d+) px content, (\d+) px for long reading/.exec(spec)
+
+    assert.ok(widths, 'DESIGN.md no longer states the content widths')
+    assert.equal(LAYOUT.contentMax, Number(widths[1]))
+    assert.equal(LAYOUT.readingMax, Number(widths[2]))
+  })
+
+  it('names Geist Sans and Geist Mono, which is what fonts.ts loads', () => {
+    assert.match(spec, /Geist Sans/)
+    assert.match(spec, /Geist Mono/)
+  })
+})
+
+/* -------------------------------------------------------------------------- */
+/* globals.css and tokens.ts must agree                                       */
 /* -------------------------------------------------------------------------- */
 
 describe('globals.css and tokens.ts have not drifted', () => {
-  const css = readFileSync(
-    path.join(process.cwd(), 'src/app/(frontend)/globals.css'),
-    'utf8',
+  const css = read('src/app/(frontend)/globals.css')
+  const desktopBlock = css.slice(
+    css.indexOf(
+      `@media (min-width: ${String(TYPE_STEP_MIN_WIDTH_REM)}rem) {\n  :root {\n    --text-`,
+    ),
   )
 
   for (const mode of MODES) {
     for (const [token, value] of Object.entries(PALETTE[mode])) {
       it(`${mode} ${token} = ${value} appears in globals.css`, () => {
-        // The declaration, not merely the value: finding `#5bc894` anywhere
+        // The declaration, not merely the value: finding the hex anywhere
         // would pass even if it had been assigned to the wrong token.
         const declaration = `--sc-${token}: ${value};`
 
@@ -385,121 +538,313 @@ describe('globals.css and tokens.ts have not drifted', () => {
     }
   })
 
-  it('no longer carries the border shade that failed on two surfaces', () => {
-    // #7e9a87 reached 3.06:1 on white and failed on both of the others. If it
-    // ever comes back, it comes back with this test failing.
-    //
-    // The DECLARATION, not the mention: globals.css names the old value in a
-    // comment explaining why it was replaced, and that explanation is the
-    // most useful thing in the file for whoever next considers nudging this
-    // shade. A substring check would have forced it out.
-    assert.ok(
-      !css.includes('--sc-border-strong: #7e9a87;'),
-      'the old light border-strong is assigned again in globals.css',
+  it('wires no colour utility that the palette does not define', () => {
+    // A `--color-*` with no tokens.ts entry would be a colour nothing
+    // measures. The yellow `accent` of the old palette is the obvious one.
+    const wired = [...css.matchAll(/--color-([a-z-]+): var\(--sc-/g)].map(
+      (match) => match[1],
     )
-    assert.ok(
-      !css.includes('--sc-border-strong: #6b8b75;'),
-      'the old dark border-strong is assigned again in globals.css',
-    )
+
+    assert.deepEqual(wired.sort(), Object.keys(PALETTE.light).sort())
   })
 
-  it('has no radius below 6px', () => {
+  it('has every radius at 6px and none below it', () => {
     for (const forbidden of [
       '--radius-sm:',
       '--radius-xs:',
       '--radius-none:',
     ]) {
-      assert.ok(!css.includes(forbidden), `${forbidden} is back in globals.css`)
+      assert.ok(!css.includes(forbidden), `${forbidden} is in globals.css`)
     }
 
-    assert.equal(Math.min(...Object.values(RADII)), 6)
+    const radii = new Map(
+      [...css.matchAll(/--radius-([a-z]+): ([\d.]+)rem;/g)].map((match) => [
+        match[1],
+        Number(match[2]) * 16,
+      ]),
+    )
+
+    assert.deepEqual([...radii.keys()].sort(), Object.keys(RADII).sort())
+
+    for (const [name, px] of radii) {
+      assert.equal(
+        px,
+        RADII[name as keyof typeof RADII],
+        `--radius-${String(name)}`,
+      )
+    }
   })
 
-  it('sets tabular figures on every numeric style', () => {
+  it('has one shadow level, tinted with the ink (rule 43)', () => {
+    const shadows = [...css.matchAll(/^\s*--shadow-[a-z-]+:/gm)]
+
+    assert.equal(shadows.length, 1, 'more than one shadow level is declared')
+    assert.ok(css.includes('--sc-shadow-overlay: rgba(23, 26, 24, 0.12);'))
+  })
+
+  it('has no gradient, glow or glass anywhere (rule 45)', () => {
+    for (const tell of [
+      'gradient(',
+      'backdrop-filter',
+      'text-shadow',
+      'blur(',
+    ]) {
+      assert.ok(!css.includes(tell), `globals.css contains ${tell}`)
+    }
+  })
+
+  it('sets tabular figures on every numeric style, mono on the table ones', () => {
     const tabular = Object.entries(TYPE_SCALE)
       .filter(([, style]) => style.tabular)
       .map(([name]) => name)
+    const mono = Object.entries(TYPE_SCALE)
+      .filter(([, style]) => style.mono)
+      .map(([name]) => name)
 
     assert.deepEqual(tabular, ['data-xl', 'data', 'data-sm'])
+    assert.deepEqual(mono, ['data', 'data-sm'])
 
-    const rule = css.slice(css.indexOf('.text-data-xl,'))
-
-    for (const name of tabular) {
-      assert.ok(
-        rule.slice(0, 200).includes(`.text-${name}`),
-        `.text-${name} is not in the tabular-nums selector`,
-      )
-    }
-
-    assert.ok(rule.includes('font-variant-numeric: tabular-nums'))
+    assert.match(
+      css,
+      /\.text-data-xl,\s*\.text-data,\s*\.text-data-sm\s*\{\s*font-variant-numeric: tabular-nums;/,
+      'the tabular-nums selector is not the three data styles',
+    )
+    assert.match(
+      css,
+      /\.text-data,\s*\.text-data-sm\s*\{\s*font-family: var\(--font-mono\);/,
+      'the mono selector is not the two table data styles',
+    )
   })
 
-  it('declares every type token with size, line height and weight', () => {
+  it('declares every type token with its mobile size, line height and weight', () => {
     for (const [name, style] of Object.entries(TYPE_SCALE)) {
-      assert.ok(css.includes(`--text-${name}:`), `--text-${name} is missing`)
       assert.ok(
-        css.includes(`--text-${name}--line-height:`),
-        `--text-${name}--line-height is missing`,
+        css.includes(`--text-${name}: ${rem(style.size)};`),
+        `--text-${name} should be ${rem(style.size)}`,
       )
       assert.ok(
-        css.includes(`--text-${name}--font-weight: ${String(style.weight)}`),
+        css.includes(`--text-${name}--line-height: ${rem(style.lineHeight)};`),
+        `--text-${name}--line-height should be ${rem(style.lineHeight)}`,
+      )
+      assert.ok(
+        css.includes(`--text-${name}--font-weight: ${String(style.weight)};`),
         `--text-${name}--font-weight should be ${String(style.weight)}`,
       )
     }
   })
 
-  it('keeps the focus ring in brand-text, which reaches 3:1', () => {
+  it('steps the large styles up at the breakpoint, and only those', () => {
+    assert.ok(desktopBlock.length > 0, 'the stepped type block is missing')
+
+    const block = desktopBlock.slice(0, desktopBlock.indexOf('}\n}') + 3)
+
+    for (const [name, style] of Object.entries(TYPE_SCALE)) {
+      if (style.desktop === null) {
+        assert.ok(!block.includes(`--text-${name}:`), `${name} should not step`)
+        continue
+      }
+
+      assert.ok(
+        block.includes(`--text-${name}: ${rem(style.desktop.size)};`),
+        `${name} should step to ${rem(style.desktop.size)}`,
+      )
+      assert.ok(
+        block.includes(
+          `--text-${name}--line-height: ${rem(style.desktop.lineHeight)};`,
+        ),
+        `${name} should step to ${rem(style.desktop.lineHeight)} leading`,
+      )
+    }
+  })
+
+  it('keeps the focus ring in brand-text, which reaches 3:1 everywhere', () => {
     assert.ok(css.includes('outline: 2px solid var(--color-brand-text)'))
     assert.ok(css.includes('outline-offset: 2px'))
   })
 
-  it('tints the shadows rather than using black in light mode', () => {
-    // A neutral black shadow over a green page reads as grey dirt.
-    assert.ok(css.includes('rgba(26, 46, 31, 0.06)'))
-    assert.ok(css.includes('rgba(26, 46, 31, 0.1)'))
+  it('points the font utilities at the Geist variables', () => {
+    assert.ok(css.includes('--font-sans: var(--font-geist-sans)'))
+    assert.match(css, /--font-mono:\s*var\(--font-geist-mono\)/)
+  })
+
+  it('sets the content and reading widths from LAYOUT', () => {
+    assert.ok(css.includes(`--container-page: ${rem(LAYOUT.contentMax)};`))
+    assert.ok(css.includes(`--container-reading: ${rem(LAYOUT.readingMax)};`))
   })
 })
 
+/* -------------------------------------------------------------------------- */
+/* The fonts                                                                  */
+/* -------------------------------------------------------------------------- */
+
+describe('the typefaces are self-hosted Geist, from the geist package', () => {
+  const fonts = read('src/lib/design/fonts.ts')
+  const pkg = JSON.parse(read('package.json')) as {
+    dependencies: Record<string, string>
+  }
+
+  it('loads through next/font/local, never next/font/google', () => {
+    assert.match(fonts, /from 'next\/font\/local'/)
+
+    // Nowhere in the source tree, not just here: a Google font anywhere is a
+    // build-time network fetch and a second family. The needle is assembled
+    // so this file does not match itself.
+    const needle = ['from ', "'next/font/", "google'"].join('')
+    const offenders: string[] = []
+    const walk = (dir: string): void => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name)
+
+        if (entry.isDirectory()) walk(full)
+        else if (/\.(tsx?|css)$/.test(entry.name)) {
+          if (readFileSync(full, 'utf8').includes(needle)) offenders.push(full)
+        }
+      }
+    }
+
+    walk(path.join(process.cwd(), 'src'))
+    assert.deepEqual(offenders, [])
+  })
+
+  it('reads the woff2 files out of the installed geist package', () => {
+    assert.ok(
+      fonts.includes(
+        "'../../../node_modules/geist/dist/fonts/geist-sans/Geist-Variable.woff2'",
+      ),
+    )
+    assert.ok(
+      fonts.includes(
+        "'../../../node_modules/geist/dist/fonts/geist-mono/GeistMono-Variable.woff2'",
+      ),
+    )
+  })
+
+  it('pins the package to an exact version', () => {
+    assert.match(pkg.dependencies.geist ?? '', /^\d+\.\d+\.\d+$/)
+  })
+
+  it('preloads the sans face only, and swaps both', () => {
+    const sans = fonts.slice(fonts.indexOf('export const geistSans'))
+    const mono = fonts.slice(fonts.indexOf('export const geistMono'))
+
+    assert.match(sans.slice(0, 600), /preload: true/)
+    assert.match(sans.slice(0, 600), /adjustFontFallback: 'Arial'/)
+    assert.match(mono.slice(0, 900), /preload: false/)
+    assert.match(sans.slice(0, 600), /display: 'swap'/)
+    assert.match(mono.slice(0, 900), /display: 'swap'/)
+  })
+
+  it('keeps every mono fallback at the 0.6em advance Geist Mono has', () => {
+    // Consolas is 0.55em; on Windows it would be chosen before Courier New and
+    // make the swap re-measure every mono cell.
+    assert.ok(!/['"]Consolas['"]/.test(fonts))
+    assert.ok(!/Consolas/.test(read('src/app/(frontend)/globals.css')))
+  })
+})
+
+/* -------------------------------------------------------------------------- */
+/* The primitives                                                             */
+/* -------------------------------------------------------------------------- */
+
+describe('the primitives carry none of the generic tells (rules 43–45, 70)', () => {
+  const dir = path.join(process.cwd(), 'src/components/ui')
+  // CODE only: the comments in these files name the tells in order to forbid
+  // them ("no gradients", "one `rounded-xl` at a time").
+  const files = readdirSync(dir)
+    .filter((name) => name.endsWith('.tsx'))
+    .map((name) => ({
+      name,
+      source: stripComments(readFileSync(path.join(dir, name), 'utf8')),
+    }))
+
+  it('finds the primitives, or this block is vacuous', () => {
+    assert.ok(files.length >= 5)
+  })
+
+  const TELLS: readonly [string, RegExp][] = [
+    ['a gradient', /\bbg-(linear|radial|conic)-|gradient/],
+    ['a shadow', /\bshadow-(sm|md|lg|xl|2xl|card|raised)\b/],
+    ['a pill', /\brounded-(full|pill|3xl|2xl|xl)\b/],
+    ['glass', /\bbackdrop-blur/],
+    ['ALL CAPS', /\buppercase\b/],
+    ['a literal white', /\btext-white\b|#fff(fff)?\b/i],
+  ]
+
+  for (const { name, source } of files) {
+    for (const [tell, pattern] of TELLS) {
+      it(`${name} has no ${tell}`, () => {
+        assert.ok(!pattern.test(source), `${name} matches ${String(pattern)}`)
+      })
+    }
+  }
+})
+
 describe('the result indicator carries its own background', () => {
-  const indicator = readFileSync(
-    path.join(process.cwd(), 'src/components/ui/ResultIndicator.tsx'),
-    'utf8',
-  )
+  const indicator = read('src/components/ui/ResultIndicator.tsx')
 
   it('sets a background on every variant', () => {
     // THE MECHANISM behind excluding result tones from `surface-accent`: the
-    // component never inherits a surface, so it cannot land on one where it
-    // measures 4.27 / 4.43 / 4.52. A per-placement exception list would have
-    // to be complete; this cannot be incomplete.
-    assert.ok(indicator.includes('bg-surface-page'))
-    assert.ok(indicator.includes('bg-result-win'))
-    assert.ok(indicator.includes('bg-result-loss'))
-    assert.ok(indicator.includes('bg-result-void'))
+    // component never inherits a surface.
+    assert.equal(
+      (indicator.match(/outlined: '[^']*bg-surface-raised'/g) ?? []).length,
+      4,
+    )
+
+    for (const fill of ['win', 'loss', 'void', 'pending']) {
+      assert.ok(indicator.includes(`bg-result-${fill}`), `no filled ${fill}`)
+    }
   })
 
   it('writes on a filled result with the token, not a literal white', () => {
     assert.ok(indicator.includes('text-ink-on-result'))
-    assert.ok(
-      !/text-white|#ffffff/i.test(indicator),
-      'a literal white here would be unreadable in dark mode',
-    )
+  })
+
+  it('draws its marks as SVG, because Geist has no ✓ or ✕', () => {
+    assert.ok(!/[✓✕]/.test(stripComments(indicator)))
+    assert.match(indicator, /<svg/)
+    assert.match(indicator, /aria-hidden="true"/)
+  })
+
+  it('still says the word for every outcome', () => {
+    for (const label of [
+      'Vyhráno',
+      'Prohráno',
+      'Zrušeno',
+      'Čeká na výsledek',
+    ]) {
+      assert.ok(indicator.includes(`label: '${label}'`), `lost ${label}`)
+    }
   })
 })
 
 describe('the input primitive uses one border colour', () => {
-  const input = readFileSync(
-    path.join(process.cwd(), 'src/components/ui/Input.tsx'),
-    'utf8',
-  )
+  const input = read('src/components/ui/Input.tsx')
 
-  it('has no per-surface conditional left', () => {
-    // The step-up to ink-muted existed only because the old border-strong
-    // failed on raised surfaces. The token was fixed; the conditional went
-    // with it, because a border that is right only when a caller remembers an
-    // argument is worse than one that is simply right.
+  it('has no per-surface conditional', () => {
+    // A border that is right only when a caller remembers an argument is
+    // worse than one that is simply right.
     assert.ok(!input.includes('ControlSurface'))
     assert.ok(!input.includes('border-ink-muted'))
     assert.ok(input.includes('border-border-strong'))
+  })
+})
+
+describe('the button primitive', () => {
+  const button = read('src/components/ui/Button.tsx')
+
+  it('fills the primary with brand and writes on it with its token', () => {
+    assert.match(
+      button,
+      /primary: cn\(\s*'border-transparent bg-brand text-ink-on-brand'/,
+    )
+  })
+
+  it('keeps all four variants and both sizes, so no caller breaks', () => {
+    assert.match(
+      button,
+      /export type ButtonVariant = 'primary' \| 'secondary' \| 'ghost' \| 'accent'/,
+    )
+    assert.match(button, /export type ButtonSize = 'md' \| 'lg'/)
   })
 })
 
@@ -508,7 +853,9 @@ describe('the input primitive uses one border colour', () => {
 /* -------------------------------------------------------------------------- */
 
 describe('type scale', () => {
-  it('marks exactly the styles at 24px and above as large text', () => {
+  it('marks exactly the styles at 24px and above ON MOBILE as large text', () => {
+    // The smallest screen decides: a style that is 32px on a desktop and
+    // 20px on a phone is not large text.
     const atLeast24 = Object.entries(TYPE_SCALE)
       .filter(([, style]) => style.size >= 24)
       .map(([name]) => name)
@@ -519,10 +866,30 @@ describe('type scale', () => {
 
   it('has line heights that are never tighter than the size', () => {
     for (const [name, style] of Object.entries(TYPE_SCALE)) {
-      assert.ok(
-        style.lineHeight >= style.size,
-        `${name} has ${String(style.lineHeight)}px leading on ${String(style.size)}px text`,
-      )
+      for (const step of [style, style.desktop]) {
+        if (step === null) continue
+
+        assert.ok(
+          step.lineHeight >= step.size,
+          `${name} has ${String(step.lineHeight)}px leading on ${String(step.size)}px text`,
+        )
+      }
+    }
+  })
+
+  it('keeps body text at 16px (rule 31)', () => {
+    assert.equal(TYPE_SCALE.body.size, 16)
+  })
+
+  it('uses only sizes on the DESIGN.md scale', () => {
+    const allowed = new Set([14, 16, 20, 24, 32, 48])
+
+    for (const [name, style] of Object.entries(TYPE_SCALE)) {
+      for (const step of [style, style.desktop]) {
+        if (step === null) continue
+
+        assert.ok(allowed.has(step.size), `${name} uses ${String(step.size)}px`)
+      }
     }
   })
 })
@@ -532,68 +899,97 @@ describe('type scale', () => {
 /* -------------------------------------------------------------------------- */
 
 describe('global-error.tsx uses palette values, not invented ones', () => {
-  const globalError = readFileSync(
-    path.join(process.cwd(), 'src/app/global-error.tsx'),
-    'utf8',
-  )
+  const globalError = read('src/app/global-error.tsx')
 
   /**
    * WHY THIS FILE IS A SPECIAL CASE
    *
    * `global-error.tsx` replaces the whole document when the ROOT LAYOUT
-   * fails — which is a real scenario here, because the footer calls
-   * `assertOperatorConfigured()` and that throws in production while the
-   * register data is a placeholder. Since the layout did not render, the
-   * stylesheet may not have been linked, so this page styles itself inline
-   * with literal hex values.
+   * fails, so the stylesheet may not be linked and the page styles itself
+   * inline with literal hex values. That is the only correct way to write
+   * it, and the one place a colour can drift from the palette unnoticed —
+   * hence this check.
    *
-   * That is the only correct way to write it, and it is also the one place in
-   * the codebase where a colour can drift away from the palette without the
-   * CSS drift tests above noticing. So every hex literal in it is checked
-   * against the LIGHT palette — the one the page uses, since it cannot
-   * participate in the theme swap either.
+   * ────────────────────────────────────────────────────────────────────────
+   * THE PENDING MIGRATION, PINNED
+   *
+   * The file sits outside the SC-005 branch's ownership, so it still carries
+   * the PREVIOUS palette's values. Rather than either editing a file this
+   * branch may not touch or dropping the check, each old value is listed
+   * here with the token that replaces it, and the test holds three lines:
+   *
+   *   1. every hex in the file is a current palette value OR a listed legacy
+   *      value — an invented colour still fails;
+   *   2. every listed legacy value is still in the file — the moment the
+   *      file is migrated, a stale entry fails and must be deleted, so this
+   *      list can only shrink;
+   *   3. the text pairs the file actually draws still reach AA.
+   *
+   * The exact replacement is in the SC-005 PR description.
    */
+  const LEGACY_GLOBAL_ERROR_VALUES: Readonly<Record<string, ColourToken>> = {
+    '#1a2e1f': 'ink',
+    '#5bc894': 'brand',
+    '#6d8775': 'border-strong',
+    '#dde8e0': 'border-subtle',
+    '#4a5f50': 'ink-muted',
+    '#27714e': 'brand-text',
+  }
+
   const hexes = [...globalError.matchAll(/#[0-9a-fA-F]{3,8}\b/g)].map((match) =>
     match[0].toLowerCase(),
   )
 
   it('contains some hex literals, or this test is vacuous', () => {
-    assert.ok(hexes.length >= 4, `found only ${hexes.length} hex literals`)
+    assert.ok(
+      hexes.length >= 4,
+      `found only ${String(hexes.length)} hex literals`,
+    )
   })
 
-  it('uses only light-palette values', () => {
-    const allowed = new Set(
-      Object.values(PALETTE.light).map((value) => value.toLowerCase()),
-    )
+  it('uses only light-palette values or a pinned legacy value', () => {
+    const allowed = new Set([
+      ...Object.values(PALETTE.light).map((value) => value.toLowerCase()),
+      ...Object.keys(LEGACY_GLOBAL_ERROR_VALUES),
+    ])
 
     for (const hex of hexes) {
       assert.ok(
         allowed.has(hex),
-        `${hex} in global-error.tsx is not a light-theme palette value. ` +
-          `Allowed: ${[...allowed].sort().join(', ')}`,
+        `${hex} in global-error.tsx is neither a light-theme palette value nor a pinned legacy value`,
       )
     }
   })
 
-  it('puts ink-on-brand on the brand fill, never white', () => {
-    // The contrast rule survives even here: white on #5bc894 is 2.07:1.
-    assert.match(
-      globalError,
-      new RegExp(`backgroundColor: '${PALETTE.light.brand}'`, 'i'),
-    )
-    assert.match(
-      globalError,
-      new RegExp(`color: '${PALETTE.light['ink-on-brand']}'`, 'i'),
-    )
-    // Case-SENSITIVE and anchored on a lowercase `color:`, so it tests the
-    // text colour and not `backgroundColor` — the page's own background
-    // legitimately is #ffffff, which is `surface-page`.
-    assert.equal(/[^a-zA-Z]color:\s*'#(fff|ffffff)'/.test(globalError), false)
+  it('still contains every pinned legacy value, so the list only shrinks', () => {
+    for (const [legacy, token] of Object.entries(LEGACY_GLOBAL_ERROR_VALUES)) {
+      assert.ok(
+        hexes.includes(legacy),
+        `${legacy} is no longer in global-error.tsx (migrated to ${token}?) — ` +
+          'remove it from LEGACY_GLOBAL_ERROR_VALUES',
+      )
+    }
+  })
+
+  it('draws only text pairs that reach AA', () => {
+    // The pairs the file renders: body text, the retry button, the muted
+    // furniture line and the help-line link, each on its background.
+    const pairs: readonly [string, string][] = [
+      ['#1a2e1f', '#ffffff'],
+      ['#1a2e1f', '#5bc894'],
+      ['#4a5f50', '#ffffff'],
+      ['#27714e', '#ffffff'],
+    ]
+
+    for (const [fg, bg] of pairs) {
+      if (!hexes.includes(fg) || !hexes.includes(bg)) continue
+
+      assert.ok(meetsAA(fg, bg), `${fg} on ${bg} is ${String(ratio(fg, bg))}:1`)
+    }
   })
 
   it('still carries the help line, because every page must', () => {
-    // Rule 5 does not exempt an outage page. This may be the only page a
-    // visitor sees.
+    // Rule 5 does not exempt an outage page.
     assert.match(globalError, /800\s?350\s?000/)
     assert.match(globalError, /18\+/)
     assert.match(globalError, /Nepřijímáme sázky/)
@@ -605,22 +1001,17 @@ describe('global-error.tsx uses palette values, not invented ones', () => {
 /* -------------------------------------------------------------------------- */
 
 describe('the brand marks are outlines, not text', () => {
-  const marks = readFileSync(
-    path.join(process.cwd(), 'src/components/brand/Marks.tsx'),
-    'utf8',
-  )
+  const marks = read('src/components/brand/Marks.tsx')
 
   /**
-   * The whole point of `Marks.tsx` is that the logo does not wait for, or
-   * change shape with, a webfont. Barlow is deliberately NOT preloaded any
-   * more, so a mark set in live text would visibly swap on every first
-   * visit. These assertions are what stop someone "simplifying" the paths
-   * back into a styled `<span>`.
+   * The logo must not wait for, or change shape with, a webfont — Geist
+   * included. These assertions stop someone "simplifying" the paths back
+   * into a styled `<span>`.
    */
   it('contains no text element and no font-family', () => {
     assert.equal(/<text[\s>]/.test(marks), false)
     assert.equal(/font-family/i.test(marks), false)
-    assert.equal(/font-display|font-barlow/.test(marks), false)
+    assert.equal(/font-display|font-barlow|font-geist/.test(marks), false)
   })
 
   it('draws both marks as path data', () => {
@@ -630,15 +1021,11 @@ describe('the brand marks are outlines, not text', () => {
   })
 
   it('inherits colour instead of hard-coding one', () => {
-    // `currentColor` is what lets the marks sit on any surface and follow the
-    // theme without a second variant per mark.
     assert.match(marks, /fill="currentColor"/)
     assert.equal(/fill="#/.test(marks), false)
   })
 
   it('carries an accessible name from the caller, not a hard-coded string', () => {
-    // The brand name is a catalogue string like any other, so it stays under
-    // the copy-rule test rather than being frozen into a component.
     assert.match(marks, /aria-label=\{label\}/)
     assert.match(marks, /role="img"/)
     assert.equal(marks.includes('aria-label="Sázej'), false)

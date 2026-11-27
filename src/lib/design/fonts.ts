@@ -1,116 +1,105 @@
 /**
- * The two typefaces, self-hosted.
+ * The two typefaces: Geist Sans and Geist Mono, self-hosted.
  *
  * ──────────────────────────────────────────────────────────────────────────
- * WHY next/font AND NOT A <link> TO GOOGLE
+ * WHERE THE FILES COME FROM
  *
- * `next/font/google` downloads the files at BUILD time and serves them from
- * our own origin. Nothing about it is a runtime request to Google. That
- * matters for three separate reasons:
+ * The `geist` npm package (SIL Open Font License, no dependencies), pinned in
+ * `package.json`. `next/font/local` reads the woff2 files out of
+ * `node_modules` at BUILD time and serves them from our own origin with
+ * hashed names. Nothing is fetched from any third party, at build time or at
+ * runtime:
  *
- *   - every visitor's IP would otherwise be sent to a third party on every
- *     page load, which is a GDPR problem a Czech site does not need and
- *     which German courts have already ruled on;
- *   - a third-party font request is a third-party dependency on the critical
- *     render path — their outage becomes our outage;
- *   - a same-origin font is one connection fewer and no cross-origin
- *     preconnect, which is the cheapest Core Web Vitals win available.
- *
- * `display: 'swap'` so text paints in the fallback immediately rather than
- * holding a blank page while the file arrives. The fallback stacks below are
- * chosen to be metrically close, which is what keeps the swap from shifting
- * layout — Next also generates an adjusted fallback automatically.
+ *   - the previous setup (`next/font/google`, Inter + Barlow) downloaded the
+ *     files from Google during `next build`, which is a build-time network
+ *     dependency — the sandboxed CI-equivalent build needed a stub for it;
+ *   - visitors' IPs never reach a font CDN, which a Czech site under GDPR
+ *     should not need to explain;
+ *   - one connection fewer on the critical path.
  *
  * ──────────────────────────────────────────────────────────────────────────
- * WHY TWO, AND WHERE THE SECOND ONE IS ALLOWED
+ * WHY `localFont` HERE AND NOT THE PACKAGE'S `GeistSans` / `GeistMono`
  *
- * Inter for everything. Barlow for display headings and the wordmark only.
- * Two families is already a budget; a third would be a decision nobody could
- * defend and another file on the critical path.
+ * The package exports are `localFont` calls too, with options this site
+ * wants to set differently:
  *
- * The variables are consumed by `globals.css` (`--font-sans`,
- * `--font-display`), so no component imports a font.
+ *   - `GeistMono` is PRELOADED by default. Mono only appears in table cells
+ *     and meta lines, never in the LCP element, so preloading it would put a
+ *     second 71 kB file on the critical path to compete with the sans face
+ *     the first paint actually needs.
+ *   - next/font requires the options as literals at the call site, so they
+ *     cannot be overridden on an imported instance.
+ *
+ * The paths point into the installed package rather than at copied files, so
+ * there is one source for the fonts and upgrading is a version bump.
+ *
+ * ──────────────────────────────────────────────────────────────────────────
+ * CZECH COVERAGE, VERIFIED RATHER THAN ASSUMED
+ *
+ * Both variable files map every Czech letter in both cases (á č ď é ě í ň ó
+ * ř š ť ú ů ý ž), plus „ “ – — … × −, checked against their `cmap` tables.
+ * They do NOT contain ✓ or ✕, which is why `ResultIndicator` draws its marks
+ * as SVG instead of borrowing them from a fallback face.
+ *
+ * ──────────────────────────────────────────────────────────────────────────
+ * NO LAYOUT SHIFT ON SWAP
+ *
+ * `display: 'swap'` so text paints immediately in a fallback.
+ *
+ *   - Sans: `adjustFontFallback: 'Arial'` makes next/font emit a fallback
+ *     face with `size-adjust` and ascent/descent overrides matched to Geist,
+ *     so the swap does not re-wrap a heading.
+ *   - Mono: Geist Mono's advance is exactly 0.600 em; Courier New's is
+ *     0.6001 em (measured from `hmtx`), and Menlo and SF Mono are 0.6 em
+ *     faces as well. A monospace fallback from that list therefore
+ *     already has the right width per character, and an Arial-based metric
+ *     override would make it WORSE (a proportional face stretched to an
+ *     average). So the fallback is a mono stack with the adjustment off.
+ *     Line height is fixed by the type tokens, so the vertical metrics of
+ *     the fallback cannot move anything either.
+ *
+ * The variables are consumed by `globals.css` (`--font-sans`, `--font-mono`),
+ * so no component imports a font.
  */
-import { Barlow, Inter } from 'next/font/google'
+import localFont from 'next/font/local'
 
-/**
- * Body, UI and all data.
- *
- * `latin-ext` is not optional: Czech needs ě š č ř ž ý á í é ú ů ť ň ď, and
- * the plain `latin` subset does not contain them. Shipping `latin` only is
- * how a Czech site ends up rendering half its diacritics from a fallback
- * face, at a different weight, which looks like a broken font rather than a
- * missing subset.
- */
-/**
- * NO `weight`, so this is the VARIABLE file.
- *
- * The old comment here said asking for the variable font "would ship every
- * weight in between for no use". That was wrong, and measurably so: with
- * four static weights requested, next/font emitted 28 `@font-face` blocks
- * pointing at only SEVEN files — the same seven, once per weight. Google
- * Fonts was already serving the variable file and the declarations were
- * merely pinning weights against it.
- *
- * So this change removes 21 redundant `@font-face` blocks from the CSS and
- * leaves the downloaded bytes alone. A variable font does not ship a copy
- * per weight; it ships one interpolable outline set, which is why the files
- * were shared in the first place.
- *
- * `latin-ext` is not optional: ř, ě, ů and ť live there, while á, í and é
- * are in `latin`. Czech needs both ranges, and dropping either is how a
- * Czech site ends up rendering half its diacritics from a fallback face.
- */
-export const inter = Inter({
-  subsets: ['latin', 'latin-ext'],
+/** Body, headings, UI and headline figures. Preloaded: it is the LCP text. */
+export const geistSans = localFont({
+  src: '../../../node_modules/geist/dist/fonts/geist-sans/Geist-Variable.woff2',
+  weight: '100 900',
+  style: 'normal',
   display: 'swap',
-  variable: '--font-inter',
-  // Above the fold on every page: body copy, the nav, the figures. This is
-  // the one family worth a preload.
+  variable: '--font-geist-sans',
   preload: true,
+  adjustFontFallback: 'Arial',
+  fallback: ['ui-sans-serif', 'system-ui', 'Segoe UI', 'Arial', 'sans-serif'],
 })
 
-/**
- * Display headings. STATIC, because Barlow has no variable file.
- *
- * Verified rather than assumed: dropping `weight` fails the build with
- * "Missing weight for Barlow. Available weights: 100, 200, …, 900" — Google
- * Fonts publishes Barlow as named instances only. So 600 and 700 are two
- * separate files per subset and there is no interpolable single file to
- * collapse them into.
- *
- * ──────────────────────────────────────────────────────────────────────────
- * WHY IT IS NOT PRELOADED AT ALL, RATHER THAN "700 ONLY"
- *
- * `preload` is per next/font INSTANCE, not per weight, and the two weights
- * cannot be split into two instances without breaking weight selection:
- * each instance gets its own internal family name, and CSS font matching
- * picks a FAMILY first and only then the nearest weight inside it. Listing
- * both families in `--font-display` would render 600 text from whichever
- * came first — synthesised, not real.
- *
- * So the choice was both weights preloaded (50.3 kB) or neither. Neither is
- * the better trade, and not only on byte count: with `display: swap` the
- * heading paints immediately in the metric-adjusted fallback either way, so
- * preloading buys no earlier text — it only avoids a swap, while competing
- * for bandwidth with the render-critical Inter and script. The swap is
- * layout-stable, because next/font emits a `size-adjust` fallback (96.68%
- * for Barlow) and the CLS work already established that font swap is not a
- * shift source here.
- */
-export const barlow = Barlow({
-  subsets: ['latin', 'latin-ext'],
+/** Odds, units, dates in tables. Not preloaded — see the header. */
+export const geistMono = localFont({
+  src: '../../../node_modules/geist/dist/fonts/geist-mono/GeistMono-Variable.woff2',
+  weight: '100 900',
+  style: 'normal',
   display: 'swap',
-  variable: '--font-barlow',
-  weight: ['600', '700'],
-  // See above. Headings swap in; they do not hold up first paint.
+  variable: '--font-geist-mono',
   preload: false,
+  adjustFontFallback: false,
+  // Every entry is a 0.60 em face. Consolas (0.55 em) is left out on
+  // purpose: on Windows it would be picked before Courier New and make the
+  // swap change the width of every mono cell.
+  fallback: [
+    'ui-monospace',
+    'SFMono-Regular',
+    'Menlo',
+    'Courier New',
+    'monospace',
+  ],
 })
 
 /**
  * Both font variables, for the `<html>` element.
  *
- * Applied once in the layout so a page cannot forget one and silently fall
- * back to a system face for its headings.
+ * Applied once in each root layout so a page cannot forget one and silently
+ * fall back to a system face.
  */
-export const fontVariables = `${inter.variable} ${barlow.variable}`
+export const fontVariables = `${geistSans.variable} ${geistMono.variable}`
