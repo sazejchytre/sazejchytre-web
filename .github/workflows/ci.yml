@@ -71,6 +71,16 @@ jobs:
       FAKTUROID_CLIENT_SECRET: ci-build-only-not-a-real-client-secret
       FAKTUROID_SLUG: ci-build-only
       FAKTUROID_USER_AGENT: sazejchytre.cz-ci (ci@sazejchytre.cz)
+      # Cloudflare Turnstile. These are Cloudflare's documented always-pass
+      # TEST keys (also in .env.example): public by design and tied to no real
+      # widget. Never use them in a real deployment — they accept every visitor.
+      TURNSTILE_SITE_KEY: 1x00000000000000000000AA
+      TURNSTILE_SECRET_KEY: 1x0000000000000000000000000000000AA
+      # Ecomail. Not a working key, and 0 is a placeholder list id; nothing in
+      # a build calls the API. The schema requires the id to be digits, and it
+      # is quoted so YAML keeps it a string.
+      ECOMAIL_API_KEY: ci-build-only-not-a-real-key
+      ECOMAIL_LIST_ID: '0'
 
     steps:
       - name: Checkout
