@@ -52,6 +52,17 @@ export default function GlobalError({
 
   return (
     <html lang="cs-CZ">
+      {/*
+        The document title (WCAG 2.4.2). `metadata` cannot be exported from
+        this file — it is a client component that replaces the root layout —
+        so the title is written as an element, the way Next documents for
+        `global-error`. Same text as `errors.serverError.metaTitle` and the
+        same "%s · Sázej chytře" template as every other page, hard-coded for
+        the reason the header gives: the message catalogue may be what failed.
+      */}
+      <head>
+        <title>Chyba serveru · Sázej chytře</title>
+      </head>
       <body
         style={{
           // The token values, inlined: see the header for why the stylesheet

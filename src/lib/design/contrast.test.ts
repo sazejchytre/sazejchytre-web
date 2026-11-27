@@ -58,6 +58,7 @@ import {
   type ColourToken,
   type ThemeMode,
 } from './tokens.ts'
+import { cs } from '../../i18n/messages/cs.ts'
 
 const MODES: readonly ThemeMode[] = ['light', 'dark']
 
@@ -1027,6 +1028,20 @@ describe('global-error.tsx uses palette values, not invented ones', () => {
     assert.match(globalError, />\s*Zkusit znovu\s*</)
     assert.match(globalError, />\s*Na úvod\s*</)
     assert.equal(/ZKUSIT ZNOVU|NA ÚVOD/.test(globalError), false)
+  })
+
+  it('has a document title and a language (WCAG 2.4.2, 3.1.1)', () => {
+    // It replaces the whole document, so nothing else supplies either. The
+    // title follows the site's "%s · Sázej chytře" template, with the text of
+    // `errors.serverError.metaTitle`.
+    const expected = `${cs.errors.serverError.metaTitle} · ${cs.common.brand}`
+
+    assert.equal(expected, 'Chyba serveru · Sázej chytře')
+    assert.ok(
+      globalError.includes(`<title>${expected}</title>`),
+      `global-error.tsx has no <title>${expected}</title>`,
+    )
+    assert.match(globalError, /<html lang="cs-CZ">/)
   })
 
   it('still carries the help line, because every page must', () => {
