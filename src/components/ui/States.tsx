@@ -69,7 +69,11 @@ export const EmptyState = ({
 /* -------------------------------------------------------------------------- */
 
 /**
- * One grey block.
+ * One grey block, in the hairline colour.
+ *
+ * The hairline rather than `surface-accent`: the SC-005 accent panel is a
+ * barely-green tint that would make a skeleton invisible on the page. Every
+ * rounding is 6px now (rule 44); the prop survives so callers keep working.
  *
  * No pulse animation by default: `prefers-reduced-motion` is honoured
  * globally, but a page of pulsing rectangles is visual noise even for
@@ -86,10 +90,10 @@ export const Skeleton = ({
   <div
     aria-hidden="true"
     className={cn(
-      'bg-surface-accent',
-      rounded === 'card' && 'rounded-card',
-      rounded === 'pill' && 'rounded-pill',
-      rounded === 'input' && 'rounded-input',
+      'bg-border-subtle',
+      // All three are 6px now; `pill` maps to the input radius rather than
+      // to a pill (rule 44). The prop stays so callers keep compiling.
+      rounded === 'card' ? 'rounded-card' : 'rounded-input',
       className,
     )}
   />
@@ -127,7 +131,12 @@ export const ErrorState = ({
 }: ErrorStateProps) => (
   <Card
     tone="raised"
-    className={cn('flex flex-col items-start gap-4', className)}
+    // A loss-red leading rule marks the panel as a failure without colouring
+    // any text: the heading and the sentence carry the meaning.
+    className={cn(
+      'flex flex-col items-start gap-4 border-s-2 border-s-result-loss',
+      className,
+    )}
   >
     {/*
       `role="alert"` rather than a plain heading: this appears after a failed

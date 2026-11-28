@@ -52,6 +52,17 @@ export default function GlobalError({
 
   return (
     <html lang="cs-CZ">
+      {/*
+        The document title (WCAG 2.4.2). `metadata` cannot be exported from
+        this file — it is a client component that replaces the root layout —
+        so the title is written as an element, the way Next documents for
+        `global-error`. Same text as `errors.serverError.metaTitle` and the
+        same "%s · Sázej chytře" template as every other page, hard-coded for
+        the reason the header gives: the message catalogue may be what failed.
+      */}
+      <head>
+        <title>Chyba serveru · Sázej chytře</title>
+      </head>
       <body
         style={{
           // The token values, inlined: see the header for why the stylesheet
@@ -60,7 +71,7 @@ export default function GlobalError({
           padding: '48px 24px',
           fontFamily: 'system-ui, sans-serif',
           backgroundColor: '#ffffff',
-          color: '#1a2e1f',
+          color: '#13201a',
           lineHeight: 1.5,
         }}
       >
@@ -84,16 +95,17 @@ export default function GlobalError({
                 padding: '10px 20px',
                 borderRadius: '8px',
                 border: 'none',
-                // #5bc894 with #1a2e1f on it: the contrast rule holds even
-                // here. White on this green is 2.07:1.
-                backgroundColor: '#5bc894',
-                color: '#1a2e1f',
+                // #14683f with #ffffff on it: the contrast rule holds even
+                // here. The brand fill is dark, so its ink is white (6.81:1);
+                // the page ink on it would be 2.47:1.
+                backgroundColor: '#14683f',
+                color: '#ffffff',
                 fontWeight: 600,
                 fontSize: '1rem',
                 cursor: 'pointer',
               }}
             >
-              ZKUSIT ZNOVU
+              Zkusit znovu
             </button>
             {/*
               A plain `<a>`, not `next/link`, and deliberately so: the root
@@ -110,13 +122,13 @@ export default function GlobalError({
                 alignItems: 'center',
                 padding: '10px 20px',
                 borderRadius: '8px',
-                border: '1px solid #6d8775',
-                color: '#1a2e1f',
+                border: '1px solid #78837d',
+                color: '#13201a',
                 textDecoration: 'none',
                 fontWeight: 600,
               }}
             >
-              NA ÚVOD
+              Na úvod
             </a>
           </p>
 
@@ -128,15 +140,15 @@ export default function GlobalError({
           <hr
             style={{
               border: 'none',
-              borderTop: '1px solid #dde8e0',
+              borderTop: '1px solid #e1e7e3',
               margin: '32px 0 16px',
             }}
           />
-          <p style={{ fontSize: '0.875rem', color: '#4a5f50', margin: 0 }}>
+          <p style={{ fontSize: '0.875rem', color: '#55625b', margin: 0 }}>
             18+ · Informační a analytická služba o sportu. Nepřijímáme sázky a
             neprovozujeme hazardní hru. Máte problém s hazardem? Národní linka
             pro odvykání,{' '}
-            <a href="tel:800350000" style={{ color: '#27714e' }}>
+            <a href="tel:800350000" style={{ color: '#14683f' }}>
               800 350 000
             </a>
             .

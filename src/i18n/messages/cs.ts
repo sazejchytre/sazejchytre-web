@@ -11,7 +11,7 @@
       No "VSADIT", no "SÁZEJ", no "HRAJ", on any button, heading or link. The
       product takes no bets and never touches a stake. A button says what the
       CONTROL does:
-          ZOBRAZIT TIP · CELÁ ANALÝZA · ODEMKNOUT TIPY · ZÍSKAT PŘÍSTUP
+          Zobrazit tip · Celá analýza · Odemknout tipy · Získat přístup
       The brand name contains "Sázej", and that is a name, not an instruction.
 
    2. NEVER PROMISE WINNINGS, PROFIT OR A RESULT.
@@ -26,11 +26,14 @@
       recommended MINIMUM odds figure is all that may appear, because that is
       a property of the analysis rather than an advertisement for a bookmaker.
 
-   4. CZECH WITH CORRECT DIACRITICS, INCLUDING INSIDE UPPERCASE.
-      "ZÍSKAT PŘÍSTUP", never "ZISKAT PRISTUP". Uppercase is set with
-      `text-transform` nowhere in this codebase for exactly this reason —
-      write the uppercase form out so the diacritics are visible in the
-      source and cannot be lost by a CSS rule.
+   4. CZECH WITH CORRECT DIACRITICS, AND ACTIONS IN SENTENCE CASE.
+      "Získat přístup", never "Ziskat pristup". Buttons, links and headings
+      are written in sentence case (DESIGN.md rule 70): a capital on the
+      first word only, no ALL CAPS. Case is never changed with CSS
+      `text-transform` anywhere in this codebase — the text on screen is
+      the text in this file, diacritics included, so nothing a stylesheet
+      does can drop a háček. Abbreviations (ROI, IČO, DPH) keep their
+      capitals.
 
    5. EVERY PAGE CARRIES THREE THINGS.
       An 18+ marker, a one-line statement that this is an informational and
@@ -150,14 +153,14 @@ export const cs = {
       heading: 'Méně tipů, víc analýzy',
       body: 'Každý tip má napsaný rozbor: proč zápas, proč tento kurz a proč tato velikost sázky. Žádné desítky tipů denně.',
       /** RULE 1: what the control does. */
-      primaryCta: 'ZOBRAZIT HISTORII',
-      secondaryCta: 'ZÍSKAT PŘÍSTUP',
+      primaryCta: 'Zobrazit historii',
+      secondaryCta: 'Získat přístup',
     },
     record: {
       heading: 'Veřejná historie',
       /** The loss count is shown as prominently as the ROI. Deliberate. */
       body: 'Všechny vyhodnocené tipy, včetně proher. Nic nemažeme a nic neskrýváme.',
-      cta: 'CELÁ HISTORIE',
+      cta: 'Celá historie',
       empty:
         'Zatím nemáme vyhodnocený ani jeden tip. Až budeme mít, najdete tu všechny — i ty prohrané.',
     },
@@ -167,7 +170,7 @@ export const cs = {
       delayNotice:
         'Tento tip zveřejňujeme se zpožděním 24 hodin. Předplatitelé ho měli před výkopem.',
       none: 'Včera jsme žádný tip nezveřejnili.',
-      cta: 'CELÁ ANALÝZA',
+      cta: 'Celá analýza',
     },
     howItWorks: {
       heading: 'Jak to funguje',
@@ -189,7 +192,7 @@ export const cs = {
     tiers: {
       heading: 'Předplatné',
       body: 'Zrušíte kdykoli. Platba kartou.',
-      cta: 'ZÍSKAT PŘÍSTUP',
+      cta: 'Získat přístup',
       recommended: 'Doporučujeme',
     },
     faq: {
@@ -243,8 +246,8 @@ export const cs = {
       allSports: 'Všechny sporty',
       from: 'Od',
       to: 'Do',
-      apply: 'POUŽÍT FILTR',
-      reset: 'ZRUŠIT FILTR',
+      apply: 'Použít filtr',
+      reset: 'Zrušit filtr',
       /** There is deliberately no "result" filter. See the page component. */
       noResultFilterNote:
         'Filtrovat podle výsledku nejde záměrně: historie, ze které lze odfiltrovat prohry, nedokazuje nic.',
@@ -259,7 +262,7 @@ export const cs = {
         'Zrušená část složeného tipu je něco jiného: takový tip se vyhodnotil, peníze v riziku byly, a do ROI se počítá celý.',
       rounding:
         'Zaokrouhlujeme jednou, na konci, od nuly. Mezivýsledky vedeme v celých číslech, aby se stejná historie vždy spočítala stejně.',
-      cta: 'CELÁ METODIKA',
+      cta: 'Celá metodika',
     },
   },
 
@@ -292,12 +295,12 @@ export const cs = {
         'Zveřejnění před výkopem, ne po něm',
       ],
       withheld: 'Pro předplatitele',
-      cta: 'ODEMKNOUT TIPY',
+      cta: 'Odemknout tipy',
     },
     notFound: {
       heading: 'Tip jsme nenašli',
       body: 'Odkaz může být starý, nebo tip nikdy nebyl zveřejněný.',
-      cta: 'ZOBRAZIT HISTORII',
+      cta: 'Zobrazit historii',
     },
     selectionsHeading: 'Co je v tipu',
     eventHeading: 'Zápas',
@@ -306,7 +309,7 @@ export const cs = {
     oddsColumn: 'Kurz při zveřejnění',
     minOddsColumn: 'Min. kurz',
     stakeColumn: 'Sázka',
-    backToHistory: 'ZPĚT DO HISTORIE',
+    backToHistory: 'Zpět do historie',
     legs: 'Počet částí',
     combinedOdds: 'Celkový kurz',
   },
@@ -326,7 +329,7 @@ export const cs = {
     perYear: '/ rok',
     recommended: 'Doporučujeme',
     /** RULE 1: what the control does, not an instruction to bet. */
-    cta: 'ZÍSKAT PŘÍSTUP',
+    cta: 'Získat přístup',
     featuresHeading: 'Co je v předplatném',
     empty: 'Ceník se připravuje.',
     unavailable: 'Cenu pro tuhle variantu zrovna nemáme nastavenou.',
@@ -353,7 +356,7 @@ export const cs = {
       metaTitle: 'Předplatné',
       heading: 'Platbu ještě nemáme zapnutou',
       body: 'Objednávání předplatného připravujeme. Napište nám a dáme vám vědět, až to půjde.',
-      cta: 'NA KONTAKT',
+      cta: 'Na kontakt',
     },
   },
 
@@ -367,7 +370,7 @@ export const cs = {
       email: 'E-mail',
       subject: 'Předmět',
       message: 'Zpráva',
-      submit: 'ODESLAT ZPRÁVU',
+      submit: 'Odeslat zprávu',
       sending: 'Odesílám…',
       success:
         'Zprávu máme. Odpovíme na uvedený e-mail, obvykle do dvou pracovních dnů.',
@@ -390,7 +393,7 @@ export const cs = {
     heading: 'Novinky e-mailem',
     body: 'Jeden e-mail, když je co říct. Žádné tipy v e-mailu.',
     email: 'E-mail',
-    submit: 'PŘIHLÁSIT K NOVINKÁM',
+    submit: 'Přihlásit k novinkám',
     sending: 'Přihlašuji…',
     /** A separate, unticked consent. Its wording is recorded verbatim. */
     consent:
@@ -422,20 +425,20 @@ export const cs = {
       metaTitle: 'Stránka nenalezena',
       heading: 'Tuhle stránku nemáme',
       body: 'Odkaz může být starý nebo překlepnutý. Zkuste historii tipů nebo úvodní stránku.',
-      homeCta: 'NA ÚVOD',
-      historyCta: 'ZOBRAZIT HISTORII',
+      homeCta: 'Na úvod',
+      historyCta: 'Zobrazit historii',
     },
     serverError: {
       metaTitle: 'Chyba serveru',
       heading: 'Něco se u nás pokazilo',
       body: 'Chybu jsme si zapsali a podíváme se na ni. Zkuste to prosím za chvíli znovu.',
-      retryCta: 'ZKUSIT ZNOVU',
-      homeCta: 'NA ÚVOD',
+      retryCta: 'Zkusit znovu',
+      homeCta: 'Na úvod',
     },
     generic: {
       heading: 'Data se nepodařilo načíst',
       body: 'Zkuste to prosím za chvíli znovu.',
-      retryCta: 'ZKUSIT ZNOVU',
+      retryCta: 'Zkusit znovu',
     },
   },
 } as const

@@ -7,13 +7,15 @@
  * The comment at the top of `cs.ts` is there to explain the rules. This is
  * what stops them being broken by someone who has not read it — and the
  * person most likely to break them is a copywriter improving a call to
- * action, for whom "VSADIT" is obviously stronger than "ZOBRAZIT TIP".
+ * action, for whom "Vsadit" is obviously stronger than "Zobrazit tip".
  *
  * These are legal constraints on the payment account the business runs on.
  * A failing test is a cheaper way to find out than a Stripe email.
  */
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
 
 import { cs } from './cs.ts'
 
@@ -40,6 +42,15 @@ const walk = (
 }
 
 const STRINGS = walk(cs)
+
+/**
+ * Every label on a control: keys named `cta`, `…Cta`, `submit`, `apply`,
+ * `reset` or `backToHistory`. Derived from the catalogue rather than listed,
+ * so a label added later is held to the same rules automatically.
+ */
+const ACTION_LABELS = STRINGS.filter(({ path: key }) =>
+  /(^|\.)(cta|[a-z]+Cta|submit|apply|reset|backToHistory)$/.test(key),
+)
 
 describe('the catalogue is not empty and is all strings', () => {
   it('has a substantial number of entries', () => {
@@ -108,21 +119,74 @@ describe('rule 1: never an imperative to place a bet', () => {
   })
 
   it('uses action labels that describe the control', () => {
-    const labels = [
-      cs.home.hero.primaryCta,
-      cs.home.hero.secondaryCta,
-      cs.home.freeTip.cta,
-      cs.tip.locked.cta,
-      cs.pricing.cta,
-    ]
-
-    for (const label of labels) {
+    // Every button and link label in the catalogue, not a hand-picked five:
+    // a new `cta` key is covered the day it is added. The verbs are matched
+    // in their sentence-case form, so this also refuses an ALL CAPS label.
+    for (const { path, value } of ACTION_LABELS) {
       assert.match(
-        label,
-        /^(ZOBRAZIT|CELÁ|ODEMKNOUT|ZÍSKAT|POUŽÍT|ZRUŠIT|ODESLAT|PŘIHLÁSIT|NA |ZKUSIT)/,
-        `${label} does not describe what the control does`,
+        value,
+        /^(Zobrazit|Celá|Odemknout|Získat|Použít|Zrušit|Odeslat|Přihlásit|Na |Zkusit|Zpět)/,
+        `${path} (${JSON.stringify(value)}) does not describe what the control does`,
       )
     }
+  })
+})
+
+/* -------------------------------------------------------------------------- */
+/* DESIGN.md rule 70 — sentence case, no ALL CAPS                             */
+/* -------------------------------------------------------------------------- */
+
+describe('rule 70: action labels and headings are in sentence case', () => {
+  it('finds every action label, or the checks below are vacuous', () => {
+    // 19 at the time of SC-005. Fewer means the key pattern stopped matching.
+    assert.ok(
+      ACTION_LABELS.length >= 19,
+      `found only ${String(ACTION_LABELS.length)} action labels`,
+    )
+  })
+
+  for (const { path, value } of ACTION_LABELS) {
+    it(`${path} is sentence case: ${JSON.stringify(value)}`, () => {
+      const first = value.charAt(0)
+      const rest = value.slice(1)
+
+      assert.equal(
+        first,
+        first.toLocaleUpperCase('cs-CZ'),
+        'must start with a capital',
+      )
+      assert.equal(
+        rest,
+        rest.toLocaleLowerCase('cs-CZ'),
+        'only the first letter may be a capital',
+      )
+    })
+  }
+
+  it('has no ALL CAPS phrase anywhere in the catalogue', () => {
+    // Two or more consecutive upper-case words. A single upper-case word is
+    // how an abbreviation looks (ROI, IČO, DPH, CSV, API) and how one
+    // developer-facing warning starts ("POZOR:"), so one is allowed; a run
+    // of two is shouting, and is what the old button labels were.
+    const shouting = /(?:^|[^\p{L}])\p{Lu}{2,}(?:\s+\p{Lu}{2,})+(?=$|[^\p{L}])/u
+
+    for (const { path, value } of STRINGS) {
+      assert.ok(
+        !shouting.test(value),
+        `${path} is ALL CAPS: ${JSON.stringify(value)}`,
+      )
+    }
+  })
+
+  it('never relies on CSS to change case', () => {
+    // The catalogue's own rule 4: what is on screen is what is in the file.
+    // Checked against the stylesheet rather than trusted.
+    const css = readFileSync(
+      path.join(process.cwd(), 'src/app/(frontend)/globals.css'),
+      'utf8',
+    )
+
+    assert.equal(/text-transform\s*:\s*uppercase/i.test(css), false)
   })
 })
 
@@ -224,21 +288,31 @@ describe('rule 3: never name or compare bookmakers', () => {
 /* RULE 4 — Czech diacritics, including in uppercase                          */
 /* -------------------------------------------------------------------------- */
 
-describe('rule 4: correct diacritics, including inside uppercase', () => {
+describe('rule 4: correct diacritics, in every case', () => {
   /**
    * Words whose correct Czech form carries a diacritic, paired with the
    * stripped spelling that must never appear.
    *
-   * Checked as whole words so that an unrelated string containing the letters
-   * does not trip it.
+   * Both the sentence-case forms the labels use now and the uppercase forms
+   * they used before SC-005 are listed: a label pasted back in from an old
+   * screenshot is the likeliest way a stripped spelling returns.
    */
   const STRIPPED = [
+    ['Ziskat', 'Získat'],
     ['ZISKAT', 'ZÍSKAT'],
+    ['pristup', 'přístup'],
     ['PRISTUP', 'PŘÍSTUP'],
-    ['ZOBRAZIT TIP', null], // no diacritic to lose; here as a sanity anchor
+    ['Zobrazit tip', null], // no diacritic to lose; here as a sanity anchor
+    ['historie tipu', 'historie tipů'],
     ['HISTORIE TIPU', 'HISTORIE TIPŮ'],
+    ['Cela analyza', 'Celá analýza'],
     ['CELA ANALYZA', 'CELÁ ANALÝZA'],
+    ['Odeslat zpravu', 'Odeslat zprávu'],
     ['ODESLAT ZPRAVU', 'ODESLAT ZPRÁVU'],
+    ['Zpet ', 'Zpět '],
+    ['Pouzit', 'Použít'],
+    ['Zrusit', 'Zrušit'],
+    ['Na uvod', 'Na úvod'],
     ['prihlasit', 'přihlásit'],
     ['ucet', 'účet'],
     ['zapas', 'zápas'],
@@ -258,13 +332,16 @@ describe('rule 4: correct diacritics, including inside uppercase', () => {
     }
   })
 
-  it('keeps diacritics in the uppercase action labels', () => {
-    // The specific failure this guards: CSS `text-transform` dropping them,
-    // which is why the uppercase forms are written out in the source.
-    assert.equal(cs.pricing.cta, 'ZÍSKAT PŘÍSTUP')
-    assert.equal(cs.tip.locked.cta, 'ODEMKNOUT TIPY')
-    assert.equal(cs.home.freeTip.cta, 'CELÁ ANALÝZA')
-    assert.equal(cs.contact.form.submit, 'ODESLAT ZPRÁVU')
+  it('keeps diacritics in the sentence-case action labels', () => {
+    // Pinned exactly, diacritics and case together. Case is never changed by
+    // CSS here, so these strings are what a visitor reads.
+    assert.equal(cs.pricing.cta, 'Získat přístup')
+    assert.equal(cs.tip.locked.cta, 'Odemknout tipy')
+    assert.equal(cs.home.freeTip.cta, 'Celá analýza')
+    assert.equal(cs.contact.form.submit, 'Odeslat zprávu')
+    assert.equal(cs.newsletter.submit, 'Přihlásit k novinkám')
+    assert.equal(cs.tip.backToHistory, 'Zpět do historie')
+    assert.equal(cs.errors.notFound.homeCta, 'Na úvod')
   })
 
   it('has no Latin-1 mangling anywhere', () => {

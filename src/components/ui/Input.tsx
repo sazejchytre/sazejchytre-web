@@ -4,9 +4,12 @@
  * ──────────────────────────────────────────────────────────────────────────
  * ONE BORDER COLOUR, ON EVERY SURFACE
  *
- * `border-strong` reaches 3:1 against all three surfaces — 3.91 / 3.75 / 3.13
- * in light, 5.30 / 4.19 / 3.32 in dark — so a control looks the same wherever
- * it sits and there is nothing for a caller to get wrong.
+ * `border-strong` reaches 3:1 against all three surfaces — 4.26 / 4.04 / 3.93
+ * on raised / page / accent in light, 3.92 / 4.26 / 3.62 in dark — so a
+ * control looks the same wherever it sits and there is nothing for a caller
+ * to get wrong. The field itself is the white `surface-raised` (DESIGN.md:
+ * inputs sit on `surface`), so it reads as a place to type on either the
+ * page or a panel.
  *
  * These components briefly took an `on="page" | "raised"` prop, because an
  * earlier `border-strong` was under 3:1 on two of the three surfaces and a
@@ -28,13 +31,24 @@ import type { ComponentProps, ReactNode } from 'react'
 import { cn } from './cn'
 
 const CONTROL_BASE = cn(
-  'w-full rounded-input border border-border-strong bg-surface-page text-ink',
+  'w-full rounded-input border bg-surface-raised text-ink',
   'px-3 py-2 text-body',
   'placeholder:text-ink-muted',
   'min-h-11',
-  'disabled:cursor-not-allowed disabled:opacity-60',
+  'transition-colors duration-150',
+  'disabled:cursor-not-allowed disabled:bg-surface-page disabled:opacity-60',
 )
 
+/**
+ * The border, by state. Exactly one border colour per state, so `cn` (which
+ * joins rather than merges) never has two utilities for one property and
+ * stylesheet order never decides which wins.
+ *
+ * Hover darkens the edge to full ink. Focus is the global 2px ring in
+ * `brand-text`, outside the border. Invalid is the loss red, and is never
+ * the only signal: the message under the field says what is wrong.
+ */
+const BORDER_DEFAULT = 'border-border-strong hover:border-ink'
 const INVALID = 'border-result-loss'
 
 /* -------------------------------------------------------------------------- */
@@ -119,7 +133,7 @@ export type InputProps = Omit<ComponentProps<'input'>, 'className'> & {
 
 export const Input = ({ invalid = false, className, ...rest }: InputProps) => (
   <input
-    className={cn(CONTROL_BASE, invalid && INVALID, className)}
+    className={cn(CONTROL_BASE, invalid ? INVALID : BORDER_DEFAULT, className)}
     aria-invalid={invalid || undefined}
     {...rest}
   />
@@ -140,7 +154,7 @@ export const Textarea = ({
     rows={rows}
     className={cn(
       CONTROL_BASE,
-      invalid && INVALID,
+      invalid ? INVALID : BORDER_DEFAULT,
       // A textarea with a fixed height fights the user; vertical only, so it
       // cannot be dragged out of the layout sideways.
       'resize-y',
@@ -162,7 +176,7 @@ export const Select = ({
   ...rest
 }: SelectProps) => (
   <select
-    className={cn(CONTROL_BASE, invalid && INVALID, className)}
+    className={cn(CONTROL_BASE, invalid ? INVALID : BORDER_DEFAULT, className)}
     aria-invalid={invalid || undefined}
     {...rest}
   />
