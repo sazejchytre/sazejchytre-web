@@ -116,7 +116,100 @@ domain, restrict origin access to Cloudflare's address ranges.
 3. `pnpm migrate:status` against production, review the pending list.
 4. Run `pnpm migrate` (then `pnpm auth:migrate` if better-auth changed) from
    the new image as a one-off container.
-5. Start the new app container, wait for `/healthz` 200.
+5. Start the new app container, wait for `/healthz` 200. On a database without
+   a verified administrator the container does not become healthy: it exits
+   with code 78 and logs `[admin-presence] Refusing to start`. That is the
+   intended state of a fresh install; follow "First administrator" below.
+
+## First administrator (private initialization)
+
+A production server runs only while at least one **verified administrator**
+exists: a row in Payload's `users` collection with an email and a stored
+password, the only kind of account that can sign in to `/admin`. Every user
+in that collection is a full administrator.
+
+### What the application enforces
+
+| Situation                                                                                              | Result                                                                                                                               |
+| ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Server starts, no verified administrator (fresh install, empty restore, wrong database)                | `next start` exits with code **78** before serving any request. Log: `[admin-presence] Refusing to start: …`                         |
+| Server running, last administrator removed outside Payload (SQL, restore, database swapped underneath) | The process exits with code 78 within **8 s** (check every 5 s, each bounded to 3 s). Log: `[admin-presence] Stopping the server: …` |
+| Server running, database stops answering                                                               | Tolerated for 15 s after the last good check (cold start, network blip), then the process exits with code 78                         |
+| Removing the last administrator in the panel or through the REST API                                   | Refused with 409, in every environment. Concurrent and bulk deletes are serialised under a database lock                             |
+| Creating a user without being a signed-in administrator, outside development                           | Refused with 403, whichever route the request comes through                                                                          |
+| `next dev` (`NODE_ENV=development`)                                                                    | Nothing above except the last-administrator rule. Payload's default setup flow works on a fresh local database                       |
+
+Nothing is cached between checks; the window is the check interval plus its
+timeout. With `restart: unless-stopped` a stopped container is restarted and
+runs the boot check again, so it keeps refusing until an administrator
+exists. The check opens one extra database connection
+(`application_name = sazejchytre-admin-presence`) and queries every 5 s,
+which also keeps a scale-to-zero database compute awake.
+
+### Procedure
+
+Run this **before the host is reachable from the internet** (on a fresh
+install, before the reverse proxy forwards to the container), and again only
+after a restore that left no administrator. It needs a terminal on the
+server; it is not reachable over HTTP.
+
+1. Confirm which database you are about to write to. The command prints the
+   database name first; stop if it is not the one you expect.
+2. Run the initialization from the same one-off tooling container used for
+   migrations (it needs the source tree and `tsx`, as `pnpm migrate` does;
+   SC-009 defines the image and the service name, written `tools` here):
+
+   ```bash
+   cd /srv/sazejchytre/production
+   docker compose run --rm -it tools \
+     node --no-deprecation --import tsx src/scripts/admin-init.ts \
+       --email 'owner@example.cz' --name 'Owner Name'
+   ```
+
+   Locally, against a disposable database, the same command is:
+
+   ```bash
+   node --env-file-if-exists=.env --no-deprecation --import tsx \
+     src/scripts/admin-init.ts --email 'owner@example.test' --name 'Owner'
+   ```
+
+   It prompts twice for the password without echoing it. To pipe it from a
+   password manager instead, add `--password-stdin` and drop `-t` from
+   `docker compose run`. The password is never accepted as an argument or an
+   environment variable. Minimum 16 characters; common passwords are refused.
+
+3. Expected output, in this order:
+
+   ```
+   admin-init: database "<name>"
+   admin-init: administrator created (id <n>)
+   admin-init: sign-in with the new credentials verified
+   admin-init: verified administrators: 1
+   ```
+
+   Exit code 0. Exit code 2 means refused (an administrator already exists,
+   bad arguments, weak password); nothing was created. The command refuses
+   whenever a verified administrator exists, under the same database lock as
+   the panel, so it cannot add a second account behind an existing owner's
+   back. Further administrators are created by a signed-in administrator in
+   the panel.
+
+4. Start the application container. The log shows
+   `[admin-presence] verified administrator present; re-checking every 5 s`
+   and `/healthz` answers 200.
+5. Sign in at `/admin` through the access path that is restricted to the
+   operator (SC-009), and record the date and the output of step 3, without
+   the email address, in the private tracker.
+
+A lost password for an existing account is recovered with the panel's
+"forgot password" email (Resend must be configured), not with this command.
+
+### After a restore
+
+Restoring a backup restores its administrators. If the server stops with
+code 78 after a restore, the restored data has no verified administrator:
+keep the host closed and run the procedure above against the restored
+database before starting the container again.
 
 ## Backups and restore
 
@@ -126,7 +219,9 @@ domain, restrict origin access to Cloudflare's address ranges.
 - R2 documents bucket: enable object versioning or a daily copy.
 - **Restore drill before launch:** restore last night's dump into a new Neon
   branch, point staging at it, open history and an invoice. Record the date
-  and duration in `docs/LAUNCH-CHECKLIST.md`.
+  and duration in `docs/LAUNCH-CHECKLIST.md`. The staging server starts only
+  if the restored data contains a verified administrator (see "First
+  administrator").
 
 ## Rollback
 
