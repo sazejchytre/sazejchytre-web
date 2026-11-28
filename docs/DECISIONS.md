@@ -104,8 +104,32 @@ other agent reviewing. This inverts the default reviewer role for those three
 packages, because the reviewer that produced the findings already holds the
 context, and it keeps two tracks running without shared files.
 
-## D-015 · open · technology for the administrator second factor
+## D-015 · 2026-11-28 · Accepted (owner)
 
-Decided by the owner once SC-019's comparison is delivered, per D-013. SC-026
-does not start before this entry names the route. This is a scheduled
-decision point, not an open question to re-ask.
+**The administrator second factor is application-native, with an
+authenticator-app code (TOTP).** This is the route named under D-013. SC-026
+implements it. The owner approved these requirements:
+
+- TOTP is mandatory for every administrator.
+- A vetted, maintained cryptographic library implements it. No hand-written
+  primitives.
+- Backup codes are single-use and stored hashed.
+- The TOTP secret is stored encrypted.
+- A code that was accepted once cannot be accepted again (replay protection).
+- Verification is rate limited and protected against brute force.
+- Activating or resetting the factor invalidates every existing session of
+  that administrator.
+- Access recovery is a documented procedure that needs shell access to the
+  server. It never turns the factor off.
+- No full administration session is issued before both factors have been
+  verified.
+- Every authentication path the framework exposes is verified, including
+  password recovery and session refresh.
+- A gateway-level control (Cloudflare Access) is kept as a possible second
+  layer later. It is not part of SC-026 and is not bought now.
+
+SC-026 stays a condition for the public launch (D-012, launch checklist).
+Reason: the administration area exposes every customer and accounting record,
+and a password alone is not an acceptable barrier. An application-native
+factor works the same on every environment, costs nothing, and covers the
+framework's own API routes as well as the panel.

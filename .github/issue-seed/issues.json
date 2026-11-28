@@ -157,7 +157,7 @@
     "prio": "P1",
     "agent": "Claude Code",
     "phase": "A",
-    "deps": ["SC-019"]
+    "deps": ["SC-017", "SC-018", "SC-019", "SC-022"]
   },
   {
     "id": "SC-020",

@@ -39,7 +39,7 @@ service; the split is in "Order of work".
 | SC-017 | Phase A surface gate: serve only what the launch scope includes | P0 | A | Claude Code | SC-003 |
 | SC-018 | One contract for client address and country | P0 | A | Claude Code | SC-003 |
 | SC-019 | First administrator and administration access control | P0 | A | Claude Code | SC-003 |
-| SC-026 | Administrator second factor | P1 | A | Claude Code | SC-019 |
+| SC-026 | Administrator second factor (D-015: application-native TOTP) | P1 | A | Claude Code | SC-017, SC-018, SC-019, SC-022 |
 | SC-020 | Public form resilience and consent evidence | P2 | A | Claude Code | SC-018 |
 | SC-021 | Customer authentication hardening | P0 | A | Claude Code | SC-017, SC-018 |
 | SC-022 | Fixture and test-data isolation | P1 | A | Codex | SC-003 |
@@ -107,7 +107,14 @@ Never concurrent:
   `NODE_ENV` and add no setting of its own.
 - SC-018 with SC-021, and SC-018 with SC-020: shared authentication
   configuration and shared form modules.
-- SC-019 with SC-026: SC-026 implements what SC-019's decision settles.
+- SC-019 with SC-026: both change the administrator collection, the
+  administrator-presence policy and the initialisation script. SC-026 starts
+  only after SC-019 is merged.
+- SC-017 with SC-026: both touch the framework API route handler, the proxy
+  and `src/lib/env.ts`. SC-026 starts after SC-017 is merged and keeps the
+  second-factor enforcement inside the authentication layer, not in the proxy.
+- SC-022 with SC-026: SC-026's database tests must use SC-022's disposable
+  database check, and both add to `package.json`. SC-022 merges first.
 - SC-023 with SC-024: shared loader and settlement modules.
 - SC-024 with SC-007: shared history components.
 - SC-022 with SC-024: shared fixture module.
