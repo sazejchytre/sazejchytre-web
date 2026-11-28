@@ -197,6 +197,12 @@ const INTEGER_COLUMNS: Record<
     // Thousandths, nullable until recorded at kick-off.
     closingOdds: { column: 'closing_odds', notNull: false },
   },
+  // The before and after closing price of a recorded correction, in the same
+  // scale as the selection column they describe.
+  tip_corrections: {
+    previousClosingOdds: { column: 'previous_closing_odds', notNull: false },
+    newClosingOdds: { column: 'new_closing_odds', notNull: false },
+  },
 }
 
 const assertTable = (

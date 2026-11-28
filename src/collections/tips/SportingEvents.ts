@@ -2,6 +2,11 @@ import type { CollectionBeforeValidateHook, CollectionConfig } from 'payload'
 import { APIError } from 'payload'
 
 import { canAccessAdminPanel, isAdmin } from '@/lib/access'
+import {
+  blockRecordedReferenceDeletion,
+  lockRecordedReference,
+  recordLockedAtField,
+} from '@/lib/tips/immutability'
 import { EVENT_STATUSES, toOptions } from '@/lib/tips/constants'
 
 /**
@@ -133,6 +138,7 @@ export const SportingEvents: CollectionConfig = {
           'Provider id map. The partner application resolves tips against this — see docs/tip-ingestion-contract.md.',
       },
     },
+    recordLockedAtField,
     {
       name: 'seedMarker',
       type: 'text',
@@ -143,7 +149,13 @@ export const SportingEvents: CollectionConfig = {
     },
   ],
   hooks: {
-    beforeValidate: [enforceScoreMatchesStatus],
+    // Frozen fields first: a locked fixture reports immutability rather than
+    // whichever score rule the new value happened to break.
+    beforeValidate: [
+      lockRecordedReference('sporting-events'),
+      enforceScoreMatchesStatus,
+    ],
+    beforeDelete: [blockRecordedReferenceDeletion('sporting-events')],
   },
   labels: { singular: 'Událost', plural: 'Události' },
   timestamps: true,

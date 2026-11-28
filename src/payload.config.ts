@@ -12,6 +12,7 @@ import { Competitions } from '@/collections/tips/Competitions'
 import { SportingEvents } from '@/collections/tips/SportingEvents'
 import { Sports } from '@/collections/tips/Sports'
 import { TipAuditEvents } from '@/collections/tips/TipAuditEvents'
+import { TipCorrections } from '@/collections/tips/TipCorrections'
 import { TipSelections } from '@/collections/tips/TipSelections'
 import { Tips } from '@/collections/tips/Tips'
 
@@ -105,6 +106,7 @@ export default buildConfig({
     Tips,
     TipSelections,
     TipAuditEvents,
+    TipCorrections,
 
     // Editable public content. Public read is a QUERY CONSTRAINT on each of
     // these, not a boolean — see their access blocks for why an unpublished

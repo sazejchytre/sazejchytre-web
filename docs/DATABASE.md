@@ -25,28 +25,90 @@ ownership".
   `entitlement_grants`, `webhook_events`, `disputes`, `consent_records`.
 - **Accounting:** `invoices`, `credit_notes`.
 - **Tips:** `sports`, `competitions`, `sporting_events`, `tips`,
-  `tip_selections`, `tip_audit_events`.
+  `tip_selections`, `tip_audit_events`, `tip_corrections`.
 
 ## Invariants enforced by the database
 
 These are the guarantees. Code mirrors them; the database is what holds.
 
-| Kind                   | Name                                                                                   | Guarantees                                                                                                                                                                                                                          |
-| ---------------------- | -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| trigger                | `tips_immutable_after_publication`                                                     | published tip content cannot be updated                                                                                                                                                                                             |
-| trigger                | `tips_no_delete_after_publication`                                                     | published tips cannot be deleted                                                                                                                                                                                                    |
-| trigger                | `tip_selections_immutable_after_publication`, `..._no_insert_...`, `..._no_delete_...` | protected fields of a published tip's selections cannot be changed, added or removed. **The guarantee is not yet complete for every relation of a published tip** (SC-023); treat the triggers as the floor, not the full invariant |
-| trigger                | `tip_audit_events_no_update`, `tip_audit_events_no_delete`                             | audit log is append-only                                                                                                                                                                                                            |
-| trigger                | `credit_notes_total_within_invoice`                                                    | credits never exceed the invoice                                                                                                                                                                                                    |
-| check                  | `invoices_totals_add_up`                                                               | total = parts                                                                                                                                                                                                                       |
-| check                  | `invoices_no_vat_when_not_registered`                                                  | no VAT while operator is not a VAT payer                                                                                                                                                                                            |
-| check                  | `entitlement_grants_exactly_one_target`, `entitlement_grants_window_ordered`           | grant shape and time window                                                                                                                                                                                                         |
-| check                  | `subscriptions_period_ordered`                                                         | period start before end                                                                                                                                                                                                             |
-| check                  | `consent_records_withdrawal_ordered`                                                   | withdrawal after consent                                                                                                                                                                                                            |
-| unique/partial indexes | see migrations                                                                         | one active price per plan + currency + interval; one webhook claim per event; one invoice per confirmed payment; refund idempotency on provider refund id                                                                           |
+| Kind                   | Name                                                                                                                                                      | Guarantees                                                                                                                                                                                                                                                                                                                             |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| trigger                | `tips_immutable_after_publication`                                                                                                                        | a published tip is compared as a whole row: only `status` (DRAFT → PUBLISHED → SETTLED or VOIDED, terminal) and `settled_at` (once, with the final status) may change. Publication needs `published_at`, at least one selection and READ COMMITTED; it locks the tip's events, competitions and sport. SETTLED needs every leg decided |
+| trigger                | `tips_insert_as_draft`                                                                                                                                    | a tip is inserted as DRAFT; publication is always the checked transition above                                                                                                                                                                                                                                                         |
+| trigger                | `tips_no_delete_after_publication`                                                                                                                        | published tips cannot be deleted                                                                                                                                                                                                                                                                                                       |
+| trigger                | `tip_selections_immutable_after_publication`, `..._no_insert_...`, `..._no_delete_...`                                                                    | the legs of a published tip cannot be added, removed, moved in or out (both parents are checked) or changed. The result moves one way while the tip is PUBLISHED (outcome from PENDING, closing price and `settled_at` from empty); any other result change must match a correction recorded in the same transaction                   |
+| trigger                | `sporting_events_locked_after_publication`, `competitions_locked_after_publication`, `sports_locked_after_publication`, `..._no_delete_after_publication` | once a published tip depends on a row (`record_locked_at` set), its identifying fields are frozen and it cannot be deleted. Still mutable: event `status`, `final_score`, `external_refs`; competition `external_refs`; sport `active`, `sort_order`                                                                                   |
+| trigger                | `tip_corrections_prepare`, `tip_corrections_apply`, `tip_corrections_no_update`, `tip_corrections_no_delete`                                              | inserting a correction records the true previous value, author, reason, database role, transaction and time, and applies the change in the same statement. Corrections are append-only                                                                                                                                                 |
+| trigger                | `tip_audit_events_no_update`, `tip_audit_events_no_delete`                                                                                                | audit log is append-only                                                                                                                                                                                                                                                                                                               |
+| trigger                | `tips_no_truncate`, `tip_selections_no_truncate`, `tip_audit_events_no_truncate`, `tip_corrections_no_truncate`                                           | the record cannot be truncated, also through `TRUNCATE ... CASCADE`                                                                                                                                                                                                                                                                    |
+| trigger                | `credit_notes_total_within_invoice`                                                                                                                       | credits never exceed the invoice                                                                                                                                                                                                                                                                                                       |
+| check                  | `invoices_totals_add_up`                                                                                                                                  | total = parts                                                                                                                                                                                                                                                                                                                          |
+| check                  | `invoices_no_vat_when_not_registered`                                                                                                                     | no VAT while operator is not a VAT payer                                                                                                                                                                                                                                                                                               |
+| check                  | `entitlement_grants_exactly_one_target`, `entitlement_grants_window_ordered`                                                                              | grant shape and time window                                                                                                                                                                                                                                                                                                            |
+| check                  | `subscriptions_period_ordered`                                                                                                                            | period start before end                                                                                                                                                                                                                                                                                                                |
+| check                  | `consent_records_withdrawal_ordered`                                                                                                                      | withdrawal after consent                                                                                                                                                                                                                                                                                                               |
+| unique/partial indexes | see migrations                                                                                                                                            | one active price per plan + currency + interval; one webhook claim per event; one invoice per confirmed payment; refund idempotency on provider refund id                                                                                                                                                                              |
 
-All of the above are exercised by `pnpm test:db` (121 tests, all passing on
-2026-11-27 against local Postgres).
+All of the above are exercised by `pnpm test:db` (158 tests, all passing on
+2026-11-28 against a fresh local PostgreSQL 16 fixture database).
+
+## The published record
+
+What holds once a tip leaves DRAFT, whoever writes: Payload with or without
+access control, a script, a migration or a `psql` session as the application
+role. Triggers: `20261015_201500_tip_immutability_triggers` (original) and
+`20261128_192000_sc_023_record_invariant_triggers` (replaces its functions under
+the same names and adds the rest). Tests: `src/lib/tips/immutability.db-test.ts`
+and `src/lib/tips/record-invariants.db-test.ts`.
+
+**What is frozen.** The tip row, every leg of it (the set of legs too), and the
+identifying fields of the event, competition and sport it refers to. The public
+pages read the fixture, kick-off, competition and sport from those rows, so they
+are locked in place rather than copied into a snapshot: a copy nobody reads
+would leave the displayed record editable. Frozen rows are compared as whole
+rows minus a short list of columns that may change, so a column added later is
+frozen by default.
+
+**What may still change.** The tip's status along DRAFT → PUBLISHED →
+SETTLED or VOIDED, with `settled_at` written once, together with the final
+status. A leg's result while the tip is PUBLISHED: the outcome from PENDING to a
+decided value, the closing price and `settled_at` from empty to a value. The
+event's `status`, `final_score` and `external_refs`, a competition's
+`external_refs`, a sport's `active` and `sort_order`. Nothing about the result
+moves once the tip is SETTLED or VOIDED, except by a correction.
+
+**Corrections.** A recorded result is changed only by inserting a row into
+`tip_corrections` (admin collection "Opravy výsledků", or SQL). The insert
+locks the leg and its tip, copies the current outcome and closing price as the
+previous value, stamps the author, reason, `recorded_at`, `database_role` and
+`transaction_id`, and applies the new value in the same statement. The leg
+trigger accepts a rewritten result only when it matches the latest correction
+for that leg in the current transaction, so a correction cannot be replayed
+and a rollback removes both. A correction never settles a pending leg, never
+returns a decided one to PENDING (so a SETTLED tip keeps every leg decided) and
+cannot clear a closing price. Corrections cannot be updated, deleted or
+truncated. The tip's own status is terminal and has no correction path.
+
+**Locking.** Every writer of a leg (insert, update, delete, correction) takes
+the parent tip row `FOR NO KEY UPDATE`, the lock the publishing `UPDATE`
+holds, and for a move it takes both parents in id order. Publication then locks
+the referenced rows in one global order: events, competitions, sports, each by
+id. A leg write and a publication of the same tip therefore never interleave,
+and concurrent publications sharing rows queue instead of deadlocking. Leg
+writes of one tip are serialised, so the writer of the last leg sees the others
+and settles the tip. Publication is refused outside READ COMMITTED, because the
+lock protocol relies on each statement seeing what committed before its lock
+was granted. An editor of a locked row under REPEATABLE READ or SERIALIZABLE
+whose snapshot predates the lock gets a serialisation failure.
+
+**Existing data.** The migration stamps `record_locked_at` on rows that already
+published tips depend on with the time the migration runs. That is when the
+lock started, not when the tip was published: values those rows held at
+publication were never recorded and are not reconstructed. The migration logs
+three counts it cannot vouch for: published tips without a selection, SETTLED
+tips with a pending leg, and events whose `updated_at` is later than the
+publication of a tip that depends on them. A non-zero count needs a human
+decision; the migration changes no row to make it fit.
 
 ## Rules for changes
 

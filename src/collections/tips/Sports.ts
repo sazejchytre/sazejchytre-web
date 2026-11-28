@@ -1,6 +1,11 @@
 import type { CollectionConfig } from 'payload'
 
 import { canAccessAdminPanel, isAdmin } from '@/lib/access'
+import {
+  blockRecordedReferenceDeletion,
+  lockRecordedReference,
+  recordLockedAtField,
+} from '@/lib/tips/immutability'
 
 /**
  * A sport. Reference data.
@@ -61,6 +66,7 @@ export const Sports: CollectionConfig = {
       validate: (value: unknown) =>
         Number.isInteger(value) ? true : 'sortOrder must be an integer.',
     },
+    recordLockedAtField,
     {
       name: 'seedMarker',
       type: 'text',
@@ -71,6 +77,11 @@ export const Sports: CollectionConfig = {
       },
     },
   ],
+  hooks: {
+    // Frozen fields first, for the same reason as on the tip.
+    beforeValidate: [lockRecordedReference('sports')],
+    beforeDelete: [blockRecordedReferenceDeletion('sports')],
+  },
   labels: { singular: 'Sport', plural: 'Sporty' },
   timestamps: true,
 }
