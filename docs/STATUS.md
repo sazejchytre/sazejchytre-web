@@ -7,8 +7,8 @@ The state of each individual task lives in GitHub Issues
 primary source. Details of unfixed security findings are never written here
 (see `docs/SECURITY.md`, "Disclosure").
 
-Last updated: 2026-11-27 (evening, after PR #18) by the project-management agent (Claude).
-Integration branch: `rebuild/v2` @ `b12cbe1`. Baseline commit: `main` @ `466c542` (2026-11-06, "perf(fonts): outlined marks,
+Last updated: 2026-11-28 (evening, after PR #32) by the project-management agent (Claude).
+Integration branch: `rebuild/v2` @ `d356c72`. Baseline commit: `main` @ `466c542` (2026-11-06, "perf(fonts): outlined marks,
 variable Inter, and a smaller preload set").
 
 Every result below was produced by running the command on 2026-11-27 in a
@@ -51,6 +51,35 @@ check: the rich-text editor in the administration panel was loaded and saved
 in a browser, with the reload, the database row and the formatting verified,
 and the database suite passed 121 of 121. Every SC-003 acceptance criterion is
 met.
+
+## Sprint 2 status, 2026-11-28
+
+State taken from GitHub on 2026-11-28 evening. Task state itself stays in the
+issues.
+
+| Package      | State                                                                                                                                                                                                                                                                                       |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SC-022 (#27) | **Partly complete.** PR #32 merged as `d356c72` after an independent review (approve with non-blocking notes). Issue stays open: its last criterion, no fixture record in any public output, statistic, history or export, is owned by SC-024 (#29) and is a public-launch blocker (D-016). |
+| SC-017 (#22) | PR #20 open. The independent review requested changes and a repeat review before merge. Details stay with the owner. Staging and production verification are open.                                                                                                                          |
+| SC-019 (#24) | PR #33 open, under independent review by Codex.                                                                                                                                                                                                                                             |
+| SC-018 (#23) | not started. SC-026 and SC-021 wait on it.                                                                                                                                                                                                                                                  |
+| SC-023 (#28) | assigned to Claude Code, independent review by Codex (D-017). No branch yet.                                                                                                                                                                                                                |
+| SC-024 (#29) | not started. Starts after SC-023 is merged. Carries the fixture-exclusion criterion.                                                                                                                                                                                                        |
+| SC-026 (#31) | not started. D-015 accepted; assignment updated, including verification before activation and interruption safety. Waits on SC-017, SC-018 and SC-019.                                                                                                                                      |
+| SC-005 (#5)  | PR #21 open. D-005 stays unapproved; a static third-variant design was delivered to the owner outside the repository.                                                                                                                                                                       |
+
+Open blockers for the public launch: PR #20 changes and re-review, PR #33
+review and merge, SC-018, SC-023, SC-024, SC-026, SC-015, SC-009 and
+SC-016. With these open the site stays private (D-012).
+
+Agents:
+
+| Agent       | Now                                         | Next                                              |
+| ----------- | ------------------------------------------- | ------------------------------------------------- |
+| Claude Code | fixes for PR #20 after review, then SC-023  | SC-018, SC-026, SC-024 in sequence (D-017)        |
+| Codex       | independent review of SC-019 (PR #33)       | repeat review of PR #20, review of SC-023, SC-011 |
+| Cowork (PM) | docs PR #34                                 | status, issues, prompts                           |
+| Owner       | merges, D-005 decision on the static design | SC-015, SC-016                                    |
 
 ## Check results on `main`
 
@@ -107,7 +136,7 @@ worth removing (see SC-005).
 | 7   | Stripe adapter, price sync and invoice issuing have **never run against Stripe** (README, Known gaps)                                                                                                                            | P1 (paid launch) | SC-010               |
 | 8   | No Dockerfile, no compose, no VPS deploy; `vercel.json` holds the two cron schedules                                                                                                                                             | P0               | SC-009               |
 | 9   | DB integration tests are not in CI and are documented as running "against Neon"                                                                                                                                                  | P1               | SC-011               |
-| 10  | Operational safeguards around fixture and test data (details tracked privately)                                                                                                                                                  | P1               | SC-022               |
+| 10  | Operational safeguards around fixture and test data (details tracked privately). **Partly fixed, PR #32 merged; the public-output part is SC-024's**                                                                             | P1               | SC-022, SC-024       |
 | 11  | No Content-Security-Policy (README, Known gaps)                                                                                                                                                                                  | P2               | SC-012               |
 | 12  | README describes "step 1, foundation only" and "Vercel Pro"                                                                                                                                                                      | P2               | SC-002 (done in #17) |
 | 13  | ~~`env.ts` comment contradicted `env.public.ts`~~ **fixed, merged in #18**                                                                                                                                                       | P3               | SC-003 done          |
@@ -149,7 +178,9 @@ was changed on the server. See `docs/DEPLOYMENT.md` and D-004.
 | `rebuild/v2`                                          | integration branch, all PRs target it                 |
 | `docs/sc-002-project-docs`                            | documentation PR #17, squash-merged into `rebuild/v2` |
 | `fix/sc-003-ci-build-audit`                           | PR #18, squash-merged into `rebuild/v2` as `b12cbe1`  |
-| `docs/sc-002-corrections`                             | this documentation PR                                 |
+| `docs/sc-002-corrections`                             | PR #19, squash-merged into `rebuild/v2` as `6c87f3e`  |
+| `fix/sc-022-fixture-isolation`                        | PR #32, squash-merged into `rebuild/v2` as `d356c72`  |
+| `docs/d-015-admin-mfa`                                | docs PR #34 (D-015, D-016, D-017, status)             |
 | older `feat/*`, `fix/*`, `chore/*`, `legacy-supabase` | kept, not deleted                                     |
 
 ## Coordination (maintained by Cowork)
@@ -158,10 +189,13 @@ Which open branch owns which files, so parallel agents never edit the same
 file. Each agent also lists its owned files in its PR description. Task
 state itself is in the linked issue.
 
-| Issue     | Branch                               | Agent       | Owned files                                                                                         |
-| --------- | ------------------------------------ | ----------- | --------------------------------------------------------------------------------------------------- |
-| #3 SC-003 | `fix/sc-003-ci-build-audit` (PR #18) | Claude Code | `.github/workflows/ci.yml`, `pnpm-workspace.yaml`, `pnpm-lock.yaml`, `src/lib/env.ts` (one comment) |
-| #2 SC-002 | `docs/sc-002-corrections`            | Cowork      | `AGENTS.md`, `CLAUDE.md`, `docs/*`, `.github/issue-seed/*`                                          |
+| Issue      | Branch                               | Agent                       | Owned files                                                                                                                                                               |
+| ---------- | ------------------------------------ | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #22 SC-017 | `feat/sc-017-launch-gate` (PR #20)   | Claude Code                 | launch gate under `src/lib/launch-gate/`, `src/proxy.ts`, `src/lib/env.ts`, `.env.example`, framework API route handler, `docs/DEPLOYMENT.md`, `docs/LAUNCH-CHECKLIST.md` |
+| #24 SC-019 | `fix/sc-019-admin-access` (PR #33)   | Claude Code (review: Codex) | `src/collections/Users.ts`, `src/lib/admin-presence/`, `src/instrumentation.ts`, `src/scripts/admin-init.ts`, `docs/DEPLOYMENT.md`, `docs/LAUNCH-CHECKLIST.md`            |
+| #5 SC-005  | `feat/sc-005-design-system` (PR #21) | Claude Code                 | design system, `src/components/ui/*`, `globals.css`, preview route, `package.json`, `pnpm-lock.yaml`                                                                      |
+| #28 SC-023 | not started                          | Claude Code (review: Codex) | new migrations, `src/lib/tips/loader.ts`, `src/lib/tips/settlement.ts`, `docs/DATABASE.md`                                                                                |
+| #2 SC-002  | `docs/d-015-admin-mfa` (PR #34)      | Cowork                      | `docs/DECISIONS.md`, `docs/TASKS.md`, `docs/STATUS.md`, `.github/issue-seed/*`                                                                                            |
 
 Sprint 2 branches are listed in `docs/TASKS.md` with their owned files. They
 are not started yet.
@@ -171,13 +205,13 @@ are not started yet.
 These files are touched by several planned packages, so only one branch may
 own each at a time:
 
-| File                                                                                                      | Wanted by                                |
-| --------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
-| `src/lib/auth/config.ts`                                                                                  | SC-018, SC-021                           |
-| `src/lib/forms/contact.ts`, `src/lib/forms/newsletter.ts`                                                 | SC-018, SC-020                           |
-| `src/lib/tips/loader.ts`, `src/lib/tips/settlement.ts`                                                    | SC-023, SC-024                           |
-| `src/lib/tips/archive.ts`, `src/components/history/TipsTable.tsx`, `src/app/(frontend)/historie/page.tsx` | SC-024, SC-007                           |
-| `src/seed/tips.ts`                                                                                        | SC-022, SC-024                           |
-| `src/lib/billing/stripe/webhook.ts`, `src/app/webhooks/stripe/route.ts`                                   | SC-025 only (whole package is one chain) |
-| `src/components/ui/*`, `src/app/(frontend)/globals.css`                                                   | SC-005 only                              |
-| `package.json`, `pnpm-lock.yaml`                                                                          | SC-003 (open), then SC-005               |
+| File                                                                                                      | Wanted by                                                                                   |
+| --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `src/lib/auth/config.ts`                                                                                  | SC-018, SC-021                                                                              |
+| `src/lib/forms/contact.ts`, `src/lib/forms/newsletter.ts`                                                 | SC-018, SC-020                                                                              |
+| `src/lib/tips/loader.ts`, `src/lib/tips/settlement.ts`                                                    | SC-023, SC-024                                                                              |
+| `src/lib/tips/archive.ts`, `src/components/history/TipsTable.tsx`, `src/app/(frontend)/historie/page.tsx` | SC-024, SC-007                                                                              |
+| `src/seed/tips.ts`                                                                                        | SC-024 (SC-022 merged)                                                                      |
+| `src/lib/billing/stripe/webhook.ts`, `src/app/webhooks/stripe/route.ts`                                   | SC-025 only (whole package is one chain)                                                    |
+| `src/components/ui/*`, `src/app/(frontend)/globals.css`                                                   | SC-005 only                                                                                 |
+| `package.json`, `pnpm-lock.yaml`                                                                          | SC-005 (open), then SC-026 (new dependency). SC-022's one-time exception is used up (D-016) |

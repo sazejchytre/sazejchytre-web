@@ -128,6 +128,13 @@ implements it. The owner approved these requirements:
 - A gateway-level control (Cloudflare Access) is kept as a possible second
   layer later. It is not part of SC-026 and is not bought now.
 
+Added by the owner on 2026-11-28:
+
+- Activation is not complete until a valid TOTP code, generated from the new
+  secret, has been verified. Until then the new secret has no effect.
+- Enrolment and recovery are safe when interrupted at any step and never leave
+  the last administrator in a state that cannot be recovered with shell access.
+
 SC-026 stays a condition for the public launch (D-012, launch checklist).
 Reason: the administration area exposes every customer and accounting record,
 and a password alone is not an acceptable barrier. An application-native
@@ -136,25 +143,46 @@ framework's own API routes as well as the panel.
 
 ## D-016 · 2026-11-28 · Accepted (owner)
 
-**SC-022's scope is extended beyond the original file list, and the
-public-output exclusion moves to SC-024.** The independent review of PR #32
-(verdict: approve with non-blocking notes) found the target check has to wrap
-every entry point, which reaches files the issue did not list: `package.json`
-(the `test:db` script), `README.md`, the fixture seed module and script, and
-the import in each of the five database suites. The owner waives the
-"`package.json` is owned by another branch" rule for this change; there is no
-textual conflict with PR #21.
+**SC-022 is partly complete. Its scope was extended once, and the
+public-output exclusion belongs to SC-024.** The independent review of PR #32
+(verdict: approve with non-blocking notes) found that the target check has to
+wrap every entry point, which reaches files the issue did not list:
+`package.json` (the `test:db` script), `README.md`, the fixture seed module
+and script, and the guard import in each of the five database suites.
 
-Excluding fixture records from every public output, statistic, history and
-export is owned by SC-024 (#29) as a binding acceptance criterion and a
-public-launch blocker. SC-022 (#27) stays open until that criterion is
-verified.
+**The `package.json` permission was a one-time exception.** It applied only to
+integrating the safe `test:db` command in PR #32. It is not a general lifting
+of the file-ownership rule: any change to a file that another open branch
+owns still needs the owner's explicit approval, each time.
 
-Non-blocking notes carried forward, none blocking the merge of PR #32:
+PR #32 was merged into `rebuild/v2` as `d356c72` on 2026-11-28. SC-022 (#27)
+stays open: excluding fixture records from every public output, statistic,
+history and export is a binding acceptance criterion and public-launch
+blocker of SC-024 (#29), and #27 closes only when it is verified there.
 
-1. The interruption and marker-refusal proofs run only by hand. Wire them into
-   a script and CI, tracked under SC-011.
+Non-blocking notes carried forward, none of them blocked the merge:
+
+1. The interruption and marker-refusal proofs run only by hand. Wiring them
+   into a script and CI is tracked under SC-011 (#11).
 2. A nit: the retirement command prints its "Retiring" line before the commit,
    so it also appears on a rolled-back run.
 3. The reviewer saw one direct refusal run that did not finish in 6 minutes
    and did not reproduce it. If it recurs, open an issue.
+
+## D-017 · 2026-11-28 · Accepted (owner)
+
+**SC-023 moves from Codex to Claude Code, and its independent reviewer
+changes from Claude Code to Codex.** Codex is taking the independent review of
+SC-019 (PR #33). For SC-023 this replaces the role inversion that D-014
+proposed. The rule behind every assignment does not change: **the author of a
+change never approves it.** The other agent reviews, and the owner merges.
+
+Consequences:
+
+- SC-023 and SC-024 both have Claude Code as implementer and Codex as
+  reviewer. They share the loader and settlement modules, so they stay
+  strictly sequential: SC-024 starts after SC-023 is merged.
+- SC-025 keeps its D-014 assignment (Codex implements, Claude Code reviews).
+- Claude Code now carries SC-017 follow-up, SC-023, then SC-018, SC-026 and
+  SC-024 in sequence. This is a launch-date risk and is tracked in
+  `docs/STATUS.md`.

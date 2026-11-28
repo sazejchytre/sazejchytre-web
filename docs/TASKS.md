@@ -42,9 +42,9 @@ service; the split is in "Order of work".
 | SC-026 | Administrator second factor (D-015: application-native TOTP) | P1 | A | Claude Code | SC-017, SC-018, SC-019, SC-022 |
 | SC-020 | Public form resilience and consent evidence | P2 | A | Claude Code | SC-018 |
 | SC-021 | Customer authentication hardening | P0 | A | Claude Code | SC-017, SC-018 |
-| SC-022 | Fixture and test-data isolation | P1 | A | Codex | SC-003 |
-| SC-023 | Complete the published-record invariants | P1 | A | Codex | SC-022 |
-| SC-024 | One public projection for analyses | P1 | A | Claude Code | SC-023 |
+| SC-022 | Fixture and test-data isolation (PR #32 merged; open until SC-024's exclusion criterion) | P1 | A | Codex | SC-003 |
+| SC-023 | Complete the published-record invariants | P1 | A | Claude Code (review: Codex, D-017) | SC-022 |
+| SC-024 | One public projection for analyses | P1 | A | Claude Code (review: Codex) | SC-022, SC-023 |
 | SC-025 | Billing and accounting integrity | P1 | B | Codex | SC-010 |
 
 ## Order of work
@@ -113,11 +113,14 @@ Never concurrent:
 - SC-017 with SC-026: both touch the framework API route handler, the proxy
   and `src/lib/env.ts`. SC-026 starts after SC-017 is merged and keeps the
   second-factor enforcement inside the authentication layer, not in the proxy.
-- SC-022 with SC-026: SC-026's database tests must use SC-022's disposable
-  database check, and both add to `package.json`. SC-022 merges first.
-- SC-023 with SC-024: shared loader and settlement modules.
+- SC-022 with SC-026: merged (`d356c72`). SC-026's database tests must use
+  SC-022's disposable database check, and `package.json` conflicts are
+  resolved by rebasing.
+- SC-023 with SC-024: shared loader and settlement modules. Both are now
+  Claude Code's (D-017), so they run strictly in sequence.
 - SC-024 with SC-007: shared history components.
-- SC-022 with SC-024: shared fixture module.
+- SC-022 with SC-024: shared fixture module. SC-022 is merged; SC-024 owns
+  `src/seed/tips.ts` from here on.
 - Anything with SC-025 inside the payment path.
 
 Design work (SC-005) is parallel to everything in this plan as long as it

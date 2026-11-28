@@ -187,7 +187,7 @@
     "id": "SC-023",
     "title": "Complete the published-record invariants",
     "prio": "P1",
-    "agent": "Codex",
+    "agent": "Claude Code",
     "phase": "A",
     "deps": ["SC-022"]
   },
@@ -197,7 +197,7 @@
     "prio": "P1",
     "agent": "Claude Code",
     "phase": "A",
-    "deps": ["SC-023"]
+    "deps": ["SC-022", "SC-023"]
   },
   {
     "id": "SC-025",
