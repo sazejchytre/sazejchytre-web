@@ -36,13 +36,15 @@ stays private (SC-017 private mode) and the launch moves.
 - [ ] Client-address handling behind the proxy verified on staging (SC-004 test procedure)
 - [ ] Cron jobs replaced on the server and one run of each logged
 - [ ] Uptime monitor alerting to a real phone/email
-- [ ] Nightly DB dump job ran once; **restore drill done** (date, duration: ____ )
+- [ ] Nightly DB dump job ran once; **restore drill done** (date, duration: ____ ); the restored staging server started with a verified administrator, or refused with exit code 78 until one was created
 - [ ] Rollback to previous image tested on staging
 - [ ] DNS switched; old Vercel deployment disabled after verification
 
 ### Content
 
-- [ ] Admin account for the operator with 2FA
+- [ ] Owner administrator created with the private initialization step (`docs/DEPLOYMENT.md`, "First administrator") before the host was reachable; command output recorded in the private tracker (date: ____ )
+- [ ] Production server log shows `[admin-presence] verified administrator present` after the deploy, and `/healthz` answers 200
+- [ ] Second factor enforced for the owner administrator account on every administrator entry point (SC-026, route named in D-015): ____
 - [ ] Methodology page complete
 - [ ] No placeholder, lorem ipsum or invented number anywhere (manual pass)
 
