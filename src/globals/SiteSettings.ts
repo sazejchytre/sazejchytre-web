@@ -1,6 +1,6 @@
-import type { GlobalConfig } from 'payload'
+import type { FieldAccess, GlobalConfig } from 'payload'
 
-import { isAdmin } from '@/lib/access'
+import { isAdmin, USERS_SLUG } from '@/lib/access'
 import { CACHE_TAGS } from '@/lib/cache/keys'
 import { revalidateOnChange } from '@/lib/content/revalidate'
 
@@ -36,6 +36,30 @@ import { revalidateOnChange } from '@/lib/content/revalidate'
  * that could change and because an operator must be able to correct it
  * immediately. The copy test pins the value in the catalogue as the fallback.
  */
+/**
+ * Who may read `notificationEmail`.
+ *
+ * The global is publicly readable because the footer needs the contact
+ * address, and Payload's REST API serves a public global to anyone. The
+ * notification address is not a contact address: it is an internal inbox,
+ * and publishing it invites mail to an address that was never meant to
+ * receive any. So the field is readable by:
+ *
+ *   - an administrator, through any API (the admin panel edits it);
+ *   - the server's own code through the Local API (`payloadAPI === 'local'`),
+ *     which is how the contact form finds where to send its notification
+ *     (`loadSiteSettings` in `src/lib/content/loaders.ts`). Payload sets
+ *     `payloadAPI` itself from the entry point a request came through; a
+ *     REST or GraphQL client cannot choose it.
+ *
+ * Everyone else — an anonymous REST read, a signed-in customer — gets the
+ * global without this field. No public page renders it: the loader's view is
+ * used server-side only, and the footer and contact page show
+ * `contactEmail`.
+ */
+export const readNotificationEmail: FieldAccess = ({ req }) =>
+  req.payloadAPI === 'local' || req.user?.collection === USERS_SLUG
+
 export const SiteSettings: GlobalConfig = {
   slug: 'site-settings',
   admin: {
@@ -71,6 +95,9 @@ export const SiteSettings: GlobalConfig = {
       name: 'notificationEmail',
       type: 'text',
       required: false,
+      // Internal: where the contact form's notifications go. Not for the
+      // public read the global otherwise allows; see `readNotificationEmail`.
+      access: { read: readNotificationEmail },
       admin: {
         description:
           'Kam chodí notifikace o nové zprávě z formuláře. Prázdné = stejná adresa jako contactEmail.',

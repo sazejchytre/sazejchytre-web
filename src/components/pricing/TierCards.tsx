@@ -16,12 +16,19 @@
  * price looks dearer than it is.
  *
  * ──────────────────────────────────────────────────────────────────────────
- * THE BUY BUTTON POINTS AT A STUB
+ * THE BUY BUTTON POINTS AT A STUB, AND ONLY WHEN THE STUB IS SERVED
  *
  * `/predplatne/...` is the route the checkout step owns. It is a real link to
  * a real page that says payment is not switched on yet, rather than a
  * disabled button: a disabled primary button with no explanation reads as a
  * broken page, and a visitor who clicks deserves a sentence.
+ *
+ * The button is rendered only when the launch gate would serve that route,
+ * which is FULL mode (`src/lib/launch-gate/`). In the informational site the
+ * route answers 404, and a call to action that leads to a 404 is worse than
+ * none: the cards are then a price list, which is what that site promises.
+ * Leaving the button out is presentation only; the proxy refuses the route
+ * whether or not anything links to it.
  *
  * ──────────────────────────────────────────────────────────────────────────
  * RULE 1 AND RULE 2
@@ -35,6 +42,7 @@ import { Badge, Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { formatMinorAmount } from '@/lib/billing/money'
 import type { FeatureKey } from '@/lib/billing/constants'
+import { isLinkServed } from '@/lib/launch-gate/server'
 import {
   type TierView,
   isRecommended,
@@ -69,6 +77,7 @@ export const TierCards = ({ tiers, interval, labels }: TierCardsProps) => (
       const recommended = isRecommended(tier.code)
       const saving = yearlySavingMinor(tier)
       const perMonth = yearlyPerMonthMinor(tier)
+      const checkoutHref = `/predplatne?plan=${tier.code}&obdobi=${interval === 'MONTH' ? 'mesicne' : 'rocne'}`
 
       return (
         <li key={tier.code} className="flex">
@@ -124,16 +133,18 @@ export const TierCards = ({ tiers, interval, labels }: TierCardsProps) => (
               )}
             </div>
 
-            <div>
-              <Button
-                href={`/predplatne?plan=${tier.code}&obdobi=${interval === 'MONTH' ? 'mesicne' : 'rocne'}`}
-                variant={recommended ? 'primary' : 'secondary'}
-                size="lg"
-                className="w-full"
-              >
-                {labels.cta}
-              </Button>
-            </div>
+            {isLinkServed(checkoutHref) ? (
+              <div>
+                <Button
+                  href={checkoutHref}
+                  variant={recommended ? 'primary' : 'secondary'}
+                  size="lg"
+                  className="w-full"
+                >
+                  {labels.cta}
+                </Button>
+              </div>
+            ) : null}
 
             <div className="flex flex-col gap-2">
               <h4 className="text-label text-ink">{labels.featuresHeading}</h4>
