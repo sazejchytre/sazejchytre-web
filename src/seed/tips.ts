@@ -1,30 +1,9 @@
-/**
- * Development seed: sports, competitions, events and fifteen historical tips.
- *
- * The track record functions are only interesting against realistic data, and
- * "realistic" has to include losses. The fixture below is deliberately NOT
- * flattering: it runs at a modest positive ROI with a losing streak in the
- * middle, a void, two Asian-handicap half outcomes and two accumulators, one
- * of which lost on its last leg.
- *
- * ──────────────────────────────────────────────────────────────────────────
- * EVERYTHING IS MARKED
- *
- * Every row gets `seedMarker: 'seed-step-3b'`, so a developer can purge the
- * lot without guessing which rows were real:
- *
- *   pnpm seed:tips --purge
- *
- * The purge deletes through raw SQL because published tips refuse deletion —
- * by hook AND by trigger — which is exactly as intended. A seed that could be
- * removed through the normal API would mean the immutability rules had a hole
- * in them.
- *
- * Idempotent: re-running upserts by slug and by code rather than duplicating.
- */
-import { getPayload } from 'payload'
+/** Historical sample tips for an explicitly disposable local database. */
+import type { PostgresAdapter } from '@payloadcms/db-postgres'
+import { BasePayload, getPayload, type Payload } from 'payload'
 
 import config from '@/payload.config'
+import { openDisposableDatabase } from '@/lib/testing/disposable-database'
 import type { SelectionOutcome } from '@/lib/tips/constants'
 
 export const SEED_MARKER = 'seed-step-3b'
@@ -536,7 +515,24 @@ const asRichText = (text: string) => ({
 })
 
 export const seedTips = async (): Promise<void> => {
-  const payload = await getPayload({ config })
+  // Inspect the adapter's configured target before opening its write pool.
+  const settings = await config
+  const adapter = settings.db.init({
+    payload: new BasePayload(),
+  }) as PostgresAdapter
+  const guard = await openDisposableDatabase(
+    adapter.poolOptions.connectionString,
+  )
+  try {
+    await writeFixture(
+      await getPayload({ config: settings, key: 'tip-fixtures' }),
+    )
+  } finally {
+    await guard.end()
+  }
+}
+
+async function writeFixture(payload: Payload) {
   const now = Date.now()
 
   /* --- sports ----------------------------------------------------------- */
@@ -836,49 +832,4 @@ export const seedTips = async (): Promise<void> => {
 
   payload.logger.info(`Tips created: ${created}, already present: ${skipped}`)
   payload.logger.info('Tips seed complete.')
-}
-
-/**
- * Remove every seeded row.
- *
- * Raw SQL because published tips refuse deletion by hook AND by trigger, which
- * is the point of this step. The triggers are disabled for the duration and
- * only rows carrying the marker are touched.
- */
-export const purgeSeededTips = async (): Promise<void> => {
-  const payload = await getPayload({ config })
-  const { sql } = await import('@payloadcms/db-postgres/drizzle')
-  const db = (
-    payload.db as unknown as {
-      drizzle: { execute: (query: unknown) => Promise<unknown> }
-    }
-  ).drizzle
-
-  // One statement per call: Postgres refuses several commands in a prepared
-  // statement, and the delete statements carry a parameter.
-  //
-  // The deletion triggers DO have to be disabled here — refusing to delete a
-  // published tip is exactly what they are for, and a purge is the one
-  // legitimate exception. Table-wide and brief, which is acceptable for a
-  // development-only script and would not be in production.
-  const statements = [
-    sql`ALTER TABLE "tip_audit_events" DISABLE TRIGGER "tip_audit_events_no_delete"`,
-    sql`ALTER TABLE "tip_selections" DISABLE TRIGGER "tip_selections_no_delete_after_publication"`,
-    sql`ALTER TABLE "tips" DISABLE TRIGGER "tips_no_delete_after_publication"`,
-    sql`DELETE FROM "tip_audit_events" WHERE "tip_id" IN (SELECT "id" FROM "tips" WHERE "seed_marker" = ${SEED_MARKER})`,
-    sql`DELETE FROM "tip_selections" WHERE "seed_marker" = ${SEED_MARKER}`,
-    sql`DELETE FROM "tips" WHERE "seed_marker" = ${SEED_MARKER}`,
-    sql`DELETE FROM "sporting_events" WHERE "seed_marker" = ${SEED_MARKER}`,
-    sql`DELETE FROM "competitions" WHERE "seed_marker" = ${SEED_MARKER}`,
-    sql`DELETE FROM "sports" WHERE "seed_marker" = ${SEED_MARKER}`,
-    sql`ALTER TABLE "tips" ENABLE TRIGGER "tips_no_delete_after_publication"`,
-    sql`ALTER TABLE "tip_selections" ENABLE TRIGGER "tip_selections_no_delete_after_publication"`,
-    sql`ALTER TABLE "tip_audit_events" ENABLE TRIGGER "tip_audit_events_no_delete"`,
-  ]
-
-  for (const statement of statements) {
-    await db.execute(statement)
-  }
-
-  payload.logger.info(`Purged every row marked ${SEED_MARKER}.`)
 }

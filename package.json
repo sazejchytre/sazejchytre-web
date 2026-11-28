@@ -14,7 +14,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "node --test \"src/**/*.test.ts\"",
-    "test:db": "cross-env NODE_OPTIONS=\"--no-deprecation --import tsx\" node --env-file-if-exists=.env --test --test-force-exit \"src/**/*.db-test.ts\"",
+    "test:db": "node --no-deprecation --import tsx --env-file-if-exists=.env src/scripts/test-disposable-database.ts",
     "test:stripe": "cross-env NODE_OPTIONS=\"--no-deprecation --import tsx\" node --env-file-if-exists=.env --test --test-force-exit \"src/**/*.stripe-test.ts\"",
     "test:fakturoid": "cross-env FAKTUROID_LIVE_TEST=1 NODE_OPTIONS=\"--no-deprecation --import tsx\" node --env-file-if-exists=.env --test --test-force-exit \"src/**/*.fakturoid-test.ts\"",
     "lint": "eslint .",

@@ -27,10 +27,13 @@ import { getPayload, type Payload } from 'payload'
 import type * as PayloadDrizzle from '@payloadcms/db-postgres/drizzle'
 
 import config from '@/payload.config'
+import { env } from '@/lib/env'
+import { openDisposableDatabase } from '@/lib/testing/disposable-database'
 
 const RUN = `imm${Date.now().toString(36)}`
 const MARKER = `dbtest-${RUN}`
 
+let guard: Awaited<ReturnType<typeof openDisposableDatabase>> | undefined
 let payload: Payload
 let sql: typeof PayloadDrizzle.sql
 let sportId: number
@@ -182,6 +185,7 @@ const publish = async (tipId: number) =>
   })
 
 before(async () => {
+  guard = await openDisposableDatabase(env.DATABASE_URL)
   payload = await getPayload({ config })
   sql = (await import('@payloadcms/db-postgres/drizzle')).sql
 
@@ -240,27 +244,9 @@ before(async () => {
   otherEventId = Number(otherEvent.id)
 })
 
+// Published rows live for the lifetime of this disposable database.
 after(async () => {
-  // Raw SQL with the delete triggers off: refusing to delete a published tip
-  // is the behaviour under test, so teardown has to go around it.
-  const statements = [
-    sql`ALTER TABLE "tip_audit_events" DISABLE TRIGGER "tip_audit_events_no_delete"`,
-    sql`ALTER TABLE "tip_selections" DISABLE TRIGGER "tip_selections_no_delete_after_publication"`,
-    sql`ALTER TABLE "tips" DISABLE TRIGGER "tips_no_delete_after_publication"`,
-    sql`DELETE FROM "tip_audit_events" WHERE "tip_id" IN (SELECT "id" FROM "tips" WHERE "seed_marker" = ${MARKER})`,
-    sql`DELETE FROM "tip_selections" WHERE "seed_marker" = ${MARKER}`,
-    sql`DELETE FROM "tips" WHERE "seed_marker" = ${MARKER}`,
-    sql`DELETE FROM "sporting_events" WHERE "seed_marker" = ${MARKER}`,
-    sql`DELETE FROM "competitions" WHERE "seed_marker" = ${MARKER}`,
-    sql`DELETE FROM "sports" WHERE "seed_marker" = ${MARKER}`,
-    sql`ALTER TABLE "tips" ENABLE TRIGGER "tips_no_delete_after_publication"`,
-    sql`ALTER TABLE "tip_selections" ENABLE TRIGGER "tip_selections_no_delete_after_publication"`,
-    sql`ALTER TABLE "tip_audit_events" ENABLE TRIGGER "tip_audit_events_no_delete"`,
-  ]
-
-  for (const statement of statements) {
-    await db().execute(statement)
-  }
+  await guard?.end()
 })
 
 /* ========================================================================== */

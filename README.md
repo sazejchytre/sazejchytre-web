@@ -62,9 +62,9 @@ crashes the boot with a list of what is wrong — see `src/lib/env.ts`.
 | `pnpm auth:migrate`       | Apply better-auth migrations (`auth` schema) |
 | `pnpm auth:migrate:dry`   | Print better-auth's SQL, change nothing      |
 | `pnpm seed`               | Upsert plans and CZK prices                  |
-| `pnpm test:db`            | Integration tests against Neon (not in CI)   |
+| `pnpm test:db`            | Test against a verified local fixture DB     |
 | `pnpm seed:tips`          | Sports, competitions and 15 historical tips  |
-| `pnpm seed:tips:purge`    | Delete every row marked `seed-step-3b`       |
+| `pnpm seed:tips:purge`    | Retire the entire confirmed fixture database |
 | `pnpm sweep:lockouts`     | Delete `auth_lockouts` past 90 days          |
 
 Payment-layer scripts:
@@ -443,18 +443,14 @@ neither knows about them nor manages them. Consequences:
 That trade was made deliberately: single-source migrations are worth more
 almost everywhere, and less than tamper-evidence here.
 
-### Working around them legitimately
+### Running database tests locally
 
-Two places need to, and both are development-only:
-
-- `pnpm seed:tips` publishes **through** the triggers rather than around them —
-  the immutability trigger permits any update while the row is still `DRAFT`,
-  and the backdated publication is that `DRAFT → PUBLISHED` statement itself.
-- `pnpm seed:tips:purge` does disable the delete triggers, because refusing to
-  delete a published tip is exactly what they are for. It only touches rows
-  carrying the seed marker.
-
-Nothing in the application code disables a trigger.
+Provision a marked disposable PostgreSQL database, run migrations as its
+owner and switch `DATABASE_URL` to its restricted application login. Load
+the fake integration settings, run `pnpm seed` for plans and prices, then
+run `pnpm test:db`. The command verifies the database before starting test
+workers and checks trigger states after the suite. The owner can retire the
+entire database when finished. See the [local DB workflow](docs/TESTING.md#running-db-tests-locally).
 
 ## Conventions that are not negotiable
 
