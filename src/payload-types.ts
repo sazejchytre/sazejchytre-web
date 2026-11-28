@@ -88,6 +88,7 @@ export interface Config {
     tips: Tip;
     'tip-selections': TipSelection;
     'tip-audit-events': TipAuditEvent;
+    'tip-corrections': TipCorrection;
     'legal-pages': LegalPage;
     'faq-entries': FaqEntry;
     'contact-submissions': ContactSubmission;
@@ -119,6 +120,7 @@ export interface Config {
     tips: TipsSelect<false> | TipsSelect<true>;
     'tip-selections': TipSelectionsSelect<false> | TipSelectionsSelect<true>;
     'tip-audit-events': TipAuditEventsSelect<false> | TipAuditEventsSelect<true>;
+    'tip-corrections': TipCorrectionsSelect<false> | TipCorrectionsSelect<true>;
     'legal-pages': LegalPagesSelect<false> | LegalPagesSelect<true>;
     'faq-entries': FaqEntriesSelect<false> | FaqEntriesSelect<true>;
     'contact-submissions': ContactSubmissionsSelect<false> | ContactSubmissionsSelect<true>;
@@ -941,6 +943,10 @@ export interface Sport {
   active: boolean;
   sortOrder: number;
   /**
+   * Set by the database when the first tip that depends on this row is published. From then on the fields that give that tip its meaning are frozen.
+   */
+  recordLockedAt?: string | null;
+  /**
    * Set by the development seed so seeded rows can be purged. Null for real data.
    */
   seedMarker?: string | null;
@@ -974,6 +980,10 @@ export interface Competition {
     | number
     | boolean
     | null;
+  /**
+   * Set by the database when the first tip that depends on this row is published. From then on the fields that give that tip its meaning are frozen.
+   */
+  recordLockedAt?: string | null;
   /**
    * Set by the development seed. Null for real data.
    */
@@ -1025,6 +1035,10 @@ export interface SportingEvent {
     | number
     | boolean
     | null;
+  /**
+   * Set by the database when the first tip that depends on this row is published. From then on the fields that give that tip its meaning are frozen.
+   */
+  recordLockedAt?: string | null;
   /**
    * Set by the development seed. Null for real data.
    */
@@ -1222,6 +1236,58 @@ export interface TipAuditEvent {
    * Optional human explanation.
    */
   note?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Oprava zaznamenaného výsledku sázky publikovaného tipu. Záznam se jen přidává; databáze opravu provede ve stejné transakci a uloží původní hodnotu.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "tip-corrections".
+ */
+export interface TipCorrection {
+  id: number;
+  selection: number | TipSelection;
+  /**
+   * Filled in from the selection; the database checks it.
+   */
+  tip: number | Tip;
+  /**
+   * The correct outcome. A correction never changes whether a leg is decided: a pending leg stays PENDING, a decided one stays decided.
+   */
+  newOutcome: 'PENDING' | 'WON' | 'LOST' | 'VOID' | 'HALF_WON' | 'HALF_LOST';
+  /**
+   * The correct closing price, in thousandths. Leave empty to keep the recorded one.
+   */
+  newClosingOdds?: number | null;
+  /**
+   * Why the recorded value was wrong and where the correct one comes from.
+   */
+  reason: string;
+  /**
+   * The signed-in administrator. Not editable.
+   */
+  actor: string;
+  /**
+   * Copied from the selection by the database.
+   */
+  previousOutcome: 'PENDING' | 'WON' | 'LOST' | 'VOID' | 'HALF_WON' | 'HALF_LOST';
+  /**
+   * Copied from the selection by the database.
+   */
+  previousClosingOdds?: number | null;
+  /**
+   * Transaction time, stamped by the database.
+   */
+  recordedAt: string;
+  /**
+   * The database login that wrote the correction.
+   */
+  databaseRole?: string | null;
+  /**
+   * Database transaction that wrote the correction. Ties it to the change it describes.
+   */
+  transactionId?: string | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -1440,6 +1506,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'tip-audit-events';
         value: number | TipAuditEvent;
+      } | null)
+    | ({
+        relationTo: 'tip-corrections';
+        value: number | TipCorrection;
       } | null)
     | ({
         relationTo: 'legal-pages';
@@ -1810,6 +1880,7 @@ export interface SportsSelect<T extends boolean = true> {
   name?: T;
   active?: T;
   sortOrder?: T;
+  recordLockedAt?: T;
   seedMarker?: T;
   updatedAt?: T;
   createdAt?: T;
@@ -1823,6 +1894,7 @@ export interface CompetitionsSelect<T extends boolean = true> {
   name?: T;
   country?: T;
   externalRefs?: T;
+  recordLockedAt?: T;
   seedMarker?: T;
   updatedAt?: T;
   createdAt?: T;
@@ -1839,6 +1911,7 @@ export interface SportingEventsSelect<T extends boolean = true> {
   status?: T;
   finalScore?: T;
   externalRefs?: T;
+  recordLockedAt?: T;
   seedMarker?: T;
   updatedAt?: T;
   createdAt?: T;
@@ -1896,6 +1969,25 @@ export interface TipAuditEventsSelect<T extends boolean = true> {
   before?: T;
   after?: T;
   note?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "tip-corrections_select".
+ */
+export interface TipCorrectionsSelect<T extends boolean = true> {
+  selection?: T;
+  tip?: T;
+  newOutcome?: T;
+  newClosingOdds?: T;
+  reason?: T;
+  actor?: T;
+  previousOutcome?: T;
+  previousClosingOdds?: T;
+  recordedAt?: T;
+  databaseRole?: T;
+  transactionId?: T;
   updatedAt?: T;
   createdAt?: T;
 }

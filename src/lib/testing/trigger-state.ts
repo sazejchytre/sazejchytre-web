@@ -24,6 +24,22 @@ export async function readProtectedTriggers(client: pg.Client) {
     'tip_selections_no_delete_after_publication',
     'tip_audit_events_no_update',
     'tip_audit_events_no_delete',
+    // Published-record invariants (SC-023).
+    'tips_insert_as_draft',
+    'tips_no_truncate',
+    'tip_selections_no_truncate',
+    'tip_audit_events_no_truncate',
+    'tip_corrections_prepare',
+    'tip_corrections_apply',
+    'tip_corrections_no_update',
+    'tip_corrections_no_delete',
+    'tip_corrections_no_truncate',
+    'sporting_events_locked_after_publication',
+    'sporting_events_no_delete_after_publication',
+    'competitions_locked_after_publication',
+    'competitions_no_delete_after_publication',
+    'sports_locked_after_publication',
+    'sports_no_delete_after_publication',
     'credit_notes_total_within_invoice',
   ]) {
     assert.ok(names.has(required), `Missing database protection: ${required}`)

@@ -1,6 +1,11 @@
 import type { CollectionConfig } from 'payload'
 
 import { canAccessAdminPanel, isAdmin } from '@/lib/access'
+import {
+  blockRecordedReferenceDeletion,
+  lockRecordedReference,
+  recordLockedAtField,
+} from '@/lib/tips/immutability'
 
 /**
  * A league, cup or tour within a sport.
@@ -57,6 +62,7 @@ export const Competitions: CollectionConfig = {
           'Provider id map, e.g. { "sportmonks": "271", "oddsapi": "soccer_czech" }. Written by a sync later; by hand for now.',
       },
     },
+    recordLockedAtField,
     {
       name: 'seedMarker',
       type: 'text',
@@ -66,6 +72,10 @@ export const Competitions: CollectionConfig = {
       },
     },
   ],
+  hooks: {
+    beforeValidate: [lockRecordedReference('competitions')],
+    beforeDelete: [blockRecordedReferenceDeletion('competitions')],
+  },
   labels: { singular: 'Soutěž', plural: 'Soutěže' },
   timestamps: true,
 }

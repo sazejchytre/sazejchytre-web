@@ -18,6 +18,8 @@ import {
   blockPublishedTipDeletion,
   enforceTipStatusTransition,
   lockPublishedTip,
+  requireDraftOnCreate,
+  requireSelectionToPublish,
   stampPublication,
 } from '@/lib/tips/immutability'
 
@@ -218,9 +220,11 @@ export const Tips: CollectionConfig = {
       // rather than as whichever content rule the new value broke.
       lockPublishedTip,
       enforceTipStatusTransition,
+      requireDraftOnCreate,
       ({ data, originalDoc }) => {
-        // A tip cannot be published without something to publish. Checked here
-        // rather than in the database because it spans two tables.
+        // A tip cannot be published without something to publish. The
+        // database refuses a publication with no selection as well;
+        // `requireSelectionToPublish` below gives the readable error.
         const becomingPublished =
           (data as { status?: string } | undefined)?.status === 'PUBLISHED' &&
           originalDoc?.status === 'DRAFT'
@@ -231,6 +235,7 @@ export const Tips: CollectionConfig = {
 
         return data
       },
+      requireSelectionToPublish,
     ],
     beforeChange: [stampPublication],
     beforeDelete: [blockPublishedTipDeletion],

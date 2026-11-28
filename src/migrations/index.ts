@@ -12,6 +12,8 @@ import * as migration_20261016_083730_step_5b_invoicing from './20261016_083730_
 import * as migration_20261016_084500_credit_note_total_trigger from './20261016_084500_credit_note_total_trigger';
 import * as migration_20261017_110000_step_5c_fakturoid from './20261017_110000_step_5c_fakturoid';
 import * as migration_20261105_111540_step_6_public_site from './20261105_111540_step_6_public_site';
+import * as migration_20261128_191937_sc_023_record_invariants from './20261128_191937_sc_023_record_invariants';
+import * as migration_20261128_192000_sc_023_record_invariant_triggers from './20261128_192000_sc_023_record_invariant_triggers';
 
 export const migrations = [
   {
@@ -82,6 +84,16 @@ export const migrations = [
   {
     up: migration_20261105_111540_step_6_public_site.up,
     down: migration_20261105_111540_step_6_public_site.down,
-    name: '20261105_111540_step_6_public_site'
+    name: '20261105_111540_step_6_public_site',
+  },
+  {
+    up: migration_20261128_191937_sc_023_record_invariants.up,
+    down: migration_20261128_191937_sc_023_record_invariants.down,
+    name: '20261128_191937_sc_023_record_invariants',
+  },
+  {
+    up: migration_20261128_192000_sc_023_record_invariant_triggers.up,
+    down: migration_20261128_192000_sc_023_record_invariant_triggers.down,
+    name: '20261128_192000_sc_023_record_invariant_triggers',
   },
 ];

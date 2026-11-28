@@ -22,6 +22,11 @@
  * disagree, the trigger wins — and the trigger is deliberately the stricter of
  * the two, so an edit that slips past a bug here still fails at the database.
  *
+ * The complete set of database rules (publication locking, the frozen event,
+ * competition and sport fields, one-way settlement and recorded corrections)
+ * is in migration `…_sc_023_record_invariant_triggers` and in
+ * `docs/DATABASE.md`.
+ *
  * ──────────────────────────────────────────────────────────────────────────
  * THE WHITELIST
  *
@@ -34,6 +39,7 @@ import type {
   CollectionBeforeChangeHook,
   CollectionBeforeDeleteHook,
   CollectionBeforeValidateHook,
+  Field,
 } from 'payload'
 import { APIError } from 'payload'
 
@@ -64,12 +70,35 @@ export const MUTABLE_TIP_FIELDS_AFTER_PUBLICATION: readonly string[] = [
  * The result, and the closing price recorded at kick-off. Nothing about the
  * pick itself: not the event, the market, the selection, the line, the price
  * taken or the minimum price.
+ *
+ * Even these move ONE WAY only, and only while the tip is PUBLISHED: an
+ * outcome from PENDING to a decided value, a closing price and `settledAt`
+ * from empty to a value. Changing a value that is already recorded is a
+ * correction, and a correction is a new `tip-corrections` document — see
+ * `lockPublishedSelection` and `src/collections/tips/TipCorrections.ts`.
  */
 export const MUTABLE_SELECTION_FIELDS_AFTER_PUBLICATION: readonly string[] = [
   'outcome',
   'closingOdds',
   'settledAt',
 ] as const
+
+/**
+ * Fields of a reference row (event, competition, sport) that may still change
+ * once a published tip depends on it. Everything else is the published
+ * meaning of that tip: which fixture, when it started, which competition and
+ * which sport.
+ */
+export const MUTABLE_REFERENCE_FIELDS_AFTER_PUBLICATION: Readonly<
+  Record<'sporting-events' | 'competitions' | 'sports', readonly string[]>
+> = Object.freeze({
+  // The fixture still has to be played and scored after the tip is out.
+  'sporting-events': ['status', 'finalScore', 'externalRefs'],
+  // Provider mapping only.
+  competitions: ['externalRefs'],
+  // Whether NEW tips may be published for it, and its place in a list.
+  sports: ['active', 'sortOrder'],
+})
 
 const offendingFields = (
   data: Record<string, unknown> | undefined,
@@ -126,6 +155,83 @@ export const lockPublishedTip: CollectionBeforeValidateHook = ({
         'Oprava se řeší publikací nového tipu, nikoli úpravou starého.',
       403,
     )
+  }
+
+  // `settledAt` is written once, in the same update that gives the tip its
+  // final status. Afterwards it is part of the record like everything else.
+  const incoming = data as
+    { status?: TipStatus; settledAt?: unknown } | undefined
+  const nextStatus = incoming?.status ?? previousStatus
+  const closing =
+    previousStatus === 'PUBLISHED' &&
+    (nextStatus === 'SETTLED' || nextStatus === 'VOIDED')
+
+  if (
+    incoming &&
+    'settledAt' in incoming &&
+    !closing &&
+    !isSameValue(incoming.settledAt, originalDoc.settledAt)
+  ) {
+    throw new APIError(
+      'Čas vyhodnocení tipu (settledAt) se zapisuje jen spolu s konečným stavem ' +
+        'a poté se už nemění.',
+      403,
+    )
+  }
+
+  return data
+}
+
+/**
+ * A tip is created as a DRAFT and published by a separate update.
+ *
+ * Publication is the moment the database locks the tip's selections and the
+ * events, competitions and sport they refer to. A tip inserted directly in a
+ * published state would skip that moment, so it is refused here and, as the
+ * guarantee, by the database.
+ */
+export const requireDraftOnCreate: CollectionBeforeValidateHook = ({
+  data,
+  operation,
+}) => {
+  const status = (data as { status?: TipStatus } | undefined)?.status
+
+  if (operation === 'create' && status !== undefined && status !== 'DRAFT') {
+    throw new APIError(
+      'Tip se zakládá jako koncept (DRAFT) a publikuje se samostatnou změnou stavu, ' +
+        'až má všechny sázky.',
+      400,
+    )
+  }
+
+  return data
+}
+
+/** Publishing a tip with no selection would publish a claim with no content. */
+export const requireSelectionToPublish: CollectionBeforeValidateHook = async ({
+  data,
+  operation,
+  originalDoc,
+  req,
+}) => {
+  const becomingPublished =
+    operation === 'update' &&
+    originalDoc?.status === 'DRAFT' &&
+    (data as { status?: TipStatus } | undefined)?.status === 'PUBLISHED'
+
+  if (!becomingPublished || originalDoc?.id === undefined) {
+    return data
+  }
+
+  const { totalDocs } = await req.payload.count({
+    collection: 'tip-selections',
+    where: { tip: { equals: originalDoc.id } },
+    overrideAccess: true,
+    req,
+  })
+
+  if (totalDocs === 0) {
+    throw new APIError('Tip bez jediné sázky nelze publikovat.', 400)
   }
 
   return data
@@ -265,17 +371,38 @@ export const lockPublishedSelection: CollectionBeforeValidateHook = async ({
     return data
   }
 
-  const status = await parentTipStatus(tipIdOf(originalDoc.tip), req)
+  const incoming = (data ?? {}) as Record<string, unknown>
+  const original = originalDoc as Record<string, unknown>
+  const sourceTipId = tipIdOf(original.tip)
+  const targetTipId = 'tip' in incoming ? tipIdOf(incoming.tip) : sourceTipId
+
+  const status = await parentTipStatus(sourceTipId, req)
+
+  // Moving a selection changes the shape of BOTH tips involved, so the
+  // destination is checked as well as the origin: a leg must not be slipped
+  // into a published accumulator any more than it may be taken out of one.
+  if (targetTipId !== sourceTipId) {
+    const targetStatus = await parentTipStatus(targetTipId, req)
+
+    if (
+      (status !== null && isFrozenStatus(status)) ||
+      (targetStatus !== null && isFrozenStatus(targetStatus))
+    ) {
+      throw new APIError(
+        'Sázku nelze přesunout z publikovaného tipu ani do něj. ' +
+          'Složení publikovaného tipu je uzavřené.',
+        403,
+      )
+    }
+  }
 
   if (status === null || !isFrozenStatus(status)) {
     return data
   }
 
-  // Moving a selection to another tip would let a published accumulator
-  // silently change shape, so `tip` is frozen like everything else.
   const offending = offendingFields(
-    data as Record<string, unknown> | undefined,
-    originalDoc as Record<string, unknown>,
+    incoming,
+    original,
     MUTABLE_SELECTION_FIELDS_AFTER_PUBLICATION,
   )
 
@@ -284,6 +411,51 @@ export const lockPublishedSelection: CollectionBeforeValidateHook = async ({
       `Sázka publikovaného tipu je neměnná. Pokus o změnu: ${offending.join(', ')}. ` +
         `Po publikaci lze změnit jen: ${MUTABLE_SELECTION_FIELDS_AFTER_PUBLICATION.join(', ')}.`,
       403,
+    )
+  }
+
+  // The result fields move one way, and only while the tip is still open.
+  // Anything else rewrites a recorded result, which is a correction.
+  const rewritten = MUTABLE_SELECTION_FIELDS_AFTER_PUBLICATION.filter(
+    (field) => {
+      if (!(field in incoming)) return false
+
+      const before = original[field]
+      const after = incoming[field]
+
+      if (isSameValue(after, before)) return false
+
+      const firstWrite =
+        field === 'outcome'
+          ? before === 'PENDING' && after !== 'PENDING'
+          : before === null || before === undefined
+
+      return !(status === 'PUBLISHED' && firstWrite)
+    },
+  )
+
+  if (rewritten.length > 0) {
+    throw new APIError(
+      `Zaznamenaný výsledek sázky nelze přepsat (${rewritten.join(', ')}). ` +
+        'Oprava se zapisuje jako nový záznam v kolekci Opravy výsledků ' +
+        '(tip-corrections) s důvodem; databáze ji provede ve stejné transakci.',
+      403,
+    )
+  }
+
+  const nextOutcome =
+    'outcome' in incoming ? incoming.outcome : original.outcome
+  const nextSettledAt =
+    'settledAt' in incoming ? incoming.settledAt : original.settledAt
+
+  if (
+    nextOutcome === 'PENDING' &&
+    nextSettledAt !== null &&
+    nextSettledAt !== undefined
+  ) {
+    throw new APIError(
+      'Čas vyhodnocení (settledAt) patří jen k rozhodnuté sázce.',
+      400,
     )
   }
 
@@ -334,3 +506,95 @@ export const blockSelectionRemovedFromPublishedTip: CollectionBeforeDeleteHook =
       )
     }
   }
+
+/* -------------------------------------------------------------------------- */
+/* Events, competitions and sports a published tip depends on                 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The public record reads the fixture, its kick-off, its competition and the
+ * sport from these rows, not from a copy. So once a published tip depends on
+ * a row, the fields that give the tip its meaning are frozen as well.
+ *
+ * The database decides when that is: publication stamps `recordLockedAt` on
+ * every event, competition and sport the tip refers to, inside the same
+ * transaction and under the same locks as the status change. These hooks only
+ * read that stamp and turn the trigger's refusal into a readable sentence.
+ */
+type ReferenceSlug = keyof typeof MUTABLE_REFERENCE_FIELDS_AFTER_PUBLICATION
+
+const REFERENCE_LABELS: Readonly<Record<ReferenceSlug, string>> = {
+  'sporting-events': 'Událost',
+  competitions: 'Soutěž',
+  sports: 'Sport',
+}
+
+const isRecordLocked = (doc: Record<string, unknown> | undefined): boolean =>
+  doc?.recordLockedAt !== null && doc?.recordLockedAt !== undefined
+
+/** Refuse an edit to a frozen field of a row a published tip depends on. */
+export const lockRecordedReference =
+  (slug: ReferenceSlug): CollectionBeforeValidateHook =>
+  ({ data, operation, originalDoc }) => {
+    if (operation !== 'update' || !isRecordLocked(originalDoc)) {
+      return data
+    }
+
+    const offending = offendingFields(
+      data as Record<string, unknown> | undefined,
+      originalDoc as Record<string, unknown>,
+      MUTABLE_REFERENCE_FIELDS_AFTER_PUBLICATION[slug],
+    )
+
+    if (offending.length > 0) {
+      throw new APIError(
+        `${REFERENCE_LABELS[slug]} je součástí publikovaného tipu a tato pole jsou neměnná: ` +
+          `${offending.join(', ')}. Lze měnit jen: ` +
+          `${MUTABLE_REFERENCE_FIELDS_AFTER_PUBLICATION[slug].join(', ')}.`,
+        403,
+      )
+    }
+
+    return data
+  }
+
+/** A row a published tip depends on cannot be deleted. */
+export const blockRecordedReferenceDeletion =
+  (slug: ReferenceSlug): CollectionBeforeDeleteHook =>
+  async ({ id, req }) => {
+    const doc = await req.payload.findByID({
+      collection: slug,
+      id: String(id),
+      depth: 0,
+      overrideAccess: true,
+      req,
+    })
+
+    if (isRecordLocked(doc as unknown as Record<string, unknown>)) {
+      throw new APIError(
+        `${REFERENCE_LABELS[slug]} je součástí publikovaného tipu a nelze ji smazat.`,
+        403,
+      )
+    }
+  }
+
+/**
+ * The stamp itself, as a read-only field. Field access refuses every write
+ * through Payload; the trigger refuses every write that changes it once set.
+ */
+export const recordLockedAtField: Field = {
+  name: 'recordLockedAt',
+  type: 'date',
+  index: true,
+  access: {
+    create: () => false,
+    update: () => false,
+  },
+  admin: {
+    readOnly: true,
+    position: 'sidebar',
+    description:
+      'Set by the database when the first tip that depends on this row is published. ' +
+      'From then on the fields that give that tip its meaning are frozen.',
+  },
+}
