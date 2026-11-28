@@ -6,13 +6,12 @@
  * one `rounded-xl` at a time.
  *
  * ──────────────────────────────────────────────────────────────────────────
- * A "CARD" IS A FLAT PANEL
+ * A "CARD" IS A QUIET PANEL
  *
- * DESIGN.md rules 42–45: borders over shadows, 6px radius, no gradients, no
- * glow, and cards only where the items are independent. So `Card` is a white
- * panel with a hairline edge on the off-white page — the sheet of data on the
- * desk — and nothing more. Whether a page should use one at all is the
- * page's decision; nothing here adds depth to make it look like it should.
+ * Flat, 12px corners, a hairline edge or a soft tint — no shadow, no
+ * gradient, no glow. Whether a page should use one at all is the page's
+ * decision: in the SC-005 direction most content sits directly on the page,
+ * and sections are separated by space and the soft band rather than boxes.
  */
 import type { ComponentProps, ReactNode } from 'react'
 
@@ -24,10 +23,9 @@ import { cn } from './cn'
 
 export type CardProps = Omit<ComponentProps<'div'>, 'className'> & {
   /**
-   * `raised` is the default: the white panel. `accent` is the barely-green
-   * callout panel, marked by a green rule on its leading edge rather than by
-   * a strong tint — for callouts, not for decoration. `page` matches the
-   * canvas, for a panel that should read as part of it.
+   * `raised` is the default: a white panel with a hairline. `accent` is the
+   * soft-tinted panel for a callout, with no border at all. `page` matches
+   * the canvas, for a panel that should read as part of it.
    */
   tone?: 'raised' | 'accent' | 'page'
   /** Removes the padding, for a card whose child owns its own edges (a table). */
@@ -38,8 +36,7 @@ export type CardProps = Omit<ComponentProps<'div'>, 'className'> & {
 
 const TONES = {
   raised: 'bg-surface-raised border-border-subtle',
-  accent:
-    'bg-surface-accent border-border-subtle border-s-2 border-s-brand-text',
+  accent: 'bg-surface-accent border-transparent',
   page: 'bg-surface-page border-border-subtle',
 } as const
 
@@ -52,13 +49,12 @@ export const Card = ({
 }: CardProps) => (
   <div
     className={cn(
-      // 6px radius. `overflow-hidden` so a flush child (a table, an image)
+      // 12px radius. `overflow-hidden` so a flush child (a table, an image)
       // cannot square off the corners.
       'rounded-card border overflow-hidden',
       TONES[tone],
-      // 16px on a phone, 24px from 640px: a 343px column cannot spend 48px
-      // of itself on padding.
-      !flush && 'p-4 sm:p-6',
+      // 20px on a phone, 32px from 640px.
+      !flush && 'p-5 sm:p-8',
       className,
     )}
     {...rest}

@@ -27,16 +27,17 @@ export const previewCopy = {
   notice:
     'Náhled návrhu vzhledu ke schválení (rozhodnutí D-005). Mimo vývojový server tato adresa vrací 404. Všechna čísla jsou živá z databáze; kde data chybí, stránka to přizná.',
 
+  /** The mobile menu disclosure. A word, not only an icon. */
+  menu: 'Menu',
+
   record: {
     /** DESIGN.md's own sentence: the one the design has to prove. */
     heading: 'Výsledky neschováváme. Ani ty špatné.',
-    summaryHeading: 'Stav veřejné historie',
     /** Rule 51: under ~30 settled tips, say the sample is too small. */
     smallSample:
       'Vzorek je zatím malý. Z takového počtu tipů se o kvalitě analýz nedá nic spolehlivě říct.',
     /** Shown in place of a rate that does not exist yet (nothing settled). */
     noValue: '—',
-    noValueLabel: 'zatím bez hodnoty',
   },
 
   table: {

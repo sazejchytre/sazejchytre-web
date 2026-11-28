@@ -3,12 +3,15 @@ import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import type { ReactNode } from 'react'
 
-import { Footer } from '@/components/layout/Footer'
-import { Header } from '@/components/layout/Header'
 import { DEFAULT_LOCALE, HTML_LANG } from '@/i18n/config'
 import { loadSiteSettings } from '@/lib/content/loaders'
 import { fontVariables } from '@/lib/design/fonts'
 import { designPreviewEnabled } from '@/lib/design/preview'
+
+import { PreviewFooter } from './_components/PreviewFooter'
+import { PreviewHeader } from './_components/PreviewHeader'
+
+import { previewCopy } from './nahled/homepage/copy'
 
 import '../(frontend)/globals.css'
 
@@ -41,11 +44,11 @@ import '../(frontend)/globals.css'
  * ──────────────────────────────────────────────────────────────────────────
  * WHAT IT RENDERS WHEN ENABLED
  *
- * The real site chrome — `Header` and `Footer` from `src/components/layout`,
- * imported unchanged — so the prototype is judged inside the header and
- * footer it would actually ship with (restyled only by the tokens). No
- * `NextIntlClientProvider`: the one client component in the chrome
- * (`NavLinks`) reads no messages.
+ * The PROPOSED site chrome for D-005: `PreviewHeader` and `PreviewFooter`
+ * in `./_components`. The real `Header` and `Footer` in
+ * `src/components/layout` belong to SC-017 and are not changed; the PR lists
+ * the proposed changes for them. Neither preview component is a client
+ * component, so the group needs no `NextIntlClientProvider`.
  */
 
 export const metadata: Metadata = {
@@ -65,6 +68,7 @@ export default async function PreviewLayout({
   if (!designPreviewEnabled()) notFound()
 
   const common = await getTranslations('common')
+  const home = await getTranslations('home')
   const settings = await loadSiteSettings(DEFAULT_LOCALE)
 
   return (
@@ -78,13 +82,26 @@ export default async function PreviewLayout({
           {common('skipToContent')}
         </a>
 
-        <Header />
+        <PreviewHeader
+          brand={common('brand')}
+          ageMarker={common('ageMarker')}
+          ageMarkerLong={common('ageMarkerLong')}
+          navLabel={common('nav.label')}
+          menuLabel={previewCopy.menu}
+          items={[
+            { href: '/historie', label: common('nav.history') },
+            { href: '#jak-to-funguje', label: home('howItWorks.heading') },
+            { href: '/metodika', label: common('footer.methodology') },
+            { href: '/cenik', label: common('nav.pricing') },
+            { href: '/kontakt', label: common('nav.contact') },
+          ]}
+        />
 
         <main id="obsah" tabIndex={-1} className="flex-1">
           {children}
         </main>
 
-        <Footer settings={settings} />
+        <PreviewFooter settings={settings} />
       </body>
     </html>
   )

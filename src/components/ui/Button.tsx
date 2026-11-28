@@ -4,15 +4,19 @@
  * ──────────────────────────────────────────────────────────────────────────
  * THE CONTRAST RULE IS BUILT IN
  *
- * The `primary` variant is `bg-brand text-ink-on-brand`. The brand green is
- * dark (#236344), so its ink is white: 7.14:1. Dark ink on it would be
- * 2.46:1. The foreground is not a prop, so neither mistake is reachable from
- * a call site.
+ * The `primary` variant is `bg-brand text-ink-on-brand`. In light mode the
+ * brand green is dark and takes white (6.81:1); in dark mode it is a light
+ * mint and takes dark ink (9.70:1). The token flips, the component does not
+ * know, and the foreground is not a prop, so no call site can get it wrong.
  *
- * `accent` used to be a yellow fill. The SC-005 palette has no yellow, so it
- * is now the INVERTED button — ink fill, surface text — for the one action in
- * a dark band or a dense panel that must out-rank a primary. Its API is
- * unchanged; nothing in the codebase calls it today.
+ * `accent` is the main action ON the deep brand band (the hero and the
+ * closing call to action): the `signal` mint with its own dark ink, 10.51:1
+ * in both themes. Its API is unchanged.
+ *
+ * ON THE BRAND BAND the other variants are recoloured by CSS through
+ * `data-variant` (see `.band-brand` in globals.css): an outlined secondary
+ * with dark ink would be invisible on dark green. No prop, so a button keeps
+ * one API wherever it is placed.
  *
  * ──────────────────────────────────────────────────────────────────────────
  * STATES (DESIGN.md rule 99)
@@ -45,7 +49,7 @@ export type ButtonSize = 'md' | 'lg'
  *
  * `min-h-11` is 44px, the minimum touch target. Declared here as well as in
  * the base layer because this is the component most likely to be given a
- * smaller padding by a caller. 6px radius, no pills (rule 44). Sentence-case
+ * smaller padding by a caller. 8px radius, no pills. Sentence-case
  * labels come from the catalogue; nothing here transforms case.
  */
 const BASE = cn(
@@ -61,7 +65,7 @@ const BASE = cn(
 )
 
 const VARIANTS: Readonly<Record<ButtonVariant, string>> = {
-  /** The filled green. White ink — see the header. */
+  /** The filled brand green. Its ink flips with the theme — see the header. */
   primary: cn(
     'border-transparent bg-brand text-ink-on-brand',
     'hover:bg-brand-strong active:bg-brand-strong',
@@ -80,10 +84,10 @@ const VARIANTS: Readonly<Record<ButtonVariant, string>> = {
     'border-transparent text-brand-text',
     'underline-offset-4 hover:underline active:underline',
   ),
-  /** Inverted: ink fill, surface ink. Both flip with the theme. */
+  /** The signal mint, for the main action on the brand band. */
   accent: cn(
-    'border-transparent bg-ink text-surface-raised',
-    'hover:bg-ink/85 active:bg-ink/85',
+    'border-transparent bg-signal text-ink-on-signal',
+    'hover:brightness-105 active:brightness-95',
   ),
 }
 
@@ -140,7 +144,12 @@ export const Button = ({
     const { href, ...anchorProps } = rest
 
     return (
-      <Link href={href} className={classes} {...anchorProps}>
+      <Link
+        href={href}
+        className={classes}
+        data-variant={variant}
+        {...anchorProps}
+      >
         {children}
       </Link>
     )
@@ -155,6 +164,7 @@ export const Button = ({
     <button
       type={buttonProps.type ?? 'button'}
       className={classes}
+      data-variant={variant}
       {...buttonProps}
     >
       {children}

@@ -3,12 +3,9 @@ import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { getPayload } from 'payload'
 
-import { TierCards } from '@/components/pricing/TierCards'
 import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/States'
 import { DEFAULT_LOCALE } from '@/i18n/config'
-import type { FeatureKey } from '@/lib/billing/constants'
-import { loadPublicTiers } from '@/lib/billing/pricing-loader'
 import { loadFaqEntries } from '@/lib/content/loaders'
 import { designPreviewEnabled } from '@/lib/design/preview'
 import { formatDate, formatDateIso, formatOdds } from '@/lib/format/czech'
@@ -19,22 +16,25 @@ import { tipResult } from '@/lib/tips/settlement'
 import { publicTrackRecord, tipDisclosure } from '@/lib/tips/visibility'
 import config from '@/payload.config'
 
+import { ClosingBand } from './_components/ClosingBand'
 import { FreeTipArticle, type FreeTipView } from './_components/FreeTipArticle'
+import { Hero } from './_components/Hero'
 import { HowItWorks } from './_components/HowItWorks'
 import { LatestResults } from './_components/LatestResults'
-import { RecordSummary } from './_components/RecordSummary'
+import { RecordBand } from './_components/RecordBand'
 import { previewCopy } from './copy'
 import { latestResultRows, recordFigures, sampleState } from './view-model'
 
 /**
- * The homepage PROTOTYPE for owner decision D-005 (SC-005).
+ * The homepage PROTOTYPE for owner decision D-005 (SC-005), second proposal.
  *
  * ──────────────────────────────────────────────────────────────────────────
  * WHAT IT IS FOR
  *
- * To show the proposed visual direction — tokens, Geist, the restyled
- * primitives, a "results desk" composition — on real data, so the owner can
- * approve or reject it before SC-006 redesigns the actual home page. The
+ * To show the proposed visual direction on real data before SC-006
+ * redesigns the actual home page. The first proposal (an editorial "results
+ * desk") was rejected; this one is a classic, conventional sports analysis
+ * website: a strong brand band, one idea per section, obvious actions. The
  * current home page (`src/app/(frontend)/page.tsx`) is not touched.
  *
  * ──────────────────────────────────────────────────────────────────────────
@@ -44,21 +44,27 @@ import { latestResultRows, recordFigures, sampleState } from './view-model'
  * `loadAllSettledTips` → `publicTrackRecord` and `buildArchiveRows`, as on
  * `/historie`; `loadLatestPublicTip` → `tipDisclosure`, as on `/`. With an
  * empty database every block says so in words. No sample row, no mock
- * figure, no testimonial — there is nothing in this file that could produce
- * one.
+ * figure, no testimonial.
+ *
+ * ──────────────────────────────────────────────────────────────────────────
+ * LAUNCH SCOPE
+ *
+ * The first public phase has no customer accounts and no payments (D-008,
+ * D-012). So there is no sign-in, no "get access" action and no price
+ * picker: the subscription section says plainly that payments are not
+ * switched on, in the catalogue's own words.
  *
  * ──────────────────────────────────────────────────────────────────────────
  * COMPOSITION, TOP TO BOTTOM
  *
- *   1. One sentence of what the service is, and the scoreboard beside it —
- *      evidence before offer, at under half a desktop viewport (rule 38).
- *   2. The newest results as a table, losses in the same rows as wins:
- *      "Výsledky neschováváme. Ani ty špatné."
- *   3. Yesterday's free tip, and how the work is done.
- *   4. Prices as information, then the FAQ if there is one.
- *
- * Green is spent on the primary action, links, step numbers and positive
- * figures. Nothing else is coloured.
+ *   1. Hero band: what the service is, one primary action (the history).
+ *   2. How it works: three steps.
+ *   3. The public record: four figures and the newest rows, or one honest
+ *      sentence.
+ *   4. Yesterday's free analysis.
+ *   5. Subscription: not yet, said plainly.
+ *   6. FAQ, when there is one.
+ *   7. Closing band: the record's promise, and the history.
  */
 
 export const metadata: Metadata = {
@@ -81,11 +87,10 @@ export default async function HomepagePreview() {
   const payload = await getPayload({ config })
   const now = new Date()
 
-  const [tips, latestTip, faq, tiers] = await Promise.all([
+  const [tips, latestTip, faq] = await Promise.all([
     loadAllSettledTips({ payload }),
     loadLatestPublicTip({ payload }, now),
     loadFaqEntries(DEFAULT_LOCALE),
-    loadPublicTiers(payload, 'CZK'),
   ])
 
   // Unfiltered, by construction — the same calls `/historie` makes.
@@ -105,8 +110,14 @@ export default async function HomepagePreview() {
     unitsShort,
     noValue: previewCopy.record.noValue,
   })
+  const byKey = new Map(figures.map((figure) => [figure.key, figure]))
+  const pick = (keys: readonly (typeof figures)[number]['key'][]) =>
+    keys.flatMap((key) => {
+      const figure = byKey.get(key)
+      return figure ? [figure] : []
+    })
 
-  const rows = latestResultRows(buildArchiveRows(tips), unitsShort)
+  const rows = latestResultRows(buildArchiveRows(tips), unitsShort, 5)
 
   const disclosure = latestTip ? tipDisclosure(latestTip, [], now) : null
   const freeTip: FreeTipView | null =
@@ -145,78 +156,50 @@ export default async function HomepagePreview() {
   return (
     <div className="flex flex-col">
       {/* For the reviewer: what this page is and is not. */}
-      <p className="border-b border-border-subtle bg-surface-raised">
+      <p className="bg-surface-accent">
         <span className="page-shell page-gutter block py-2 text-body-sm text-ink-muted">
           {previewCopy.notice}
         </span>
       </p>
 
-      {/* ================================================================ */}
-      {/* 1. Hero: what this is, and the record beside it                  */}
-      {/* ================================================================ */}
-      <div className="page-shell page-gutter py-10 md:py-12">
-        <div className="layout-grid items-start gap-y-10">
-          <div className="col-span-4 flex flex-col gap-6 md:col-span-6 md:pe-8">
-            {/* No eyebrow label above it (rule 40). */}
-            <h1 className="text-display-xl text-ink">{home('hero.heading')}</h1>
-            <p className="max-w-reading text-heading font-normal text-ink-muted">
-              {home('hero.body')}
-            </p>
-            <div className="flex flex-wrap gap-3">
-              <Button href="/historie" size="lg">
-                {home('hero.primaryCta')}
-              </Button>
-              <Button href="/metodika" variant="secondary" size="lg">
-                {history('methodology.heading')}
-              </Button>
-            </div>
-            {/* What the service is, and what it is not, in one line. */}
-            <p className="max-w-reading text-body-sm text-ink-muted">
-              {common('serviceStatement')}
-            </p>
-          </div>
+      <Hero
+        heading={home('hero.heading')}
+        body={home('hero.body')}
+        serviceStatement={common('serviceStatement')}
+        brand={common('brand')}
+        primary={{ href: '/historie', label: home('hero.primaryCta') }}
+        secondary={{
+          href: '#jak-to-funguje',
+          label: home('howItWorks.heading'),
+        }}
+      />
 
-          <div className="col-span-4 md:col-span-6">
-            <RecordSummary
-              headingId="stav-historie"
-              heading={previewCopy.record.summaryHeading}
-              asOf={history('asOf', { date: formatDate(record.asOf) })}
-              asOfIso={formatDateIso(record.asOf)}
-              figures={figures}
-              sample={sampleState(record.settled)}
-              sampleSize={history('sampleSize', { count: record.settled })}
-              emptyNote={home('record.empty')}
-              smallSampleNote={previewCopy.record.smallSample}
-              noValueLabel={previewCopy.record.noValueLabel}
-              links={[
-                { href: '/historie', label: home('record.cta') },
-                { href: '/metodika', label: history('methodology.cta') },
-              ]}
-            />
-          </div>
-        </div>
+      <div id="jak-to-funguje">
+        <HowItWorks
+          headingId="jak-to-funguje-nadpis"
+          heading={home('howItWorks.heading')}
+          steps={steps}
+        />
       </div>
 
-      {/* ================================================================ */}
-      {/* 2. The newest results, losses included                           */}
-      {/* ================================================================ */}
-      <section
-        aria-labelledby="vysledky"
-        className="border-t border-border-subtle bg-surface-page"
+      <RecordBand
+        headingId="verejna-historie"
+        heading={home('record.heading')}
+        lead={home('record.body')}
+        asOf={history('asOf', { date: formatDate(record.asOf) })}
+        asOfIso={formatDateIso(record.asOf)}
+        sample={sampleState(record.settled)}
+        sampleSize={history('sampleSize', { count: record.settled })}
+        headline={pick(['settled', 'roi', 'profit', 'drawdown'])}
+        counts={pick(['won', 'lost', 'void'])}
+        emptyNote={home('record.empty')}
+        smallSampleNote={previewCopy.record.smallSample}
+        links={[
+          { href: '/historie', label: home('record.cta') },
+          { href: '/metodika', label: history('methodology.cta') },
+        ]}
       >
-        <div className="page-shell page-gutter flex flex-col gap-6 py-12 md:py-16">
-          <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
-            <div className="flex max-w-reading flex-col gap-2">
-              <h2 id="vysledky" className="text-display-lg text-ink">
-                {previewCopy.record.heading}
-              </h2>
-              <p className="text-body text-ink-muted">{home('record.body')}</p>
-            </div>
-            <Button href="/historie" variant="ghost">
-              {home('record.cta')}
-            </Button>
-          </div>
-
+        {rows.length > 0 ? (
           <LatestResults
             rows={rows}
             labels={{
@@ -231,105 +214,68 @@ export default async function HomepagePreview() {
               empty: home('record.empty'),
             }}
           />
-        </div>
-      </section>
+        ) : null}
+      </RecordBand>
 
-      {/* ================================================================ */}
-      {/* 3. Yesterday's free tip, and how the work is done                */}
-      {/* ================================================================ */}
-      <div className="border-t border-border-subtle">
-        <div className="page-shell page-gutter py-12 md:py-16">
-          <div className="layout-grid gap-y-12">
-            <section
-              aria-labelledby="tip-zdarma"
-              className="col-span-4 flex flex-col gap-6 md:col-span-7"
-            >
-              <h2 id="tip-zdarma" className="text-display-lg text-ink">
-                {home('freeTip.heading')}
-              </h2>
-              {freeTip ? (
-                <FreeTipArticle
-                  tip={freeTip}
-                  labels={{
-                    delayNotice: home('freeTip.delayNotice'),
-                    cta: home('freeTip.cta'),
-                    minimumOddsNote: tipCopy('minimumOddsNote'),
-                    oddsColumn: tipCopy('oddsColumn'),
-                  }}
-                />
-              ) : (
-                <EmptyState>{home('freeTip.none')}</EmptyState>
-              )}
-            </section>
-
-            <div className="col-span-4 md:col-span-5">
-              <HowItWorks
-                headingId="jak-to-funguje"
-                heading={home('howItWorks.heading')}
-                steps={steps}
+      <section aria-labelledby="tip-zdarma">
+        <div className="page-shell page-gutter flex flex-col gap-8 py-16 md:py-20">
+          <h2 id="tip-zdarma" className="text-display-lg text-ink">
+            {home('freeTip.heading')}
+          </h2>
+          {freeTip ? (
+            <div className="max-w-reading">
+              <FreeTipArticle
+                tip={freeTip}
+                labels={{
+                  delayNotice: home('freeTip.delayNotice'),
+                  cta: home('freeTip.cta'),
+                  minimumOddsNote: tipCopy('minimumOddsNote'),
+                  oddsColumn: tipCopy('oddsColumn'),
+                }}
               />
             </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ================================================================ */}
-      {/* 4. Prices as information, then the FAQ                           */}
-      {/* ================================================================ */}
-      <section
-        aria-labelledby="predplatne"
-        className="border-t border-border-subtle"
-      >
-        <div className="page-shell page-gutter flex flex-col gap-6 py-12 md:py-16">
-          <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
-            <div className="flex max-w-reading flex-col gap-2">
-              <h2 id="predplatne" className="text-display-lg text-ink">
-                {home('tiers.heading')}
-              </h2>
-              <p className="text-body text-ink-muted">{home('tiers.body')}</p>
-            </div>
-            <Button href="/cenik" variant="ghost">
-              {common('nav.pricing')}
-            </Button>
-          </div>
-
-          {tiers.length === 0 ? (
-            <EmptyState>{pricing('empty')}</EmptyState>
           ) : (
-            <TierCards
-              tiers={tiers}
-              interval="MONTH"
-              labels={{
-                recommended: pricing('recommended'),
-                perMonth: pricing('perMonth'),
-                perYear: pricing('perYear'),
-                yearlySaving: (amount) => pricing('yearlySaving', { amount }),
-                yearlyEquivalent: (amount) =>
-                  pricing('yearlyEquivalent', { amount }),
-                featuresHeading: pricing('featuresHeading'),
-                cta: pricing('cta'),
-                vatNote: pricing('vatNote'),
-                unavailable: pricing('unavailable'),
-                featureLabel: (key: FeatureKey) => pricing(`features.${key}`),
-              }}
-            />
+            <EmptyState className="max-w-reading">
+              {home('freeTip.none')}
+            </EmptyState>
           )}
         </div>
       </section>
 
+      <section aria-labelledby="predplatne" className="bg-surface-accent">
+        <div className="page-shell page-gutter flex flex-col gap-6 py-16 md:py-20">
+          <div className="flex max-w-reading flex-col gap-3">
+            <h2 id="predplatne" className="text-display-lg text-ink">
+              {home('tiers.heading')}
+            </h2>
+            <p className="text-heading text-ink">
+              {pricing('checkoutStub.heading')}
+            </p>
+            <p className="text-lead text-ink-muted">
+              {pricing('checkoutStub.body')}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <Button href="/cenik" variant="secondary" prefetch={false}>
+              {common('nav.pricing')}
+            </Button>
+            <Button href="/kontakt" variant="ghost" prefetch={false}>
+              {pricing('checkoutStub.cta')}
+            </Button>
+          </div>
+        </div>
+      </section>
+
       {faq.length > 0 ? (
-        <section
-          aria-labelledby="caste-dotazy"
-          className="border-t border-border-subtle"
-        >
-          <div className="page-shell page-gutter flex flex-col gap-6 py-12 md:py-16">
+        <section aria-labelledby="caste-dotazy">
+          <div className="page-shell page-gutter flex flex-col gap-8 py-16 md:py-20">
             <h2 id="caste-dotazy" className="text-display-lg text-ink">
               {home('faq.heading')}
             </h2>
             {/* `<details>`: opens without script, keyboard operable for free. */}
             <div className="max-w-reading divide-y divide-border-subtle border-y border-border-subtle">
               {faq.map((entry) => (
-                <details key={entry.id} className="group py-2">
+                <details key={entry.id} className="py-2">
                   <summary className="flex min-h-11 cursor-pointer items-center text-body font-medium text-ink">
                     {entry.question}
                   </summary>
@@ -342,6 +288,13 @@ export default async function HomepagePreview() {
           </div>
         </section>
       ) : null}
+
+      <ClosingBand
+        headingId="zaver"
+        heading={previewCopy.record.heading}
+        body={home('record.body')}
+        action={{ href: '/historie', label: home('hero.primaryCta') }}
+      />
     </div>
   )
 }

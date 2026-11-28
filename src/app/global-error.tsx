@@ -70,8 +70,8 @@ export default function GlobalError({
           margin: 0,
           padding: '48px 24px',
           fontFamily: 'system-ui, sans-serif',
-          backgroundColor: '#f8f9f6',
-          color: '#171a18',
+          backgroundColor: '#ffffff',
+          color: '#13201a',
           lineHeight: 1.5,
         }}
       >
@@ -93,12 +93,12 @@ export default function GlobalError({
               style={{
                 minHeight: '44px',
                 padding: '10px 20px',
-                borderRadius: '6px',
+                borderRadius: '8px',
                 border: 'none',
-                // #236344 with #ffffff on it: the contrast rule holds even
-                // here. The brand fill is dark, so its ink is white (7.14:1);
-                // the page ink on it would be 2.46:1.
-                backgroundColor: '#236344',
+                // #14683f with #ffffff on it: the contrast rule holds even
+                // here. The brand fill is dark, so its ink is white (6.81:1);
+                // the page ink on it would be 2.47:1.
+                backgroundColor: '#14683f',
                 color: '#ffffff',
                 fontWeight: 600,
                 fontSize: '1rem',
@@ -121,9 +121,9 @@ export default function GlobalError({
                 display: 'inline-flex',
                 alignItems: 'center',
                 padding: '10px 20px',
-                borderRadius: '6px',
-                border: '1px solid #767c78',
-                color: '#171a18',
+                borderRadius: '8px',
+                border: '1px solid #78837d',
+                color: '#13201a',
                 textDecoration: 'none',
                 fontWeight: 600,
               }}
@@ -140,15 +140,15 @@ export default function GlobalError({
           <hr
             style={{
               border: 'none',
-              borderTop: '1px solid #dfe3df',
+              borderTop: '1px solid #e1e7e3',
               margin: '32px 0 16px',
             }}
           />
-          <p style={{ fontSize: '0.875rem', color: '#6b716e', margin: 0 }}>
+          <p style={{ fontSize: '0.875rem', color: '#55625b', margin: 0 }}>
             18+ · Informační a analytická služba o sportu. Nepřijímáme sázky a
             neprovozujeme hazardní hru. Máte problém s hazardem? Národní linka
             pro odvykání,{' '}
-            <a href="tel:800350000" style={{ color: '#236344' }}>
+            <a href="tel:800350000" style={{ color: '#14683f' }}>
               800 350 000
             </a>
             .

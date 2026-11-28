@@ -43,6 +43,7 @@ import {
   thresholdFor,
 } from './contrast.ts'
 import {
+  DESIGN_MD_DEPARTURES,
   DESIGN_SPEC_TOKENS,
   EXCLUDED_PLACEMENTS,
   FILLED_PAIRS,
@@ -54,6 +55,7 @@ import {
   RADII,
   SURFACE_TOKENS,
   TYPE_SCALE,
+  TYPE_SIZES,
   TYPE_STEP_MIN_WIDTH_REM,
   type ColourToken,
   type ThemeMode,
@@ -229,30 +231,67 @@ describe('filled controls', () => {
         const bg = PALETTE[mode][pair.bg]
 
         assert.ok(
-          meetsAA(fg, bg, 'normal'),
-          `${pair.fg} on ${pair.bg} is ${String(ratio(fg, bg))}:1`,
+          meetsAA(fg, bg, pair.level),
+          `${pair.fg} on ${pair.bg} is ${String(ratio(fg, bg))}:1, needs ${String(thresholdFor(pair.level))}:1`,
         )
       })
     }
   }
 
-  it('binds each fill to exactly one foreground', () => {
-    const fills = FILLED_PAIRS.map((pair) => pair.bg)
+  it('lists no pair twice, and binds each control fill to exactly one ink', () => {
+    const keys = FILLED_PAIRS.map((pair) => `${pair.fg}|${pair.bg}`)
 
-    assert.equal(
-      new Set(fills).size,
-      fills.length,
-      'a fill has two foregrounds',
-    )
+    assert.equal(new Set(keys).size, keys.length, 'a pair is listed twice')
+
+    // A BUTTON fill has one legal text colour, so a component cannot reach
+    // for the wrong one. The brand BAND is a surface and legitimately carries
+    // a headline ink, a secondary ink and the signal ring.
+    for (const fill of ['brand', 'brand-strong', 'signal'] as const) {
+      const text = FILLED_PAIRS.filter(
+        (pair) => pair.bg === fill && pair.level === 'normal',
+      )
+
+      assert.equal(text.length, 1, `${fill} has ${String(text.length)} inks`)
+    }
   })
 
-  it('puts WHITE on the brand fill, because the fill is dark now', () => {
-    // The old palette's rule was the opposite ("never white on brand"). The
-    // SC-005 green is #236344, where white is 7.14:1 and ink is 2.46:1. The
-    // token, not the call site, carries that, so it is pinned here.
+  it('gives the brand band a text ink, a secondary ink and a focus ring', () => {
+    const onBand = FILLED_PAIRS.filter((pair) => pair.bg === 'surface-brand')
+
+    assert.deepEqual(onBand.map((pair) => `${pair.fg}:${pair.level}`).sort(), [
+      'ink-muted-on-surface-brand:normal',
+      'ink-on-surface-brand:normal',
+      'signal:non-text',
+    ])
+  })
+
+  it('flips the ink on the brand fill with the theme', () => {
+    // Light: the brand green is dark and takes white (6.81:1); ink on it is
+    // 2.47:1. Dark: the brand green is a light mint and takes dark ink;
+    // white on it would fail. The token, not the call site, carries this.
     assert.equal(PALETTE.light['ink-on-brand'], '#ffffff')
-    assert.equal(PALETTE.dark['ink-on-brand'], '#ffffff')
     assert.ok(!meetsAA(PALETTE.light.ink, PALETTE.light.brand, 'normal'))
+    assert.notEqual(PALETTE.dark['ink-on-brand'], '#ffffff')
+    assert.ok(!meetsAA('#ffffff', PALETTE.dark.brand, 'normal'))
+  })
+
+  it('moves the focus ring to signal on the brand band', () => {
+    // The ordinary ring is brand-text, which vanishes on the band in light
+    // mode. globals.css must override it inside `.band-brand`.
+    assert.ok(
+      !meetsAA(
+        PALETTE.light['brand-text'],
+        PALETTE.light['surface-brand'],
+        'non-text',
+      ),
+    )
+
+    const css = read('src/app/(frontend)/globals.css')
+
+    assert.match(
+      css,
+      /\.band-brand :focus-visible,\s*\.band-brand input:focus-within\s*\{\s*outline-color: var\(--color-signal\);/,
+    )
   })
 })
 
@@ -399,8 +438,51 @@ describe('the pairs that must never be used', () => {
 /* docs/DESIGN.md and tokens.ts must agree                                    */
 /* -------------------------------------------------------------------------- */
 
-describe('tokens.ts implements the DESIGN.md specification', () => {
+describe('tokens.ts implements DESIGN.md, or declares each departure', () => {
+  /**
+   * DESIGN.md still describes the first, rejected proposal. The second
+   * proposal departs from it on purpose, and every departure must be
+   * DECLARED in `DESIGN_MD_DEPARTURES` with the exact previous and proposed
+   * value. So:
+   *
+   *   - a value that differs from DESIGN.md and is not declared fails;
+   *   - a declared departure whose "previous" no longer matches DESIGN.md, or
+   *     whose "proposed" no longer matches the code, fails;
+   *   - a declared departure that no longer departs (because Cowork updated
+   *     DESIGN.md) fails, so the list empties itself.
+   */
   const spec = read('docs/DESIGN.md')
+  const checked = new Set<string>()
+
+  const agreeOrDepart = (
+    name: string,
+    specified: string,
+    implemented: string,
+  ): void => {
+    checked.add(name)
+    const departure = DESIGN_MD_DEPARTURES.find((entry) => entry.spec === name)
+
+    if (specified === implemented) {
+      assert.equal(
+        departure,
+        undefined,
+        `${name} matches DESIGN.md (${specified}) again — remove its entry from DESIGN_MD_DEPARTURES`,
+      )
+      return
+    }
+
+    assert.ok(
+      departure,
+      `${name} is ${implemented} in code but ${specified} in DESIGN.md, and is not a declared departure`,
+    )
+    assert.equal(departure.previous, specified, `${name}: "previous" is stale`)
+    assert.equal(
+      departure.proposed,
+      implemented,
+      `${name}: "proposed" is stale`,
+    )
+    assert.ok(departure.why.length > 20, `${name}: say why`)
+  }
 
   /** `| \`bg\` | \`#F8F9F6\` | …` rows of the token table. */
   const specColours = new Map(
@@ -421,75 +503,59 @@ describe('tokens.ts implements the DESIGN.md specification', () => {
   })
 
   for (const [name, token] of Object.entries(DESIGN_SPEC_TOKENS)) {
-    it(`DESIGN.md \`${name}\` is the light \`${token}\``, () => {
-      assert.equal(PALETTE.light[token], specColours.get(name))
+    it(`DESIGN.md \`${name}\` is the light \`${token}\`, or a declared departure`, () => {
+      agreeOrDepart(
+        name,
+        specColours.get(name) ?? '(missing)',
+        PALETTE.light[token],
+      )
     })
   }
 
-  it('uses the specified sizes', () => {
-    // "H1 48/56, H2 32/40, H3 20/28, body 16/26, small 14/20, table 14/20",
-    // and "mobile H1 32/40".
-    const pair = (pattern: RegExp): [number, number] => {
-      const match = pattern.exec(spec)
+  const size = (pattern: RegExp): string => {
+    const match = pattern.exec(spec)
 
-      assert.ok(match, `DESIGN.md no longer matches ${String(pattern)}`)
+    assert.ok(match, `DESIGN.md no longer matches ${String(pattern)}`)
 
-      return [Number(match[1]), Number(match[2])]
-    }
+    return `${match[1] as string}/${match[2] as string}`
+  }
 
-    const expected: readonly [string, [number, number], [number, number]][] = [
-      [
-        'H1',
-        pair(/\bH1 (\d+)\/(\d+)/),
-        [
-          TYPE_SCALE['display-xl'].desktop.size,
-          TYPE_SCALE['display-xl'].desktop.lineHeight,
-        ],
-      ],
-      [
-        'mobile H1',
-        pair(/mobile H1 (\d+)\/(\d+)/),
-        [TYPE_SCALE['display-xl'].size, TYPE_SCALE['display-xl'].lineHeight],
-      ],
-      [
-        'H2',
-        pair(/\bH2 (\d+)\/(\d+)/),
-        [
-          TYPE_SCALE['display-lg'].desktop.size,
-          TYPE_SCALE['display-lg'].desktop.lineHeight,
-        ],
-      ],
-      [
-        'H3',
-        pair(/\bH3 (\d+)\/(\d+)/),
-        [TYPE_SCALE.heading.size, TYPE_SCALE.heading.lineHeight],
-      ],
-      [
-        'body',
-        pair(/\bbody (\d+)\/(\d+)/),
-        [TYPE_SCALE.body.size, TYPE_SCALE.body.lineHeight],
-      ],
-      [
-        'small',
-        pair(/\bsmall (\d+)\/(\d+)/),
-        [TYPE_SCALE['body-sm'].size, TYPE_SCALE['body-sm'].lineHeight],
-      ],
-      [
-        'table',
-        pair(/\btable (\d+)\/(\d+)/),
-        [TYPE_SCALE['data-sm'].size, TYPE_SCALE['data-sm'].lineHeight],
-      ],
-    ]
+  const step = (s: { size: number; lineHeight: number }): string =>
+    `${String(s.size)}/${String(s.lineHeight)}`
 
-    for (const [name, specified, implemented] of expected) {
-      assert.deepEqual(implemented, specified, `${name} drifted from DESIGN.md`)
-    }
+  const SIZES: readonly [string, RegExp, string][] = [
+    ['H1', /\bH1 (\d+)\/(\d+)/, step(TYPE_SCALE['display-xl'].desktop)],
+    ['mobile H1', /mobile H1 (\d+)\/(\d+)/, step(TYPE_SCALE['display-xl'])],
+    ['H2', /\bH2 (\d+)\/(\d+)/, step(TYPE_SCALE['display-lg'].desktop)],
+    ['H3', /\bH3 (\d+)\/(\d+)/, step(TYPE_SCALE.heading)],
+    ['body', /\bbody (\d+)\/(\d+)/, step(TYPE_SCALE.body)],
+    ['small', /\bsmall (\d+)\/(\d+)/, step(TYPE_SCALE['body-sm'])],
+    ['table', /\btable (\d+)\/(\d+)/, step(TYPE_SCALE['data-sm'])],
+  ]
+
+  for (const [name, pattern, implemented] of SIZES) {
+    it(`DESIGN.md ${name} size is implemented, or a declared departure`, () => {
+      agreeOrDepart(name, size(pattern), implemented)
+    })
+  }
+
+  it('implements the radius, or declares the departure', () => {
+    const specified = /\|\s*radius\s*\|\s*`(\d+px)`/.exec(spec)?.[1]
+
+    assert.ok(specified, 'DESIGN.md no longer states a radius')
+
+    // Widened from the literal types, so the comparison stays meaningful
+    // whatever the current values are.
+    const radii: Readonly<Record<keyof typeof RADII, number>> = RADII
+    const uniform = radii.button === radii.card && radii.button === radii.input
+    const implemented = uniform
+      ? `${String(radii.button)}px`
+      : `${String(radii.button)}px controls, ${String(radii.card)}px panels`
+
+    agreeOrDepart('radius', specified, implemented)
   })
 
-  it('uses the specified radius and content widths', () => {
-    assert.match(spec, /\|\s*radius\s*\|\s*`6px`/)
-    assert.deepEqual(new Set(Object.values(RADII)), new Set([6]))
-
+  it('uses the specified content widths', () => {
     const widths = /(\d+) px content, (\d+) px for long reading/.exec(spec)
 
     assert.ok(widths, 'DESIGN.md no longer states the content widths')
@@ -500,6 +566,24 @@ describe('tokens.ts implements the DESIGN.md specification', () => {
   it('names Geist Sans and Geist Mono, which is what fonts.ts loads', () => {
     assert.match(spec, /Geist Sans/)
     assert.match(spec, /Geist Mono/)
+  })
+
+  it('declares no departure for something that is not checked', () => {
+    // Runs last in this block: by now every check above has registered its
+    // name. An entry for an unchecked name would be documentation nothing
+    // holds to account.
+    for (const entry of DESIGN_MD_DEPARTURES) {
+      assert.ok(
+        checked.has(entry.spec),
+        `${entry.spec} is not a checked spec value`,
+      )
+    }
+
+    assert.equal(
+      new Set(DESIGN_MD_DEPARTURES.map((entry) => entry.spec)).size,
+      DESIGN_MD_DEPARTURES.length,
+      'a departure is declared twice',
+    )
   })
 })
 
@@ -549,7 +633,7 @@ describe('globals.css and tokens.ts have not drifted', () => {
     assert.deepEqual(wired.sort(), Object.keys(PALETTE.light).sort())
   })
 
-  it('has every radius at 6px and none below it', () => {
+  it('declares every radius from RADII, and none below 6px', () => {
     for (const forbidden of [
       '--radius-sm:',
       '--radius-xs:',
@@ -574,13 +658,18 @@ describe('globals.css and tokens.ts have not drifted', () => {
         `--radius-${String(name)}`,
       )
     }
+
+    // Softer than the first proposal, still no pills and no 16px+ rounded
+    // containers.
+    assert.ok(Math.min(...Object.values(RADII)) >= 6, 'a radius below 6px')
+    assert.ok(Math.max(...Object.values(RADII)) <= 12, 'a radius above 12px')
   })
 
   it('has one shadow level, tinted with the ink (rule 43)', () => {
     const shadows = [...css.matchAll(/^\s*--shadow-[a-z-]+:/gm)]
 
     assert.equal(shadows.length, 1, 'more than one shadow level is declared')
-    assert.ok(css.includes('--sc-shadow-overlay: rgba(23, 26, 24, 0.12);'))
+    assert.ok(css.includes('--sc-shadow-overlay: rgba(19, 32, 26, 0.14);'))
   })
 
   it('has no gradient, glow or glass anywhere (rule 45)', () => {
@@ -882,8 +971,8 @@ describe('type scale', () => {
     assert.equal(TYPE_SCALE.body.size, 16)
   })
 
-  it('uses only sizes on the DESIGN.md scale', () => {
-    const allowed = new Set([14, 16, 20, 24, 32, 48])
+  it('uses only sizes on the declared scale (TYPE_SIZES)', () => {
+    const allowed = new Set<number>(TYPE_SIZES)
 
     for (const [name, style] of Object.entries(TYPE_SCALE)) {
       for (const step of [style, style.desktop]) {
@@ -1023,8 +1112,14 @@ describe('global-error.tsx uses palette values, not invented ones', () => {
     )
   })
 
-  it('uses the 6px radius and sentence-case labels', () => {
-    assert.equal(/borderRadius: '(?!6px)/.test(globalError), false)
+  it('uses the button radius and sentence-case labels', () => {
+    const radius = `${String(RADII.button)}px`
+    const radii = [...globalError.matchAll(/borderRadius: '([^']+)'/g)].map(
+      (m) => m[1],
+    )
+
+    assert.ok(radii.length > 0)
+    assert.deepEqual([...new Set(radii)], [radius])
     assert.match(globalError, />\s*Zkusit znovu\s*</)
     assert.match(globalError, />\s*Na úvod\s*</)
     assert.equal(/ZKUSIT ZNOVU|NA ÚVOD/.test(globalError), false)
