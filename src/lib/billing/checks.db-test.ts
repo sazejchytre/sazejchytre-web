@@ -23,7 +23,10 @@ import { getPayload, type Payload } from 'payload'
 import type * as PayloadDrizzle from '@payloadcms/db-postgres/drizzle'
 
 import config from '@/payload.config'
+import { env } from '@/lib/env'
+import { openDisposableDatabase } from '@/lib/testing/disposable-database'
 
+const guard = await openDisposableDatabase(env.DATABASE_URL)
 const RUN = `chk-${Date.now()}`
 /*
  * There was a `TEST_YEAR` here — a year no real document would use,
@@ -183,6 +186,8 @@ after(async () => {
   )
   await db().execute(sql`DELETE FROM "users" WHERE "email" LIKE ${`${RUN}%`}`)
 })
+
+after(() => guard.end())
 
 /* -------------------------------------------------------------------------- */
 /* Invoice arithmetic and tax treatment                                       */
