@@ -54,11 +54,54 @@ All of the above are exercised by `pnpm test:db` (121 tests, all passing on
    `pnpm migrate:create <name>`.
 2. A migration that touches a table with a trigger above needs Codex review
    and a DB test proving the trigger still fires.
-3. Never drop or disable an immutability trigger, not even temporarily. The
-   legitimate workarounds are in README, "Working around them legitimately".
+3. Keep immutability triggers active throughout development and testing.
+   Retire local fixture databases using the workflow in [TESTING.md](TESTING.md#checking-and-retiring-a-fixture-database).
 4. Production migrations run only after explicit product-owner approval, from
    the deploy procedure in `docs/DEPLOYMENT.md`, after a fresh backup.
-5. `pnpm seed:tips` writes fixture tips. Never run it against production.
+5. Use a local fixture database for sample tips and DB tests.
+
+## Local fixture database
+
+Create a fresh database from `template0` in the verified local cluster for
+each test lifecycle. Pick an unused name starting with `sc_fixture_`, followed
+by 1–40 lowercase letters, digits or underscores. The example uses
+`sc_fixture_example`. Stop on the first SQL error (`psql -v ON_ERROR_STOP=1`).
+Only label a database you just created for this purpose.
+
+```sql
+CREATE DATABASE sc_fixture_example TEMPLATE template0;
+COMMENT ON DATABASE sc_fixture_example IS 'sazejchytre:disposable:v1:sc_fixture_example';
+REVOKE ALL ON DATABASE sc_fixture_example FROM PUBLIC;
+```
+
+The creating login owns the database, runs both migration commands and
+retires the database. Use a separate local application login with a password
+set interactively using psql. Create the role once per local test cluster,
+then grant it CONNECT for each new fixture database:
+
+```sql
+CREATE ROLE sc_fixture_app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+\password sc_fixture_app
+GRANT CONNECT ON DATABASE sc_fixture_example TO sc_fixture_app;
+```
+
+As the owner, point `DATABASE_URL` at the new database, run `pnpm migrate`
+and `pnpm auth:migrate`, then connect to **that database** and grant the
+application access to its migrated objects:
+
+```sql
+GRANT USAGE ON SCHEMA public, auth TO sc_fixture_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public, auth TO sc_fixture_app;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public, auth TO sc_fixture_app;
+```
+
+Use the application login for billing seed, tip fixtures and tests. Give it
+no role memberships, object ownership, schema creation or table truncation
+rights. The local URL must include credentials, `127.0.0.1`, an explicit
+port and the database name. The optional query string is `?sslmode=disable`.
+The PostgreSQL database comment is the owner's positive designation of this
+database. The test process reads it from the live catalog.
+See [TESTING.md](TESTING.md#running-db-tests-locally) for execution and retirement.
 
 ## Backups
 

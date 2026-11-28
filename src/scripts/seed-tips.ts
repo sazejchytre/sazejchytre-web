@@ -1,21 +1,21 @@
 /**
- * Seeds (or purges) the development tips fixture.
+ * Seeds development tips or retires the entire confirmed fixture database.
  *
  *   pnpm seed:tips         upsert sports, competitions, events and 15 tips
- *   pnpm seed:tips:purge   delete every row marked seed-step-3b
+ *   pnpm seed:tips:purge   owner-only retirement of a confirmed fixture database
  *
- * The mode comes from SEED_PURGE, not from argv: `payload run` consumes extra
- * flags itself and does not forward them, so `--purge` silently ran the seed.
- *
- * Uses TOP-LEVEL await rather than `main().then(…)`: `payload run` exits once
- * module evaluation finishes, so a floating promise is abandoned half-done and
- * the script appears to succeed having written nothing.
+ * The package scripts select the operation through SEED_PURGE. Top-level
+ * await keeps Payload's CLI alive until the selected operation finishes.
  */
-import { purgeSeededTips, seedTips } from '@/seed/tips'
-
 if (process.env.SEED_PURGE === '1') {
-  await purgeSeededTips()
+  const { disposeDatabase } = await import('../lib/testing/dispose-database.ts')
+  await disposeDatabase(
+    process.env.DATABASE_URL,
+    process.env.DISPOSABLE_DROP_DATABASE,
+    process.env.DISPOSABLE_MAINTENANCE_DATABASE,
+  )
 } else {
+  const { seedTips } = await import('@/seed/tips')
   await seedTips()
 }
 
