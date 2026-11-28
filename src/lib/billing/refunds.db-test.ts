@@ -24,10 +24,13 @@ import { getPayload, type Payload } from 'payload'
 import type * as PayloadDrizzle from '@payloadcms/db-postgres/drizzle'
 
 import config from '@/payload.config'
+import { env } from '@/lib/env'
+import { openDisposableDatabase } from '@/lib/testing/disposable-database'
 import { issueCreditNoteForRefund } from '@/lib/billing/stripe/webhook'
 import { loadCustomerEntitlementState } from '@/lib/billing/entitlement-loader'
 import { resolveEntitlements } from '@/lib/entitlements'
 
+const guard = await openDisposableDatabase(env.DATABASE_URL)
 const RUN = `dbtest-refund-${Date.now()}`
 
 /*
@@ -108,6 +111,8 @@ after(async () => {
     sql`DELETE FROM "customers" WHERE "email" LIKE ${`${RUN}%`}`,
   )
 })
+
+after(() => guard.end())
 
 /* -------------------------------------------------------------------------- */
 /* Fixtures                                                                   */

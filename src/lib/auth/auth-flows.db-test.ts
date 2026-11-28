@@ -23,6 +23,8 @@ import { createOTP } from '@better-auth/utils/otp'
 import { getPayload, type Payload } from 'payload'
 
 import config from '@/payload.config'
+import { env } from '@/lib/env'
+import { openDisposableDatabase } from '@/lib/testing/disposable-database'
 import { auth } from '@/lib/auth/config'
 import { getCurrentCustomer, requireEntitlement } from '@/lib/auth/customer'
 import { setEmailTransport, type SendArgs } from '@/lib/auth/email'
@@ -32,6 +34,7 @@ import {
   SESSION_REMEMBERED_SECONDS,
 } from '@/lib/auth/session-policy'
 
+const guard = await openDisposableDatabase(env.DATABASE_URL)
 const RUN = `af${Date.now().toString(36)}`
 const PASSWORD = 'tajne-dlouhe-heslo-2026'
 const NEW_PASSWORD = 'jine-dlouhe-heslo-2026'
@@ -178,6 +181,8 @@ after(async () => {
     sql`delete from "auth"."user" where "email" like ${`${RUN}%`}`,
   )
 })
+
+after(() => guard.end())
 
 /* ========================================================================== */
 

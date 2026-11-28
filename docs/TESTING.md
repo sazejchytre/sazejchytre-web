@@ -5,7 +5,7 @@
 | Command                 | Files                 | Needs                                                                              | In CI today                           |
 | ----------------------- | --------------------- | ---------------------------------------------------------------------------------- | ------------------------------------- |
 | `pnpm test`             | `src/**/*.test.ts`    | nothing (Node native type stripping)                                               | yes                                   |
-| Guarded DB runner below | `src/**/*.db-test.ts` | marked local PostgreSQL database with migrations and billing seed                  | **no** (SC-011)                       |
+| `pnpm test:db`          | `src/**/*.db-test.ts` | marked local PostgreSQL database with migrations and billing seed                  | **no** (SC-011)                       |
 | `pnpm test:stripe`      | `*.stripe-test.ts`    | Stripe **test** keys                                                               | no, manual                            |
 | `pnpm test:fakturoid`   | `*.fakturoid-test.ts` | `FAKTUROID_LIVE_TEST=1` plus whatever Fakturoid credentials are in the environment | no, manual. **See the warning below** |
 | Playwright e2e          | none yet              | running app + test DB                                                              | no (SC-011)                           |
@@ -32,14 +32,14 @@ the **application** login on the fixture database. In a shell with those values:
 
 ```bash
 pnpm seed                  # plans and prices required by the DB suites
-node --import tsx src/scripts/test-disposable-database.ts
+pnpm test:db
 pnpm seed:tips             # optional, for a local sample history
 ```
 
 The runner checks and holds the target before starting any test worker.
-Use this runner for the complete suite. The existing `pnpm test:db` alias
-starts Node directly. Sample tips keep their `seedMarker` for SC-024's
-public projection work. Keep fixture databases and their dumps local.
+Each DB suite also verifies the target when run individually. Sample tips
+keep their `seedMarker` for SC-024's public projection work. Keep fixture
+databases and their dumps local.
 
 ### Checking and retiring a fixture database
 

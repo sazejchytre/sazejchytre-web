@@ -17,6 +17,8 @@ import { getPayload, type Payload } from 'payload'
 import type * as PayloadDrizzle from '@payloadcms/db-postgres/drizzle'
 
 import config from '@/payload.config'
+import { env } from '@/lib/env'
+import { openDisposableDatabase } from '@/lib/testing/disposable-database'
 import type { ConfirmedPayment } from '@/lib/invoicing/confirmed-payment'
 import { issueInvoiceForPayment } from '@/lib/invoicing/issue'
 import {
@@ -32,6 +34,7 @@ import {
 import { anonymiseCustomer } from '@/lib/invoicing/retention'
 import { collectAccountingRows } from '@/lib/invoicing/export'
 
+const guard = await openDisposableDatabase(env.DATABASE_URL)
 const RUN = `dbtest-inv-${Date.now()}`
 
 /**
@@ -136,6 +139,8 @@ after(async () => {
     sql`DELETE FROM "customers" WHERE "email" LIKE ${`${RUN}%`}`,
   )
 })
+
+after(() => guard.end())
 
 /* -------------------------------------------------------------------------- */
 /* Fixtures                                                                   */
