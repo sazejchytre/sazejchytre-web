@@ -30,11 +30,24 @@
  *
  * No script, no stylesheet, no image, nothing fetched: a refusal must not
  * depend on any other path, all of which are refused too.
+ *
+ * The INFORMATIONAL not-found page is built the same way and for the same
+ * reason: it is answered by the proxy itself, never by routing to a page
+ * (see `proxy-handler.ts`), so it cannot depend on host names, on the route
+ * tree or on anything a closed area would load. Its one link is to the home
+ * page, which is served wherever this page is.
  */
 import type { RefusalReason } from './decide.ts'
 import type { HttpMethod } from './routes.ts'
 
 export const GATE_HEADER = 'x-launch-gate'
+
+/**
+ * Present on every response the gate handled, passed or refused (`'1'`).
+ * Its absence means the response was produced in front of the application,
+ * by a reverse proxy; see `verification.ts`.
+ */
+export const GATE_SEEN_HEADER = 'x-launch-gate-seen'
 
 const COMMON_HEADERS: Readonly<Record<string, string>> = Object.freeze({
   'cache-control': 'no-store',
@@ -65,6 +78,29 @@ export const PRIVATE_MAINTENANCE_HTML = `<!doctype html>
 </html>
 `
 
+/**
+ * The page for a closed or unknown address in INFORMATIONAL mode: the same
+ * answer as for an address that never existed. It links to the home page,
+ * which every mode that refuses with `not-found` serves.
+ */
+export const NOT_FOUND_HTML = `<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Sázej chytře – stránka nenalezena</title>
+</head>
+<body>
+<main>
+<h1>Stránka nenalezena</h1>
+<p>Na této adrese nic není.</p>
+<p><a href="/">Přejít na úvodní stránku</a></p>
+</main>
+</body>
+</html>
+`
+
 const STATUS: Readonly<Record<RefusalReason, number>> = Object.freeze({
   private: 503,
   'private-robots': 200,
@@ -75,14 +111,14 @@ const STATUS: Readonly<Record<RefusalReason, number>> = Object.freeze({
 const BODY: Readonly<Record<RefusalReason, string>> = Object.freeze({
   private: PRIVATE_MAINTENANCE_HTML,
   'private-robots': PRIVATE_ROBOTS_TXT,
-  'not-found': 'Not Found\n',
+  'not-found': NOT_FOUND_HTML,
   method: 'Method Not Allowed\n',
 })
 
 const CONTENT_TYPE: Readonly<Record<RefusalReason, string>> = Object.freeze({
   private: HTML,
   'private-robots': TEXT,
-  'not-found': TEXT,
+  'not-found': HTML,
   method: TEXT,
 })
 
@@ -95,8 +131,9 @@ export const refusalHeaders = (
   const headers = new Headers(COMMON_HEADERS)
   headers.set('content-type', CONTENT_TYPE[reason])
   headers.set(GATE_HEADER, reason)
+  headers.set(GATE_SEEN_HEADER, '1')
 
-  if (reason === 'private') {
+  if (reason === 'private' || reason === 'not-found') {
     headers.set('content-language', 'cs')
   }
 

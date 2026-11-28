@@ -53,10 +53,13 @@ which areas a deployment serves. Enforcement points, in request order:
    `/_next/static`. The decision (`src/lib/launch-gate/decide.ts`) is a pure
    function of mode, method and pathname over an allowlist
    (`src/lib/launch-gate/routes.ts`): a path that matches no rule is refused
-   outside `FULL`.
-2. `src/app/(payload)/api/[...slug]/route.ts` wraps Payload's REST handlers:
-   in `PRIVATE` mode only an administrator session or an administrator
-   sign-in operation reaches Payload.
+   outside `FULL`. Every refusal is answered there in full (no rewrite or
+   redirect), so it does not depend on host names.
+2. `src/app/(payload)/api/[...slug]/route.ts` wraps Payload's REST handlers
+   in the REST guard (`src/lib/launch-gate/rest-guard.ts`): in `PRIVATE` mode
+   only an administrator session or an administrator sign-in operation
+   reaches Payload, and in every mode every REST response is marked
+   `Cache-Control: private, no-store` with `Vary: Authorization, Cookie`.
 3. `src/components/layout/Header.tsx` (sign-in) and
    `src/components/pricing/TierCards.tsx` (purchase) render a link only when
    `isLinkServed(href)` (`src/lib/launch-gate/server.ts`) says the gate would
@@ -67,10 +70,12 @@ A new route file under `src/app` fails `src/lib/launch-gate/routes.test.ts`
 until it is classified in both `routes.ts` and `test-fixtures.ts`. A
 component or public page that links into an area `INFORMATIONAL` closes
 without asking `isLinkServed` fails `src/lib/launch-gate/link-guard.test.ts`.
-The `PRIVATE` 503 page is Czech HTML defined in
-`src/lib/launch-gate/responses.ts`, outside the message catalogue because the
-proxy answers before any page renders. Operations and deployment controls:
-`docs/DEPLOYMENT.md`, "Launch gate".
+The `PRIVATE` 503 page and the `INFORMATIONAL` 404 page are Czech HTML
+defined in `src/lib/launch-gate/responses.ts`, outside the message catalogue
+because the proxy answers before any page renders. The deployment check's
+rules (what each route must answer, directly and through a reverse proxy)
+are in `src/lib/launch-gate/verification.ts` and unit-tested. Operations and
+deployment controls: `docs/DEPLOYMENT.md`, "Launch gate".
 
 ## Boundaries
 

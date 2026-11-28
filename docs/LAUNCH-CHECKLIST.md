@@ -38,7 +38,7 @@ production only after the Phase B sign-off below.
 - [ ] Turnstile widget for the production domain; Ecomail list id set
 - [ ] Stripe **test** keys in Phase A; `ACCOUNTING_PROVIDER=FAKE`
 - [ ] Image built in CI, pulled on server, `/healthz` 200 on staging and production
-- [ ] Launch gate verified on the server (SC-009, `docs/DEPLOYMENT.md` "Launch gate"): proxy forwards every path, no cache or cache purged after a mode change, access restriction in front of staging; `/admin` and `/api` restricted at the proxy and the first administrator created before the host is reachable; `verify-launch-gate.ts` summary with 0 mismatches for staging and production (with `--expect-admin-restricted` from outside the allowlist, and `--check-links` in `INFORMATIONAL`): ____
+- [ ] Launch gate verified on the server (SC-009, `docs/DEPLOYMENT.md` "Launch gate"): proxy forwards every path, no cache or cache purged after a mode change, access restriction in front of staging; `/admin` and `/api` restricted at the proxy and the first administrator created before the host is reachable; `verify-launch-gate.ts` summary with 0 mismatches for staging and production (`--target proxy --proxy-policy admin` from outside the allowlist, `--target app` on the host, `--check-links` in `INFORMATIONAL`, no tolerated 5xx): ____
 - [ ] Production switched from `PRIVATE` to `INFORMATIONAL` only after every other Phase A box is ticked; verification re-run after the switch: ____
 - [ ] TLS valid, HTTP redirects to HTTPS, HSTS header present
 - [ ] Client-address handling behind the proxy verified on staging (SC-004 test procedure)

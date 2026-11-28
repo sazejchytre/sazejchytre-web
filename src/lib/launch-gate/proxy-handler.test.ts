@@ -5,8 +5,12 @@ import { describe, it } from 'node:test'
 import { NextRequest } from 'next/server.js'
 
 import { LAUNCH_MODES, type LaunchMode } from './modes.ts'
-import { NOT_FOUND_PATH, runLaunchGate } from './proxy-handler.ts'
-import { PRIVATE_MAINTENANCE_HTML, PRIVATE_ROBOTS_TXT } from './responses.ts'
+import { runLaunchGate } from './proxy-handler.ts'
+import {
+  NOT_FOUND_HTML,
+  PRIVATE_MAINTENANCE_HTML,
+  PRIVATE_ROBOTS_TXT,
+} from './responses.ts'
 import { discoverAppRoutes } from './route-inventory.ts'
 import { HTTP_METHODS, type HttpMethod } from './routes.ts'
 import { EXPECTED_ROUTES, type ExpectedRoute } from './test-fixtures.ts'
@@ -27,9 +31,9 @@ const APP_DIR = fileURLToPath(new URL('../../app', import.meta.url))
 const ROUTES = discoverAppRoutes(APP_DIR)
 
 type Outcome =
-  | { kind: 'pass' }
-  | { kind: 'not-found-rewrite' }
-  | { kind: 'status'; status: number; reason: string }
+  { kind: 'pass' } | { kind: 'status'; status: number; reason: string }
+
+const NOT_FOUND = { kind: 'status', status: 404, reason: 'not-found' } as const
 
 /* -------------------------------------------------------------------------- */
 /* The policy, written out independently of the implementation               */
@@ -68,9 +72,7 @@ const expectedOutcome = (
         : { kind: 'status', status: 503, reason: 'private' }
     }
 
-    return method === 'GET' || method === 'HEAD'
-      ? { kind: 'not-found-rewrite' }
-      : { kind: 'status', status: 404, reason: 'not-found' }
+    return { kind: 'status', status: 404, reason: 'not-found' }
   }
 
   if (route.methods !== 'ANY' && !route.methods.includes(method)) {
@@ -97,19 +99,23 @@ const request = (
   })
 
 const observe = (response: Response): Outcome => {
+  // Every response the gate handles carries the marker.
+  assert.equal(response.headers.get('x-launch-gate-seen'), '1')
+
   if (response.headers.get('x-middleware-next') === '1') {
     assert.equal(response.headers.get('x-launch-gate'), null)
+    assert.equal(response.headers.get('x-middleware-rewrite'), null)
     return { kind: 'pass' }
   }
 
-  const rewrite = response.headers.get('x-middleware-rewrite')
-
-  if (rewrite !== null) {
-    assert.equal(rewrite, new URL(NOT_FOUND_PATH, ORIGIN).toString())
-    assert.equal(response.headers.get('x-launch-gate'), 'not-found')
-    assert.equal(response.headers.get('cache-control'), 'no-store')
-    return { kind: 'not-found-rewrite' }
-  }
+  // A refusal is FINAL: never handed back to the framework to route,
+  // rewrite or redirect (a rewrite target's origin depends on host names;
+  // see proxy-handler.ts).
+  assert.equal(response.headers.get('x-middleware-rewrite'), null)
+  assert.equal(response.headers.get('x-middleware-next'), null)
+  assert.equal(response.headers.get('location'), null)
+  assert.ok(response.status >= 200 && response.status < 600)
+  assert.notEqual(response.headers.get('x-launch-gate'), null)
 
   assert.equal(response.headers.get('cache-control'), 'no-store')
   assert.equal(response.headers.get('x-robots-tag'), 'noindex, nofollow')
@@ -385,7 +391,7 @@ describe('no bypass', () => {
     ]) {
       assert.deepEqual(
         observe(gate(`${closed}${query}`, 'GET', 'INFORMATIONAL')),
-        { kind: 'not-found-rewrite' },
+        NOT_FOUND,
         query,
       )
     }
@@ -415,7 +421,7 @@ describe('no bypass', () => {
 
     for (const spelling of spellings) {
       const outcome = observe(gate(spelling, 'GET', 'INFORMATIONAL'))
-      assert.deepEqual(outcome, { kind: 'not-found-rewrite' }, spelling)
+      assert.deepEqual(outcome, NOT_FOUND, spelling)
 
       const post = observe(gate(spelling, 'POST', 'INFORMATIONAL'))
       assert.deepEqual(
@@ -441,15 +447,159 @@ describe('no bypass', () => {
     )
   })
 
-  it('refuses the rewrite target itself when requested directly', () => {
-    assert.deepEqual(observe(gate(NOT_FOUND_PATH, 'GET', 'INFORMATIONAL')), {
-      kind: 'not-found-rewrite',
-    })
-    assert.deepEqual(observe(gate(NOT_FOUND_PATH, 'GET', 'PRIVATE')), {
+  it('refuses the former internal not-found path like any unknown path', () => {
+    const former = '/_launch-gate/not-found'
+
+    assert.deepEqual(observe(gate(former, 'GET', 'INFORMATIONAL')), NOT_FOUND)
+    assert.deepEqual(observe(gate(former, 'GET', 'PRIVATE')), {
       kind: 'status',
       status: 503,
       reason: 'private',
     })
+  })
+})
+
+/* -------------------------------------------------------------------------- */
+/* The refusal does not depend on the host or the kind of request             */
+/* -------------------------------------------------------------------------- */
+
+describe('host and request-kind independence', () => {
+  /**
+   * The origins a request can arrive with: loopback by address and by name,
+   * IPv6 loopback, the wildcard bind, and public host names as a reverse
+   * proxy passes them on. The refusal must be byte-identical for all of
+   * them; it used to depend on whether the request's origin matched the
+   * server's bind address.
+   */
+  const ORIGINS = [
+    'http://127.0.0.1:3000',
+    'http://localhost:3000',
+    'http://[::1]:3000',
+    'http://0.0.0.0:3000',
+    'https://sazejchytre.cz',
+    'https://staging.sazejchytre.cz',
+  ]
+
+  const FORWARDED: Record<string, string>[] = [
+    {},
+    { 'x-forwarded-host': 'sazejchytre.cz', 'x-forwarded-proto': 'https' },
+    { 'x-forwarded-host': 'localhost:3000', 'x-forwarded-proto': 'http' },
+  ]
+
+  /** The request kinds a browser or the Next client sends to a page. */
+  const KINDS: Array<{
+    name: string
+    method: string
+    headers: Record<string, string>
+  }> = [
+    { name: 'document GET', method: 'GET', headers: { accept: 'text/html' } },
+    { name: 'HEAD', method: 'HEAD', headers: {} },
+    {
+      name: 'form POST',
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    },
+    { name: 'RSC navigation', method: 'GET', headers: { rsc: '1' } },
+    {
+      name: 'RSC prefetch',
+      method: 'GET',
+      headers: { rsc: '1', 'next-router-prefetch': '1' },
+    },
+    {
+      name: 'Server Action',
+      method: 'POST',
+      headers: {
+        'next-action': '7f00000000000000000000000000000000000000',
+        'content-type': 'text/plain;charset=UTF-8',
+      },
+    },
+  ]
+
+  const CLOSED = [
+    '/prihlaseni',
+    '/registrace',
+    '/ucet',
+    '/predplatne',
+    '/auth/sign-in/email',
+  ]
+
+  it('answers a closed route in INFORMATIONAL with the same final 404 from every host', async () => {
+    for (const path of CLOSED) {
+      for (const kind of KINDS) {
+        const answers = new Set<string>()
+
+        for (const origin of ORIGINS) {
+          for (const forwarded of FORWARDED) {
+            const response = runLaunchGate(
+              new NextRequest(`${origin}${path}`, {
+                method: kind.method,
+                headers: { ...kind.headers, ...forwarded },
+              }),
+              'INFORMATIONAL',
+              { development: false },
+            )
+            const label = `${kind.name} ${origin}${path} ${JSON.stringify(forwarded)}`
+
+            assert.deepEqual(observe(response), NOT_FOUND, label)
+            assert.equal(
+              response.headers.get('content-type'),
+              'text/html; charset=utf-8',
+              label,
+            )
+
+            const body = await response.text()
+            assert.equal(
+              body,
+              kind.method === 'HEAD' ? '' : NOT_FOUND_HTML,
+              label,
+            )
+            answers.add(`${response.status} ${body}`)
+          }
+        }
+
+        assert.equal(answers.size, 1, `${kind.name} ${path} differs by host`)
+      }
+    }
+  })
+
+  it('answers PRIVATE the same way from every host', () => {
+    for (const origin of ORIGINS) {
+      for (const kind of KINDS) {
+        const response = runLaunchGate(
+          new NextRequest(`${origin}/`, {
+            method: kind.method,
+            headers: kind.headers,
+          }),
+          'PRIVATE',
+          { development: false },
+        )
+        assert.deepEqual(
+          observe(response),
+          { kind: 'status', status: 503, reason: 'private' },
+          `${kind.name} ${origin}`,
+        )
+      }
+    }
+  })
+
+  it('passes an open page from every host', () => {
+    for (const origin of ORIGINS) {
+      for (const kind of KINDS) {
+        const response = runLaunchGate(
+          new NextRequest(`${origin}/kontakt`, {
+            method: kind.method,
+            headers: kind.headers,
+          }),
+          'INFORMATIONAL',
+          { development: false },
+        )
+        assert.deepEqual(
+          observe(response),
+          { kind: 'pass' },
+          `${kind.name} ${origin}`,
+        )
+      }
+    }
   })
 })
 

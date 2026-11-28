@@ -6,29 +6,32 @@
  * method and mode without starting a server.
  *
  * ──────────────────────────────────────────────────────────────────────────
- * WHY A `not-found` GET IS A REWRITE
+ * A REFUSAL IS ANSWERED HERE, COMPLETELY. NOTHING IS DELEGATED.
  *
- * A visitor who types a closed address, or follows an old bookmark to one,
- * should land on the site's own 404 page with its navigation, not on a bare
- * status line: the public site has no dead ends. So a GET or HEAD refused as
- * `not-found` is rewritten to `NOT_FOUND_PATH`, which no route serves —
- * it sits under an underscore segment, which the App Router never routes —
- * and Next answers it with `global-not-found.tsx` and status 404. The closed
- * page itself is never rendered: a rewrite replaces the route, it does not
- * wrap it. `routes.test.ts` asserts that nothing in `src/app` can match the
- * rewrite target.
+ * Every refused request — every method, every request kind (document, RSC
+ * navigation, prefetch, Server Action, form post) — gets its final response
+ * from this function. The framework is never asked to route it anywhere.
  *
- * Every other method gets the plain 404 from `responses.ts`. A POST is how a
- * Server Function is invoked, and the safe answer to one aimed at a closed
- * area is to process nothing at all.
+ * In particular there is no rewrite to a not-found page. A rewrite target is
+ * an absolute URL, and how the framework resolves it depends on the host
+ * name and the address the server is bound to. A refusal must not depend on
+ * either, so the gate answers with its own self-contained page
+ * (`responses.ts`), and `routes.test.ts` pins that no rewrite or redirect
+ * is used anywhere in the gate.
+ *
+ * The closed route itself never runs: the proxy returns before routing, so
+ * no page, layout, route handler or Server Action of a closed area is loaded.
+ *
+ * `x-launch-gate-seen` is set on every response the gate handles, passed or
+ * refused. It tells the deployment check that a response came from the
+ * application rather than from something in front of it (a reverse proxy's
+ * own 403), and it says nothing a visitor could use: not the mode, not the
+ * route, not the decision.
  */
 import { NextResponse, type NextRequest } from 'next/server.js'
 
 import { decide } from './decide.ts'
-import { GATE_HEADER, refusalResponse } from './responses.ts'
-
-/** Rewrite target for a refused GET/HEAD in INFORMATIONAL mode. */
-export const NOT_FOUND_PATH = '/_launch-gate/not-found'
+import { GATE_SEEN_HEADER, refusalResponse } from './responses.ts'
 
 export type LaunchGateOptions = {
   /** True only under `next dev`. */
@@ -48,27 +51,13 @@ export const runLaunchGate = (
   })
 
   if (decision.action === 'pass') {
-    return NextResponse.next()
-  }
-
-  const method = request.method.toUpperCase()
-
-  if (
-    decision.reason === 'not-found' &&
-    (method === 'GET' || method === 'HEAD')
-  ) {
-    const response = NextResponse.rewrite(
-      new URL(NOT_FOUND_PATH, request.nextUrl.origin),
-    )
-    response.headers.set(GATE_HEADER, decision.reason)
-    response.headers.set('cache-control', 'no-store')
-    response.headers.set('x-robots-tag', 'noindex, nofollow')
-
+    const response = NextResponse.next()
+    response.headers.set(GATE_SEEN_HEADER, '1')
     return response
   }
 
   return refusalResponse(decision.reason, {
-    method,
+    method: request.method,
     ...(decision.allow === undefined ? {} : { allow: decision.allow }),
   })
 }

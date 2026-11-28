@@ -86,11 +86,11 @@ One run-time variable decides which parts of the application a deployment
 serves. It is read from `.env` when the process starts; changing it means
 restarting the container, not rebuilding the image.
 
-| Mode            | Serves                                                                                                                                              | Refuses                                                                                                                                                                                  |
-| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PRIVATE`       | `/healthz`, `/api/cron/*` (bearer), `/admin` and `/api/*` (Payload; anonymous API reads refused, administrator session and sign-in only)            | every page and public output, known or not: **503** with a short Czech "temporarily unavailable" page; `robots.txt` answers `Disallow: /`                                                |
-| `INFORMATIONAL` | the above, plus `/`, `/historie`, `/metodika`, `/cenik`, `/kontakt`, the three legal pages, `/tipy/<slug>`, `robots.txt`, `sitemap.xml`, `llms.txt` | registration, sign-in, password and email flows, `/ucet/*`, `/auth/*`, `/predplatne`, `/webhooks/*`, and any path not in the route table: **404** (the site's own 404 page for GET/HEAD) |
-| `FULL`          | everything, unchanged behaviour                                                                                                                     | nothing                                                                                                                                                                                  |
+| Mode            | Serves                                                                                                                                              | Refuses                                                                                                                                                                             |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PRIVATE`       | `/healthz`, `/api/cron/*` (bearer), `/admin` and `/api/*` (Payload; anonymous API reads refused, administrator session and sign-in only)            | every page and public output, known or not: **503** with a short Czech "temporarily unavailable" page; `robots.txt` answers `Disallow: /`                                           |
+| `INFORMATIONAL` | the above, plus `/`, `/historie`, `/metodika`, `/cenik`, `/kontakt`, the three legal pages, `/tipy/<slug>`, `robots.txt`, `sitemap.xml`, `llms.txt` | registration, sign-in, password and email flows, `/ucet/*`, `/auth/*`, `/predplatne`, `/webhooks/*`, and any path not in the route table: **404** with a short Czech not-found page |
+| `FULL`          | everything, unchanged behaviour                                                                                                                     | nothing                                                                                                                                                                             |
 
 Rules that hold in every mode:
 
@@ -109,12 +109,24 @@ Rules that hold in every mode:
 - **Server Functions.** A Server Function invoked against a different page is
   forwarded by Next to its owning page, which passes the gate again, so an
   account action cannot be run through an open page.
+- **Refusals are final and answered by the proxy step itself**, for every
+  method and request kind (document, RSC navigation, prefetch, form post,
+  Server Action), never by routing the request elsewhere, so the answer
+  does not depend on the host name or bind address. `PRIVATE` answers a
+  short Czech maintenance page (503), `INFORMATIONAL` a short Czech
+  not-found page (404) that links to the home page. Both are self-contained
+  HTML (no script, stylesheet or image) in
+  `src/lib/launch-gate/responses.ts`; `responses.test.ts` checks their copy
+  against the copy rules.
 - **Refusals are `Cache-Control: no-store`, `X-Robots-Tag: noindex`** and
-  carry `x-launch-gate: <reason>` so the verification script can tell them
-  from the application's own 404s. The `PRIVATE` page is self-contained
-  HTML (no script, stylesheet or image) defined in
-  `src/lib/launch-gate/responses.ts`; its copy is checked against the copy
-  rules by `responses.test.ts`.
+  carry `x-launch-gate: <reason>`. Every response the gate handled, passed
+  or refused, carries `x-launch-gate-seen: 1`, which lets the verification
+  script tell an application answer from a reverse proxy's.
+- **REST answers are never cacheable.** Every response of the Payload REST
+  mount, in every mode (success, Payload's errors, the `PRIVATE` refusal, a
+  generic 500), carries `Cache-Control: private, no-store` and
+  `Vary: Authorization, Cookie` in addition to the framework's own `Vary`.
+  This does not rely on purging a cache after a mode change.
 - **No link into a closed area.** The header's sign-in button and the
   pricing cards' purchase button are rendered only when the gate would serve
   their destination (`isLinkServed` in `src/lib/launch-gate/server.ts`, which
@@ -143,21 +155,28 @@ yet. The reverse proxy is the second layer, not the only one.
 
 ### Verified locally vs. to be verified on the server
 
-**Verified locally** (2026-11-27, production build of this branch, local
-Postgres): `node src/scripts/verify-launch-gate.ts` against `next start` in
-each mode, with every route of the build's route manifest, all seven methods
-and raw path spellings (encoded characters, dot segments, double and
-trailing slashes): 352 of 352 probes as expected in `PRIVATE` (variable
-unset), `INFORMATIONAL` and `FULL`. A registration Server Function posted to
-an open page ran in `FULL` and did not run in `INFORMATIONAL`. In `PRIVATE`
-the Payload API answered an administrator session and refused anonymous and
-cross-origin requests, and every page answered the Czech 503 page. An
-invalid value answered 500 everywhere. Against `next dev` with a priced tier
-in the database, `--check-links` found no link to a refused path on any of
-the 9 public pages in `INFORMATIONAL`, and the purchase and sign-in buttons
-rendered in `FULL`. (Under `next start` the public pages currently answer
-500 until the operator identity is filled in, SC-015, so the link check was
-run against the development server.)
+**Verified locally** (2026-11-28, production build of this branch, marked
+disposable local Postgres): `node src/scripts/verify-launch-gate.ts
+--build-dir .next --include-unsafe-methods` against `next start`, with every
+route of the build's route manifest, all seven methods, every GET also as an
+RSC navigation and prefetch, every POST also as a Server Action, and raw
+path spellings: 541 probes, 0 mismatches in each of `PRIVATE` (variable
+unset), `INFORMATIONAL` and `FULL`. `INFORMATIONAL` was also run with the
+server bound to `127.0.0.1` and four `Host` values (`127.0.0.1`,
+`localhost`, `sazejchytre.cz`, `staging.sazejchytre.cz`), all identical. A
+registration Server Function posted to a closed page and to an open page
+did not run in `INFORMATIONAL` (no account created). Through a local
+caching reverse proxy, no REST response was stored. An invalid value
+answered 500 everywhere.
+
+**SC-015 limitation, not a gate result:** under `next start` every frontend
+page answers 500 until the operator identity is filled in
+(`src/lib/legal/operator.ts`). The gate passes those pages; the script lists
+them as "permitted but 5xx" and does not count them as working (27 in
+`INFORMATIONAL`, 150 in `FULL`, all with that one server-side cause; none in
+`PRIVATE`, which serves no page). The rendered pages were therefore checked
+against `next dev`: 281 probes, 0 mismatches, 0 server errors, and
+`--check-links` found no link to a refused path on the 9 public pages.
 
 These are guarantees of the application only. They say nothing about what
 the internet can reach on a real host; that is the list below.
@@ -185,12 +204,30 @@ prepare content before launch. The application side, verified locally in
   failed attempts (`src/collections/Users.ts`).
 
 So the application does not, and cannot by itself, keep the admin panel off
-the public internet. The verification script prints this surface on every
-run ("Administrative surface as seen from this client"); with
-`--expect-admin-restricted` it fails unless each of those requests is
-refused in front of the application (401, 403 or 404 without the gate's
-header) while `/healthz` still answers. Run locally without a proxy, it
-reports all five as reachable and exits 1, as it should.
+the public internet. That is checked from outside with the verification
+script's proxy mode (next section).
+
+### Verification script: targets and proxy policies
+
+| Invocation                            | Use it                                                       | Passes when                                                                                                                                                                                                 |
+| ------------------------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--target app` (default)              | against the container port, on the host                      | every answer is the application's (`x-launch-gate-seen`) and is what the gate decides for the mode                                                                                                          |
+| `--target proxy --proxy-policy none`  | through the public host, from an allowlisted client          | the same as `app`                                                                                                                                                                                           |
+| `--target proxy --proxy-policy admin` | through the public host, from a client outside the allowlist | `/admin` and `/api/*` are refused **by the proxy** (401, 403 or 404 without the gate marker); an application answer there fails, whatever its status. `/api/cron/*` may be either. Everything else as `app` |
+| `--target proxy --proxy-policy site`  | a non-public host (staging, closed production)               | every path except `/healthz` is refused by the proxy; `/healthz` reaches the application                                                                                                                    |
+
+A proxy refusal of a public page under `admin` fails too: that would be a
+different policy. Every REST answer the application gives must carry
+`private, no-store`. A route the gate passes that answers 5xx is reported as
+"permitted but 5xx" and fails the run unless `--tolerate-permitted-5xx` is
+given; a route the gate must refuse that answers 5xx is always a mismatch.
+`--host-header <host>` repeats the run with another `Host`.
+
+Verified locally against nginx in front of a `PRIVATE` build: with `/admin`
+and `/api/*` (except `/api/cron/*`) denied, `--proxy-policy admin` passed
+(281 of 281); with the same proxy but no restriction it failed with 57
+mismatches, every administrative probe reported as reachable. One run hit a
+transient container-to-host timeout on an unrelated path and was repeated.
 
 **Requires SC-009 verification on staging and production** (none of this is
 done yet):
@@ -199,10 +236,12 @@ done yet):
    does not serve anything itself for the application's host, so the gate
    sees every request.
 2. No response cache at the proxy or a CDN in front of the application, or
-   one that honours `Cache-Control` and is **purged after every
-   `LAUNCH_MODE` change**. `llms.txt` and `sitemap.xml` are cacheable by
-   design while the site is public, and a cache would replay them after a
-   switch to `PRIVATE`.
+   one that honours `Cache-Control` and `Vary` and is **purged after every
+   `LAUNCH_MODE` change**. REST and refusal responses are marked
+   non-storable by the application, but `llms.txt` and `sitemap.xml` are
+   cacheable by design while the site is public, and a cache would replay
+   them after a switch to `PRIVATE`. The proxy must not strip
+   `Cache-Control`, `Vary` or `x-launch-gate-seen`.
 3. While staging (or production in `PRIVATE`) is not public, an access
    restriction at VPS Centrum in front of the whole host (HTTP basic auth or
    an IP allowlist), with `/healthz` exempt for the uptime monitor. A
@@ -213,8 +252,8 @@ done yet):
    (or a VPN, or basic auth) in `PRIVATE` mode, and wherever feasible in
    every mode. `/api/cron/*` must stay reachable for the scheduler, either
    through the same allowlist or by calling the container on `127.0.0.1`.
-   Verified with `--expect-admin-restricted` from a client outside the
-   allowlist, and without it from an allowed client.
+   Verified with `--target proxy --proxy-policy admin` from a client outside
+   the allowlist, and `--proxy-policy none` from an allowed client.
 5. The first administrator is created **before** the host is reachable from
    outside, and `/api/users/init` answers `{"initialized":true}` before the
    proxy is opened; until then the first-administrator form is open to any
@@ -229,11 +268,12 @@ done yet):
    bypass the gate, but it would bypass the proxy controls above.
 9. After every deploy and every mode change, run the verification against the
    host and keep its summary line with the deploy record:
-   `node src/scripts/verify-launch-gate.ts --base-url https://<host> --mode <MODE>`.
+   `node src/scripts/verify-launch-gate.ts --base-url https://<host> --mode <MODE> --target proxy --proxy-policy <policy>`,
+   and on the host against the container port with `--target app`.
    Add `--check-links` in `INFORMATIONAL` (it fails if no public page could
-   be read), and `--expect-admin-restricted` from a client outside the admin
-   allowlist. Add `--include-unsafe-methods` only on staging: it sends
-   anonymous empty POST/PUT/PATCH/DELETE requests, which reach open handlers.
+   be read). Do not use `--tolerate-permitted-5xx` on a real host. Add
+   `--include-unsafe-methods` only on staging: it sends anonymous empty
+   POST/PUT/PATCH/DELETE requests, which reach open handlers.
 10. Monitoring: in `PRIVATE` mode `/` answers 503 by design, so the uptime
     monitor must watch `/healthz`, or expect 503 on `/`.
 

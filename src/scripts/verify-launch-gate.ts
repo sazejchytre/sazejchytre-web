@@ -2,47 +2,64 @@
  * Probe a running deployment and report what every route answers.
  *
  *   node src/scripts/verify-launch-gate.ts --base-url <origin> --mode <MODE>
- *        [--build-dir .next] [--include-unsafe-methods] [--check-links]
- *        [--expect-admin-restricted]
+ *        [--target app|proxy] [--proxy-policy none|admin|site]
+ *        [--host-header <host>] [--build-dir .next]
+ *        [--include-unsafe-methods] [--check-links]
+ *        [--tolerate-permitted-5xx]
  *
- * The expected outcome of each request comes from the launch gate's own
- * decision (`src/lib/launch-gate/decide.ts`) for the mode the deployment is
- * SUPPOSED to be in; the script compares that with what the server actually
- * answers. Any difference is printed and makes the exit code 1. Run it after
- * every deploy and after every change to `LAUNCH_MODE` (SC-009).
+ * The expected answer to each request comes from `src/lib/launch-gate/
+ * verification.ts`, which derives it from the gate's own decision for the
+ * mode the deployment is SUPPOSED to be in, and from the vantage point:
+ *
+ *   --target app      (default) talking to the application itself, e.g. the
+ *                     container port on the host. Every response must be the
+ *                     application's (`x-launch-gate-seen`), as the gate
+ *                     decides it.
+ *   --target proxy    talking to the public host through the reverse proxy,
+ *                     with --proxy-policy:
+ *       none          this client is allowed everywhere: same as `app`.
+ *       admin         `/admin` and `/api/*` must be refused BY THE PROXY
+ *                     (401/403/404 without the gate marker); the application
+ *                     answering any of them fails the run. Cron may be either.
+ *                     Everything else must reach the application. Run it from
+ *                     a client OUTSIDE the admin allowlist.
+ *       site          a non-public host: everything but `/healthz` must be
+ *                     refused by the proxy.
+ *
+ * Any difference is printed and makes the exit code 1. Run it after every
+ * deploy and after every change to `LAUNCH_MODE` (SC-009).
  *
  * What it probes:
- *   - every sample path of every route under `src/app`;
+ *   - every sample path of every route under `src/app`, plus the
+ *     administrative surface (`/admin`, the Payload sign-in endpoints, two
+ *     content reads);
+ *   - every GET again as an RSC navigation and as an RSC prefetch, the way
+ *     the Next client requests pages;
+ *   - with `--include-unsafe-methods`, POST/PUT/PATCH/DELETE, and every POST
+ *     again as a Server Action call;
  *   - with `--build-dir`, every route in the build's own route manifest, so a
  *     route the build exposes but the source tree does not is reported;
  *   - other spellings of closed paths, sent RAW (not normalised by a URL
  *     parser) so the reverse proxy and the server see exactly these bytes;
- *   - the Payload REST API's PRIVATE-mode rule (one content read, one
- *     administrator sign-in read);
  *   - with `--check-links`, the HTML of every public page the gate serves:
- *     each root-relative `href` in it must be a path the gate also serves in
- *     this mode, so no rendered link or call to action leads to a refusal;
- *   - always, the administrative surface (`/admin`, the Payload sign-in
- *     endpoints) as this client sees it, printed so the reader can tell
- *     whether it is reachable from where the script runs. The application
- *     serves it in every mode by design; whether the internet can reach it
- *     is a reverse-proxy decision (SC-009). With `--expect-admin-restricted`
- *     each of those requests must be refused IN FRONT of the application
- *     (401, 403 or 404 without the gate's header), and the health check must
- *     still answer, or the run fails. Use it from a client outside the
- *     allowlist.
+ *     each root-relative `href` in it must be a path the gate also serves.
  *
- * Methods: GET, HEAD and OPTIONS everywhere. POST, PUT, PATCH and DELETE only
- * with `--include-unsafe-methods`, and only against a local or staging
- * deployment: every request is anonymous with an empty body, but against an
- * OPEN route it does reach the handler (a webhook, an auth endpoint).
+ * Every REST answer the application gives must carry
+ * `Cache-Control: private, no-store`.
  *
- * "Pass" means "not refused by the gate": the response carries no
- * `x-launch-gate` header. A passing route can still answer 404 or 500 on its
- * own, and the table shows that status so it can be read for what it is.
+ * A route the gate passes that answers 5xx is NOT counted as working: it is
+ * listed under "permitted but 5xx" and fails the run, unless
+ * `--tolerate-permitted-5xx` is given — for a local build whose pages cannot
+ * render for a known, separate reason (operator identity, SC-015). Even then
+ * the list is printed. A route the gate must refuse that answers 5xx is a
+ * mismatch, always.
  *
- * Read-only by design for GET/HEAD/OPTIONS. Never point it at production
- * with `--include-unsafe-methods`.
+ * `--host-header` sends that `Host` on every request (plain HTTP only), to
+ * check that the answers do not depend on the host name a request uses.
+ *
+ * Methods: GET, HEAD and OPTIONS by default. Never point it at production
+ * with `--include-unsafe-methods`: every request is anonymous with an empty
+ * body, but against an OPEN route it does reach the handler.
  */
 import { existsSync, readFileSync } from 'node:fs'
 import { request as httpRequest } from 'node:http'
@@ -51,44 +68,51 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 
-import { decide, type GateDecision } from '../lib/launch-gate/decide.ts'
+import { decide } from '../lib/launch-gate/decide.ts'
 import { LAUNCH_MODES, type LaunchMode } from '../lib/launch-gate/modes.ts'
-import { payloadApiAccess } from '../lib/launch-gate/payload-api.ts'
 import { discoverAppRoutes } from '../lib/launch-gate/route-inventory.ts'
-import { GATE_HEADER } from '../lib/launch-gate/responses.ts'
+import { GATE_HEADER, GATE_SEEN_HEADER } from '../lib/launch-gate/responses.ts'
+import {
+  PROXY_POLICIES,
+  VERIFICATION_TARGETS,
+  expectationFor,
+  isRestPath,
+  judge,
+  normalisedPath,
+  type Observation,
+  type ProxyPolicy,
+  type VerificationTarget,
+} from '../lib/launch-gate/verification.ts'
 
-type Probe = { method: string; path: string; origin: string }
-type Observation = {
-  status: number
-  gate: string | null
+type Kind = 'plain' | 'rsc' | 'prefetch' | 'action'
+type Probe = { method: string; path: string; origin: string; kind: Kind }
+type Response = Observation & {
   location: string | null
   contentType: string | null
-  /** Only when asked for, and only up to `MAX_BODY_BYTES`. */
   body: string | null
 }
 
-const MAX_BODY_BYTES = 4 * 1024 * 1024
-type Expectation =
-  | { pass: true }
-  /** `gate: null` = refused by the framework itself, before any handler. */
-  | { pass: false; status: number; gate: string | null }
+/** The report goes to stdout; diagnostics and usage go to stderr. */
+const print = (line = ''): void => {
+  process.stdout.write(`${line}\n`)
+}
 
-/**
- * Methods `src/app/(payload)/api/[...slug]/route.ts` exports (HEAD is
- * derived from GET). Any other method is answered 405 by Next before the
- * PRIVATE-mode wrapper or Payload ever runs.
- */
-const PAYLOAD_API_METHODS = new Set([
-  'GET',
-  'HEAD',
-  'POST',
-  'PATCH',
-  'DELETE',
-  'OPTIONS',
-])
+const MAX_BODY_BYTES = 4 * 1024 * 1024
 
 const SAFE_METHODS = ['GET', 'HEAD', 'OPTIONS'] as const
 const UNSAFE_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'] as const
+
+const KIND_HEADERS: Readonly<Record<Kind, Record<string, string>>> = {
+  plain: {},
+  rsc: { rsc: '1' },
+  prefetch: { rsc: '1', 'next-router-prefetch': '1' },
+  // An id no build contains: the gate must refuse a closed page before Next
+  // looks it up, and an open page answers it as an unknown action.
+  action: {
+    'next-action': '7f00000000000000000000000000000000000000',
+    'content-type': 'text/plain;charset=UTF-8',
+  },
+}
 
 /** Raw spellings of closed paths; sent byte for byte. */
 const RAW_SPELLINGS = [
@@ -108,14 +132,28 @@ const RAW_SPELLINGS = [
   '/predplatne.json',
   '/_launch-gate/not-found',
   '/does-not-exist',
+  '/historie/../admin',
+  '/historie/%2e%2e/api/users/me',
+]
+
+/** What the application serves to anyone, in every mode, by design. */
+const ADMIN_SURFACE = [
+  '/admin',
+  '/admin/login',
+  '/api/users/init',
+  '/api/users/me',
+  '/api/access',
+  '/api/legal-pages',
+  '/api/globals/site-settings',
 ]
 
 const usage = (message: string): never => {
   console.error(message)
   console.error(
     'usage: node src/scripts/verify-launch-gate.ts --base-url <origin> ' +
-      `--mode <${LAUNCH_MODES.join('|')}> [--build-dir .next] [--include-unsafe-methods] ` +
-      '[--check-links] [--expect-admin-restricted]',
+      `--mode <${LAUNCH_MODES.join('|')}> [--target ${VERIFICATION_TARGETS.join('|')}] ` +
+      `[--proxy-policy ${PROXY_POLICIES.join('|')}] [--host-header <host>] [--build-dir .next] ` +
+      '[--include-unsafe-methods] [--check-links] [--tolerate-permitted-5xx]',
   )
   process.exit(2)
 }
@@ -124,10 +162,13 @@ const { values } = parseArgs({
   options: {
     'base-url': { type: 'string' },
     mode: { type: 'string' },
+    target: { type: 'string', default: 'app' },
+    'proxy-policy': { type: 'string', default: 'none' },
+    'host-header': { type: 'string' },
     'build-dir': { type: 'string' },
     'include-unsafe-methods': { type: 'boolean', default: false },
     'check-links': { type: 'boolean', default: false },
-    'expect-admin-restricted': { type: 'boolean', default: false },
+    'tolerate-permitted-5xx': { type: 'boolean', default: false },
   },
 })
 
@@ -137,8 +178,20 @@ const modeArg = values.mode ?? usage('--mode is required')
 if (!(LAUNCH_MODES as readonly string[]).includes(modeArg)) {
   usage(`--mode must be one of ${LAUNCH_MODES.join(', ')}`)
 }
+if (!(VERIFICATION_TARGETS as readonly string[]).includes(values.target)) {
+  usage(`--target must be one of ${VERIFICATION_TARGETS.join(', ')}`)
+}
+if (!(PROXY_POLICIES as readonly string[]).includes(values['proxy-policy'])) {
+  usage(`--proxy-policy must be one of ${PROXY_POLICIES.join(', ')}`)
+}
+if (values.target === 'app' && values['proxy-policy'] !== 'none') {
+  usage('--proxy-policy needs --target proxy')
+}
 
 const mode = modeArg as LaunchMode
+const target = values.target as VerificationTarget
+const policy = values['proxy-policy'] as ProxyPolicy
+const hostHeader = values['host-header']
 const methods: readonly string[] = values['include-unsafe-methods']
   ? [...SAFE_METHODS, ...UNSAFE_METHODS]
   : SAFE_METHODS
@@ -152,24 +205,29 @@ const APP_DIR = fileURLToPath(new URL('../app', import.meta.url))
 const routes = discoverAppRoutes(APP_DIR)
 const probes: Probe[] = []
 
-for (const route of routes) {
-  for (const path of route.samples) {
-    for (const method of methods) {
-      probes.push({ method, path, origin: route.template })
+const addProbes = (
+  path: string,
+  origin: string,
+  probeMethods: readonly string[],
+) => {
+  for (const method of probeMethods) {
+    probes.push({ method, path, origin, kind: 'plain' })
+
+    if (method === 'GET') {
+      probes.push({ method, path, origin, kind: 'rsc' })
+      probes.push({ method, path, origin, kind: 'prefetch' })
+    }
+    if (method === 'POST') {
+      probes.push({ method, path, origin, kind: 'action' })
     }
   }
 }
 
-for (const path of RAW_SPELLINGS) {
-  for (const method of methods) {
-    probes.push({ method, path, origin: 'raw spelling' })
-  }
+for (const route of routes) {
+  for (const path of route.samples) addProbes(path, route.template, methods)
 }
-
-probes.push(
-  { method: 'GET', path: '/api/legal-pages', origin: 'payload content read' },
-  { method: 'GET', path: '/api/users/me', origin: 'payload sign-in read' },
-)
+for (const path of RAW_SPELLINGS) addProbes(path, 'raw spelling', methods)
+for (const path of ADMIN_SURFACE) addProbes(path, 'admin surface', ['GET'])
 
 /* -------------------------------------------------------------------------- */
 /* What the build exposes                                                     */
@@ -196,67 +254,31 @@ if (values['build-dir'] !== undefined) {
   const generated = new Set(['/_not-found', '/_global-error', '/favicon.ico'])
 
   const built = [...new Set(Object.values(manifest))].sort()
-  console.log(`Build route manifest: ${built.length} routes`)
+  print(`Build route manifest: ${built.length} routes`)
 
   for (const template of built) {
     const listed = known.has(template) || generated.has(template)
-    console.log(`  ${listed ? 'ok     ' : 'UNKNOWN'} ${template}`)
+    print(`  ${listed ? 'ok     ' : 'UNKNOWN'} ${template}`)
 
     if (!listed) buildProblems.push(template)
   }
 
-  console.log('')
+  print('')
 }
 
 /* -------------------------------------------------------------------------- */
-/* Expectation and observation                                                */
+/* Sending                                                                    */
 /* -------------------------------------------------------------------------- */
-
-const expectationFor = ({ method, path }: Probe): Expectation => {
-  // The server resolves dot segments the way the WHATWG parser does before
-  // the gate runs; classify the same normalised path.
-  // Concatenated: `new URL('//x', base)` would read `//x` as a host.
-  const pathname = new URL(`http://verification.invalid${path}`).pathname
-  const decision: GateDecision = decide({
-    mode,
-    method,
-    pathname,
-    development: false,
-  })
-
-  if (decision.action === 'refuse') {
-    const status: Record<string, number> = {
-      private: 503,
-      'private-robots': 200,
-      'not-found': 404,
-      method: 405,
-    }
-    return {
-      pass: false,
-      status: status[decision.reason] ?? 0,
-      gate: decision.reason,
-    }
-  }
-
-  if (
-    decision.rule?.name === 'payload-api' &&
-    payloadApiAccess(mode, method, pathname) === 'administrator-only'
-  ) {
-    return PAYLOAD_API_METHODS.has(method)
-      ? { pass: false, status: 503, gate: 'private' }
-      : { pass: false, status: 405, gate: null }
-  }
-
-  return { pass: true }
-}
 
 const send = (
-  { method, path }: Probe,
+  { method, path, kind }: Pick<Probe, 'method' | 'path' | 'kind'>,
   { withBody = false }: { withBody?: boolean } = {},
-): Promise<Observation> =>
+): Promise<Response> =>
   new Promise((resolve, reject) => {
     const base = new URL(baseUrl)
     const request = base.protocol === 'https:' ? httpsRequest : httpRequest
+    const origin =
+      hostHeader === undefined ? base.origin : `${base.protocol}//${hostHeader}`
     const outgoing = request(
       {
         protocol: base.protocol,
@@ -265,8 +287,14 @@ const send = (
         method,
         // RAW: deliberately not passed through a URL parser.
         path,
-        headers: { 'user-agent': 'launch-gate-verification', accept: '*/*' },
-        timeout: 15_000,
+        headers: {
+          'user-agent': 'launch-gate-verification',
+          accept: '*/*',
+          ...(hostHeader === undefined ? {} : { host: hostHeader }),
+          ...KIND_HEADERS[kind],
+          ...(kind === 'action' ? { origin } : {}),
+        },
+        timeout: 20_000,
       },
       (response) => {
         const chunks: Buffer[] = []
@@ -280,9 +308,14 @@ const send = (
         })
         response.on('end', () => {
           const gate = response.headers[GATE_HEADER]
+          const seen = response.headers[GATE_SEEN_HEADER]
+          const cacheControl = response.headers['cache-control']
           resolve({
             status: response.statusCode ?? 0,
             gate: typeof gate === 'string' ? gate : null,
+            seen: seen === '1',
+            cacheControl:
+              typeof cacheControl === 'string' ? cacheControl : null,
             location: response.headers.location ?? null,
             contentType: response.headers['content-type'] ?? null,
             body: withBody ? Buffer.concat(chunks).toString('utf8') : null,
@@ -291,86 +324,101 @@ const send = (
       },
     )
 
+    if (kind === 'action') outgoing.write('[]')
     outgoing.on('timeout', () => outgoing.destroy(new Error('timeout')))
     outgoing.on('error', reject)
     outgoing.end()
   })
 
-const matches = (expected: Expectation, observed: Observation): boolean =>
-  expected.pass
-    ? observed.gate === null
-    : observed.gate === expected.gate && observed.status === expected.status
-
-/* -------------------------------------------------------------------------- */
-/* Run                                                                        */
-/* -------------------------------------------------------------------------- */
-
-console.log(
-  `Launch gate verification against ${baseUrl}, expected mode ${mode}`,
-)
-console.log(`Methods: ${methods.join(', ')}; probes: ${probes.length}\n`)
-
-let mismatches = 0
-const rows: string[] = []
-
 /**
- * Next answers a non-canonical spelling (`/x/`, `//x`, a resolved dot
- * segment that leaves a trailing slash) with a 308 to the canonical path
- * BEFORE the proxy runs. Such a redirect carries no content; what matters is
- * what the target answers, so it is followed once and judged instead.
+ * Redirects the framework issues on its own, which carry no content:
+ *
+ *   - a 308 to the canonical path for a non-canonical spelling (`/x/`,
+ *     `//x`, a resolved dot segment), sent BEFORE the proxy runs, so without
+ *     the gate marker;
+ *   - a 307 to `?_rsc=…` for an RSC request without the cache-busting
+ *     parameter, sent after the gate passed it.
+ *
+ * What matters is what the target answers, so one same-origin redirect is
+ * followed and the target is judged by the same rules — an administrative
+ * target is still administrative. A gate refusal is never a redirect.
  */
 const REDIRECTS = new Set([301, 302, 307, 308])
 
-const isSameOriginRedirect = (observed: Observation): boolean =>
+const isPreGateRedirect = (observed: Response): boolean =>
   observed.gate === null &&
   REDIRECTS.has(observed.status) &&
   observed.location !== null &&
   new URL(observed.location, baseUrl).origin === new URL(baseUrl).origin
 
+/* -------------------------------------------------------------------------- */
+/* Run                                                                        */
+/* -------------------------------------------------------------------------- */
+
+print(
+  `Launch gate verification against ${baseUrl}` +
+    (hostHeader === undefined ? '' : ` (Host: ${hostHeader})`) +
+    `, expected mode ${mode}, target ${target}` +
+    (target === 'proxy' ? `, proxy policy ${policy}` : ''),
+)
+print(`Methods: ${methods.join(', ')}; probes: ${probes.length}\n`)
+
+let mismatches = 0
+const permitted5xx: string[] = []
+const rows: string[] = []
+
 for (const probe of probes) {
-  let target = probe
-  let expected = expectationFor(probe)
-  let observed: Observation
+  let path = probe.path
+  let observed: Response
   let hop = ''
 
   try {
     observed = await send(probe)
 
-    if (isSameOriginRedirect(observed) && observed.location !== null) {
+    if (isPreGateRedirect(observed) && observed.location !== null) {
       const location = new URL(observed.location, baseUrl)
-      target = { ...probe, path: `${location.pathname}${location.search}` }
-      hop = `${observed.status} -> ${target.path}, then `
-      expected = expectationFor(target)
-      observed = await send(target)
+      path = `${location.pathname}${location.search}`
+      hop = `${observed.status} -> ${path}, then `
+      observed = await send({ ...probe, path })
     }
   } catch (error) {
     mismatches += 1
     rows.push(
-      `MISMATCH ${probe.method.padEnd(7)} ${probe.path}  request failed: ${String(error)}`,
+      `MISMATCH ${probe.method.padEnd(7)} ${probe.kind.padEnd(8)} ${probe.path}  request failed: ${String(error)}`,
     )
     continue
   }
 
-  const ok = matches(expected, observed)
-  if (!ok) mismatches += 1
+  const expected = expectationFor({
+    mode,
+    method: probe.method,
+    rawPath: path,
+    target,
+    policy,
+  })
+  const result = judge(expected, observed, {
+    restResponse: isRestPath(normalisedPath(path)),
+  })
 
-  const want = expected.pass
-    ? 'pass'
-    : `${expected.status} ${expected.gate ?? 'framework'}`
-  const got =
-    hop +
-    (observed.gate === null
-      ? `ungated ${observed.status}`
-      : `${observed.status} ${observed.gate}`)
+  if (!result.ok) mismatches += 1
+
+  const serverError = result.ok && result.serverError
+  const label = !result.ok ? 'MISMATCH' : serverError ? 'PASS-5XX' : 'ok      '
+
+  if (serverError) {
+    permitted5xx.push(
+      `${probe.method} ${probe.kind} ${probe.path} -> ${observed.status}`,
+    )
+  }
 
   rows.push(
-    `${ok ? 'ok      ' : 'MISMATCH'} ${probe.method.padEnd(7)} ${probe.path.padEnd(44)} ` +
-      `expected ${want.padEnd(20)} got ${got.padEnd(22)} [${probe.origin}]`,
+    `${label} ${probe.method.padEnd(7)} ${probe.kind.padEnd(8)} ${probe.path.padEnd(40)} ` +
+      `${hop}${result.note} [${probe.origin}]`,
   )
 }
 
-console.log(rows.join('\n'))
-console.log('')
+print(rows.join('\n'))
+print('')
 
 /* -------------------------------------------------------------------------- */
 /* Rendered links                                                             */
@@ -407,21 +455,19 @@ if (values['check-links']) {
     return decision.action === 'pass' && decision.rule?.area === 'public'
   })
 
-  console.log(
-    `Rendered links on ${pages.length} public pages served in ${mode}:`,
-  )
+  print(`Rendered links on ${pages.length} public pages served in ${mode}:`)
 
   for (const path of pages) {
-    let observed: Observation
+    let observed: Response
 
     try {
       observed = await send(
-        { method: 'GET', path, origin: 'links' },
+        { method: 'GET', path, kind: 'plain' },
         { withBody: true },
       )
     } catch (error) {
       deadLinks += 1
-      console.log(`  MISMATCH ${path}  request failed: ${String(error)}`)
+      print(`  MISMATCH ${path}  request failed: ${String(error)}`)
       continue
     }
 
@@ -429,26 +475,24 @@ if (values['check-links']) {
       observed.status !== 200 ||
       !observed.contentType?.includes('text/html')
     ) {
-      // Not a rendered page (a missing tip slug answers 404, a page whose
-      // data is missing may answer 500); nothing to check, but say so.
-      console.log(
-        `  skipped  ${path.padEnd(28)} ungated ${observed.status}, no page to read`,
-      )
+      print(`  skipped  ${path.padEnd(28)} ${observed.status}, no page to read`)
       continue
     }
 
     pagesChecked += 1
     const links = internalLinks(observed.body ?? '')
-    const refused = links.filter((href) => {
-      const pathname = new URL(`http://verification.invalid${href}`).pathname
-      return (
-        decide({ mode, method: 'GET', pathname, development: false }).action ===
-        'refuse'
-      )
-    })
+    const refused = links.filter(
+      (href) =>
+        decide({
+          mode,
+          method: 'GET',
+          pathname: normalisedPath(href),
+          development: false,
+        }).action === 'refuse',
+    )
 
     deadLinks += refused.length
-    console.log(
+    print(
       `  ${refused.length === 0 ? 'ok      ' : 'MISMATCH'} ${path.padEnd(28)} ` +
         `${links.length} internal links` +
         (refused.length === 0
@@ -457,90 +501,33 @@ if (values['check-links']) {
     )
   }
 
-  console.log('')
+  print('')
 }
 
 /* -------------------------------------------------------------------------- */
-/* Administrative surface                                                     */
+/* Summary                                                                    */
 /* -------------------------------------------------------------------------- */
 
-/**
- * What the application serves to anyone in every mode, because the
- * administrator has to be able to sign in. Whether "anyone" means the whole
- * internet is decided in front of the application.
- */
-const ADMIN_SURFACE = [
-  '/admin',
-  '/admin/login',
-  '/api/users/init',
-  '/api/users/me',
-  '/api/access',
-] as const
-
-/** Refused before the application: a proxy answer, not one of ours. */
-const restrictedInFront = (observed: Observation): boolean =>
-  observed.gate === null && [401, 403, 404].includes(observed.status)
-
-let adminProblems = 0
-
-console.log(
-  'Administrative surface as seen from this client ' +
-    (values['expect-admin-restricted']
-      ? '(expected: refused in front of the application):'
-      : '(reported only; pass --expect-admin-restricted to require a restriction):'),
-)
-
-for (const path of ADMIN_SURFACE) {
-  let observed: Observation
-
-  try {
-    observed = await send({ method: 'GET', path, origin: 'admin surface' })
-  } catch (error) {
-    // A connection refused or reset by a firewall is also "not reachable".
-    console.log(
-      `  ${'unreachable'.padEnd(11)} GET ${path.padEnd(18)} ${String(error)}`,
-    )
-    continue
-  }
-
-  const reachable = !restrictedInFront(observed)
-  const label = reachable ? 'REACHABLE' : 'restricted'
-  if (values['expect-admin-restricted'] && reachable) adminProblems += 1
-
-  console.log(
-    `  ${label.padEnd(11)} GET ${path.padEnd(18)} ${observed.status}` +
-      (observed.gate === null ? '' : ` ${observed.gate}`),
+if (permitted5xx.length > 0) {
+  print(
+    `Permitted by the gate but answered 5xx (${permitted5xx.length}); NOT evidence these routes work:`,
   )
+  for (const line of permitted5xx) print(`  ${line}`)
+  print('')
 }
 
-if (values['expect-admin-restricted']) {
-  // The uptime monitor must still get through.
-  try {
-    const health = await send({
-      method: 'GET',
-      path: '/healthz',
-      origin: 'health',
-    })
-    const healthy = health.gate === null && [200, 503].includes(health.status)
-    if (!healthy) adminProblems += 1
-    console.log(
-      `  ${(healthy ? 'ok' : 'MISMATCH').padEnd(11)} GET /healthz            ${health.status} (must stay reachable)`,
-    )
-  } catch (error) {
-    adminProblems += 1
-    console.log(`  MISMATCH    GET /healthz            ${String(error)}`)
-  }
-}
+// Asked to check links and read no page: nothing was verified.
+const linksUnverified =
+  values['check-links'] && pagesChecked === 0 && mode !== 'PRIVATE'
 
-console.log('')
-console.log(
-  `Summary: ${probes.length} probes, ${probes.length - mismatches} as expected, ` +
-    `${mismatches} mismatches, ${buildProblems.length} unclassified build routes` +
+print(
+  `Summary: ${probes.length} probes, ${probes.length - mismatches - permitted5xx.length} as expected, ` +
+    `${mismatches} mismatches, ${permitted5xx.length} permitted-but-5xx` +
+    (values['tolerate-permitted-5xx'] ? ' (tolerated)' : '') +
+    `, ${buildProblems.length} unclassified build routes` +
     (values['check-links']
-      ? `, ${pagesChecked} pages link-checked, ${deadLinks} links to refused paths`
-      : '') +
-    (values['expect-admin-restricted']
-      ? `, ${adminProblems} admin-restriction problems`
+      ? `, ${pagesChecked} pages link-checked, ${deadLinks} links to refused paths` +
+        (linksUnverified ? ' (NO PAGE COULD BE READ)' : '')
       : ''),
 )
 
@@ -548,9 +535,8 @@ process.exit(
   mismatches === 0 &&
     buildProblems.length === 0 &&
     deadLinks === 0 &&
-    // Asked to check links and read no page: nothing was verified.
-    !(values['check-links'] && pagesChecked === 0 && mode !== 'PRIVATE') &&
-    adminProblems === 0
+    !linksUnverified &&
+    (permitted5xx.length === 0 || values['tolerate-permitted-5xx'])
     ? 0
     : 1,
 )

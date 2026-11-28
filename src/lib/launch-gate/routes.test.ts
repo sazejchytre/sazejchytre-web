@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict'
+import { readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { before, describe, it } from 'node:test'
 
 import { decide } from './decide.ts'
-import { NOT_FOUND_PATH } from './proxy-handler.ts'
 import { discoverAppRoutes, type AppRoute } from './route-inventory.ts'
 import { ROUTE_RULES, classifyPath } from './routes.ts'
 import { EXPECTED_ROUTES, PLACEHOLDER_ENV } from './test-fixtures.ts'
@@ -76,12 +77,24 @@ describe('route inventory', () => {
   })
 })
 
-describe('the not-found rewrite target', () => {
-  it('can never be served by a route', () => {
-    // An underscore folder is not routable, so the only way a route could
-    // answer NOT_FOUND_PATH is a dynamic segment at the root.
-    assert.ok(NOT_FOUND_PATH.startsWith('/_'))
+describe('refusals are not routed', () => {
+  it('has no rewrite or redirect anywhere in the gate', () => {
+    // A refusal handed back to the framework (a rewrite to a not-found page,
+    // a redirect) depends on how the framework resolves host names, and was
+    // the cause of a 500 instead of a 404. The gate answers every refusal
+    // itself; this pins that no code path goes back to routing.
+    const dir = fileURLToPath(new URL('.', import.meta.url))
 
+    for (const file of readdirSync(dir)) {
+      if (!file.endsWith('.ts') || file.endsWith('.test.ts')) continue
+
+      const source = readFileSync(join(dir, file), 'utf8')
+      assert.ok(!/NextResponse\.(rewrite|redirect)\(/.test(source), file)
+      assert.ok(!/Response\.redirect\(/.test(source), file)
+    }
+  })
+
+  it('has no root catch-all route, so unknown paths stay unknown', () => {
     for (const route of routes) {
       const first = route.template.split('/')[1] ?? ''
       assert.equal(
@@ -90,10 +103,6 @@ describe('the not-found rewrite target', () => {
         `${route.file} is a root catch-all`,
       )
     }
-  })
-
-  it('is not in the gate table, so it is refused if requested directly', () => {
-    assert.equal(classifyPath(NOT_FOUND_PATH), undefined)
   })
 })
 

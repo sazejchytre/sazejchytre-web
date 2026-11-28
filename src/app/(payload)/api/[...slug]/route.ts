@@ -6,10 +6,11 @@
  *
  * GraphQL is disabled in payload.config.ts, so no graphql route is mounted.
  *
- * Every handler is wrapped in the launch gate's PRIVATE-mode rule: while the
- * site is private, the API answers administrators and their sign-in
- * operations only. In every other mode the wrapper hands the request to
- * Payload untouched. See `src/lib/launch-gate/payload-api.ts`.
+ * Every handler is wrapped in the launch gate's REST guard: while the site is
+ * private, the API answers administrators and their sign-in operations only;
+ * in every mode, every response leaves with `Cache-Control: private,
+ * no-store` and `Vary: Authorization, Cookie`, because every REST answer
+ * depends on the caller's session. See `src/lib/launch-gate/rest-guard.ts`.
  */
 import config from '@payload-config'
 import {

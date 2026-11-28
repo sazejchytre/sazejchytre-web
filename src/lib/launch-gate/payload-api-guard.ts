@@ -1,6 +1,8 @@
 /**
- * Wraps Payload's REST route handlers with the PRIVATE-mode rule from
- * `payload-api.ts`.
+ * Wraps Payload's REST route handlers with the launch gate's REST guard
+ * (`rest-guard.ts`): the PRIVATE-mode rule from `payload-api.ts`, and the
+ * session cache headers from `session-headers.ts` on every response, in
+ * every mode.
  *
  * The administrator check is Payload's own: `payload.auth` runs the
  * configured auth strategies against the request headers and returns the
@@ -13,41 +15,27 @@ import { getPayload, type SanitizedConfig } from 'payload'
 import { USERS_SLUG } from '@/lib/access'
 import { env } from '../env.ts'
 
-import { payloadApiAccess } from './payload-api'
-import { refusalResponse } from './responses'
+import { guardRestHandler, type RestHandler } from './rest-guard'
 
-type RestHandler<Args> = (request: Request, args: Args) => Promise<Response>
+const administratorCheck =
+  (config: Promise<SanitizedConfig> | SanitizedConfig) =>
+  async (request: Request): Promise<boolean> => {
+    try {
+      const payload = await getPayload({ config })
+      const { user } = await payload.auth({ headers: request.headers })
 
-const isAdministrator = async (
-  config: Promise<SanitizedConfig> | SanitizedConfig,
-  request: Request,
-): Promise<boolean> => {
-  try {
-    const payload = await getPayload({ config })
-    const { user } = await payload.auth({ headers: request.headers })
-
-    return user?.collection === USERS_SLUG
-  } catch (error) {
-    console.error('[launch-gate] administrator check failed:', error)
-    return false
-  }
-}
-
-export const withLaunchGate =
-  <Args>(
-    config: Promise<SanitizedConfig> | SanitizedConfig,
-    handler: RestHandler<Args>,
-  ): RestHandler<Args> =>
-  async (request, args) => {
-    const access = payloadApiAccess(
-      env.LAUNCH_MODE,
-      request.method,
-      new URL(request.url).pathname,
-    )
-
-    if (access === 'open' || (await isAdministrator(config, request))) {
-      return handler(request, args)
+      return user?.collection === USERS_SLUG
+    } catch (error) {
+      console.error('[launch-gate] administrator check failed:', error)
+      return false
     }
-
-    return refusalResponse('private', { method: request.method })
   }
+
+export const withLaunchGate = <Args>(
+  config: Promise<SanitizedConfig> | SanitizedConfig,
+  handler: RestHandler<Args>,
+): RestHandler<Args> =>
+  guardRestHandler(handler, {
+    mode: env.LAUNCH_MODE,
+    isAdministrator: administratorCheck(config),
+  })

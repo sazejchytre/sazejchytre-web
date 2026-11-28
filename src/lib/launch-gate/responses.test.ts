@@ -1,131 +1,182 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
+import { isLinkServedInMode } from './links.ts'
 import {
   GATE_HEADER,
+  GATE_SEEN_HEADER,
+  NOT_FOUND_HTML,
   PRIVATE_MAINTENANCE_HTML,
   PRIVATE_ROBOTS_TXT,
   refusalResponse,
 } from './responses.ts'
 
 /**
- * The refusals themselves, and the Czech page PRIVATE mode answers with.
+ * The refusals themselves, and the two Czech pages the gate answers with:
+ * the PRIVATE maintenance page and the INFORMATIONAL not-found page.
  *
- * That page is customer-facing copy that lives outside the message
- * catalogue (see the comment in `responses.ts`), so the catalogue's copy
- * test cannot see it. The rules that apply to it are restated here.
+ * Both are customer-facing copy that lives outside the message catalogue
+ * (see the comment in `responses.ts`), so the catalogue's copy test cannot
+ * see them. The rules that apply to them are restated here.
  */
 
-describe('the PRIVATE-mode response', () => {
-  it('is a 503 Czech HTML page that nothing may cache or index', async () => {
-    const response = refusalResponse('private', { method: 'GET' })
+const PAGES = [
+  {
+    name: 'the PRIVATE maintenance page',
+    html: PRIVATE_MAINTENANCE_HTML,
+    reason: 'private',
+    status: 503,
+    phrases: [/dočasně nedostupný/, /Zkuste to prosím později/],
+    stripped: ['docasne', 'nedostupny'],
+    links: [] as string[],
+  },
+  {
+    name: 'the INFORMATIONAL not-found page',
+    html: NOT_FOUND_HTML,
+    reason: 'not-found',
+    status: 404,
+    phrases: [/Stránka nenalezena/, /Přejít na úvodní stránku/],
+    stripped: ['Stranka', 'Prejit', 'uvodni'],
+    links: ['/'],
+  },
+] as const
 
-    assert.equal(response.status, 503)
-    assert.equal(
-      response.headers.get('content-type'),
-      'text/html; charset=utf-8',
-    )
-    assert.equal(response.headers.get('content-language'), 'cs')
-    assert.equal(response.headers.get('cache-control'), 'no-store')
-    assert.equal(response.headers.get('x-robots-tag'), 'noindex, nofollow')
-    assert.equal(response.headers.get(GATE_HEADER), 'private')
-    assert.equal(await response.text(), PRIVATE_MAINTENANCE_HTML)
-  })
+const visibleText = (html: string): string => html.replace(/<[^>]*>/g, ' ')
 
-  it('declares its language and encoding, and asks not to be indexed', () => {
-    assert.match(PRIVATE_MAINTENANCE_HTML, /^<!doctype html>/)
-    assert.match(PRIVATE_MAINTENANCE_HTML, /<html lang="cs">/)
-    assert.match(PRIVATE_MAINTENANCE_HTML, /<meta charset="utf-8">/)
-    assert.match(
-      PRIVATE_MAINTENANCE_HTML,
-      /<meta name="robots" content="noindex, nofollow">/,
-    )
-    assert.match(PRIVATE_MAINTENANCE_HTML, /<title>[^<]+<\/title>/)
-    assert.match(PRIVATE_MAINTENANCE_HTML, /<h1>[^<]+<\/h1>/)
-  })
+for (const page of PAGES) {
+  describe(page.name, () => {
+    it('is answered as Czech HTML that nothing may cache or index', async () => {
+      const response = refusalResponse(page.reason, { method: 'GET' })
 
-  it('loads nothing: no script, style, image, frame, form or link', () => {
-    // Every other path is refused in this mode, so anything the page tried
-    // to fetch would fail; and a refusal should not run code at all.
-    for (const tag of [
-      '<script',
-      '<style',
-      '<link',
-      '<img',
-      '<iframe',
-      '<form',
-      '<a ',
-      'style=',
-      'src=',
-      'href=',
-    ]) {
-      assert.ok(
-        !PRIVATE_MAINTENANCE_HTML.toLowerCase().includes(tag),
-        `the maintenance page contains ${tag}`,
+      assert.equal(response.status, page.status)
+      assert.equal(
+        response.headers.get('content-type'),
+        'text/html; charset=utf-8',
       )
-    }
+      assert.equal(response.headers.get('content-language'), 'cs')
+      assert.equal(response.headers.get('cache-control'), 'no-store')
+      assert.equal(response.headers.get('x-robots-tag'), 'noindex, nofollow')
+      assert.equal(response.headers.get(GATE_HEADER), page.reason)
+      assert.equal(response.headers.get(GATE_SEEN_HEADER), '1')
+      assert.equal(await response.text(), page.html)
+    })
+
+    it('is the same answer for every method that carries a body', async () => {
+      for (const method of [
+        'GET',
+        'POST',
+        'PUT',
+        'PATCH',
+        'DELETE',
+        'OPTIONS',
+      ]) {
+        const response = refusalResponse(page.reason, { method })
+        assert.equal(response.status, page.status, method)
+        assert.equal(await response.text(), page.html, method)
+      }
+    })
+
+    it('has no body for HEAD', async () => {
+      const response = refusalResponse(page.reason, { method: 'HEAD' })
+
+      assert.equal(response.status, page.status)
+      assert.equal(await response.text(), '')
+    })
+
+    it('declares its language and encoding, and asks not to be indexed', () => {
+      assert.match(page.html, /^<!doctype html>/)
+      assert.match(page.html, /<html lang="cs">/)
+      assert.match(page.html, /<meta charset="utf-8">/)
+      assert.match(
+        page.html,
+        /<meta name="robots" content="noindex, nofollow">/,
+      )
+      assert.match(page.html, /<title>[^<]+<\/title>/)
+      assert.match(page.html, /<h1>[^<]+<\/h1>/)
+    })
+
+    it('loads nothing: no script, style, image, frame or form', () => {
+      // A refusal must not depend on any other path, and must not run code.
+      for (const tag of [
+        '<script',
+        '<style',
+        '<link',
+        '<img',
+        '<iframe',
+        '<form',
+        'style=',
+        'src=',
+      ]) {
+        assert.ok(
+          !page.html.toLowerCase().includes(tag),
+          `${page.name} contains ${tag}`,
+        )
+      }
+    })
+
+    it('links only where it is meant to, and only to served paths', () => {
+      const hrefs = [...page.html.matchAll(/href="([^"]*)"/g)].map((m) => m[1])
+
+      assert.deepEqual(hrefs, page.links)
+
+      // The not-found page is only ever answered in INFORMATIONAL; its link
+      // must be one that mode serves, or it would be a dead end of its own.
+      for (const href of hrefs) {
+        assert.ok(isLinkServedInMode('INFORMATIONAL', href ?? ''), href)
+      }
+    })
+
+    it('is Czech, with its diacritics intact', () => {
+      assert.match(page.html, /Sázej chytře/)
+      for (const phrase of page.phrases) assert.match(page.html, phrase)
+
+      // Rule 4 of the copy rules: no stripped spellings.
+      for (const stripped of [...page.stripped, 'Sazej chytre']) {
+        assert.ok(!page.html.includes(stripped), stripped)
+      }
+    })
+
+    it('follows the copy rules: no betting imperative, no promise, no urgency', () => {
+      const text = visibleText(page.html).toLowerCase()
+
+      for (const forbidden of [
+        // rule 1
+        'vsaď',
+        'vsadit',
+        'hraj',
+        'tipni',
+        'tipněte',
+        // rule 2
+        'vyděl',
+        'zaručen',
+        'garant',
+        'zisk',
+        // no false urgency, no invented launch date (AGENTS.md rule 11)
+        'brzy',
+        'již za',
+        'už za',
+        'spouštíme',
+        'poslední',
+        'nenechte',
+        'neváhejte',
+        '!',
+      ]) {
+        assert.ok(!text.includes(forbidden), `contains "${forbidden}"`)
+      }
+
+      assert.ok(
+        !/\d/.test(visibleText(page.html)),
+        'the visible text must not state a date, time or number',
+      )
+    })
+
+    it('names no person, company or identifier', () => {
+      // Operator identity comes from `src/lib/legal/operator.ts` only
+      // (AGENTS.md rule 12); a refusal has no reason to carry it.
+      assert.ok(!/IČO|IČ:|s\.r\.o\.|@/.test(page.html))
+    })
   })
-
-  it('is Czech, with its diacritics intact', () => {
-    assert.match(PRIVATE_MAINTENANCE_HTML, /dočasně nedostupný/)
-    assert.match(PRIVATE_MAINTENANCE_HTML, /Sázej chytře/)
-    // Rule 4 of the copy rules: no stripped spellings.
-    for (const stripped of ['docasne', 'nedostupny', 'Sazej chytre']) {
-      assert.ok(!PRIVATE_MAINTENANCE_HTML.includes(stripped), stripped)
-    }
-  })
-
-  it('follows the copy rules: no betting imperative, no promise, no urgency', () => {
-    // The words a reader sees, title included; markup removed.
-    const visible = PRIVATE_MAINTENANCE_HTML.replace(/<[^>]*>/g, ' ')
-    const text = visible.toLowerCase()
-
-    assert.match(visible, /Zkuste to prosím později/)
-
-    for (const forbidden of [
-      // rule 1
-      'vsaď',
-      'vsadit',
-      'hraj',
-      'tipni',
-      'tipněte',
-      // rule 2
-      'vyděl',
-      'zaručen',
-      'garant',
-      'zisk',
-      // no false urgency, no invented launch date (AGENTS.md rule 11)
-      'brzy',
-      'již za',
-      'už za',
-      'spouštíme',
-      'poslední',
-      'nenechte',
-      'neváhejte',
-      '!',
-    ]) {
-      assert.ok(!text.includes(forbidden), `contains "${forbidden}"`)
-    }
-
-    assert.ok(
-      !/\d/.test(visible),
-      'the visible text must not state a date, time or number',
-    )
-  })
-
-  it('names no person, company or identifier', () => {
-    // Operator identity comes from `src/lib/legal/operator.ts` only
-    // (AGENTS.md rule 12); a refusal has no reason to carry it.
-    assert.ok(!/IČO|IČ:|s\.r\.o\.|@/.test(PRIVATE_MAINTENANCE_HTML))
-  })
-
-  it('has no body for HEAD', async () => {
-    const response = refusalResponse('private', { method: 'HEAD' })
-
-    assert.equal(response.status, 503)
-    assert.equal(await response.text(), '')
-  })
-})
+}
 
 describe('the other refusals', () => {
   it('answers robots.txt in PRIVATE mode with disallow-everything', async () => {
@@ -139,25 +190,21 @@ describe('the other refusals', () => {
     assert.equal(await response.text(), PRIVATE_ROBOTS_TXT)
   })
 
-  it('keeps 404 and 405 plain text, with Allow on the 405', async () => {
-    const notFound = refusalResponse('not-found', { method: 'POST' })
-    assert.equal(notFound.status, 404)
-    assert.equal(
-      notFound.headers.get('content-type'),
-      'text/plain; charset=utf-8',
-    )
-    assert.equal(notFound.headers.get('content-language'), null)
-
+  it('keeps 405 plain text, with Allow', async () => {
     const method = refusalResponse('method', {
       method: 'DELETE',
       allow: ['GET', 'HEAD'],
     })
     assert.equal(method.status, 405)
     assert.equal(method.headers.get('allow'), 'GET, HEAD')
+    assert.equal(
+      method.headers.get('content-type'),
+      'text/plain; charset=utf-8',
+    )
     assert.equal(await method.text(), 'Method Not Allowed\n')
   })
 
-  it('marks every refusal no-store and noindex', () => {
+  it('marks every refusal no-store, noindex and as seen by the gate', () => {
     for (const reason of [
       'private',
       'private-robots',
@@ -172,6 +219,7 @@ describe('the other refusals', () => {
         reason,
       )
       assert.equal(response.headers.get(GATE_HEADER), reason, reason)
+      assert.equal(response.headers.get(GATE_SEEN_HEADER), '1', reason)
     }
   })
 })
