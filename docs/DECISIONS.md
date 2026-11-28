@@ -104,8 +104,85 @@ other agent reviewing. This inverts the default reviewer role for those three
 packages, because the reviewer that produced the findings already holds the
 context, and it keeps two tracks running without shared files.
 
-## D-015 · open · technology for the administrator second factor
+## D-015 · 2026-11-28 · Accepted (owner)
 
-Decided by the owner once SC-019's comparison is delivered, per D-013. SC-026
-does not start before this entry names the route. This is a scheduled
-decision point, not an open question to re-ask.
+**The administrator second factor is application-native, with an
+authenticator-app code (TOTP).** This is the route named under D-013. SC-026
+implements it. The owner approved these requirements:
+
+- TOTP is mandatory for every administrator.
+- A vetted, maintained cryptographic library implements it. No hand-written
+  primitives.
+- Backup codes are single-use and stored hashed.
+- The TOTP secret is stored encrypted.
+- A code that was accepted once cannot be accepted again (replay protection).
+- Verification is rate limited and protected against brute force.
+- Activating or resetting the factor invalidates every existing session of
+  that administrator.
+- Access recovery is a documented procedure that needs shell access to the
+  server. It never turns the factor off.
+- No full administration session is issued before both factors have been
+  verified.
+- Every authentication path the framework exposes is verified, including
+  password recovery and session refresh.
+- A gateway-level control (Cloudflare Access) is kept as a possible second
+  layer later. It is not part of SC-026 and is not bought now.
+
+Added by the owner on 2026-11-28:
+
+- Activation is not complete until a valid TOTP code, generated from the new
+  secret, has been verified. Until then the new secret has no effect.
+- Enrolment and recovery are safe when interrupted at any step and never leave
+  the last administrator in a state that cannot be recovered with shell access.
+
+SC-026 stays a condition for the public launch (D-012, launch checklist).
+Reason: the administration area exposes every customer and accounting record,
+and a password alone is not an acceptable barrier. An application-native
+factor works the same on every environment, costs nothing, and covers the
+framework's own API routes as well as the panel.
+
+## D-016 · 2026-11-28 · Accepted (owner)
+
+**SC-022 is partly complete. Its scope was extended once, and the
+public-output exclusion belongs to SC-024.** The independent review of PR #32
+(verdict: approve with non-blocking notes) found that the target check has to
+wrap every entry point, which reaches files the issue did not list:
+`package.json` (the `test:db` script), `README.md`, the fixture seed module
+and script, and the guard import in each of the five database suites.
+
+**The `package.json` permission was a one-time exception.** It applied only to
+integrating the safe `test:db` command in PR #32. It is not a general lifting
+of the file-ownership rule: any change to a file that another open branch
+owns still needs the owner's explicit approval, each time.
+
+PR #32 was merged into `rebuild/v2` as `d356c72` on 2026-11-28. SC-022 (#27)
+stays open: excluding fixture records from every public output, statistic,
+history and export is a binding acceptance criterion and public-launch
+blocker of SC-024 (#29), and #27 closes only when it is verified there.
+
+Non-blocking notes carried forward, none of them blocked the merge:
+
+1. The interruption and marker-refusal proofs run only by hand. Wiring them
+   into a script and CI is tracked under SC-011 (#11).
+2. A nit: the retirement command prints its "Retiring" line before the commit,
+   so it also appears on a rolled-back run.
+3. The reviewer saw one direct refusal run that did not finish in 6 minutes
+   and did not reproduce it. If it recurs, open an issue.
+
+## D-017 · 2026-11-28 · Accepted (owner)
+
+**SC-023 moves from Codex to Claude Code, and its independent reviewer
+changes from Claude Code to Codex.** Codex is taking the independent review of
+SC-019 (PR #33). For SC-023 this replaces the role inversion that D-014
+proposed. The rule behind every assignment does not change: **the author of a
+change never approves it.** The other agent reviews, and the owner merges.
+
+Consequences:
+
+- SC-023 and SC-024 both have Claude Code as implementer and Codex as
+  reviewer. They share the loader and settlement modules, so they stay
+  strictly sequential: SC-024 starts after SC-023 is merged.
+- SC-025 keeps its D-014 assignment (Codex implements, Claude Code reviews).
+- Claude Code now carries SC-017 follow-up, SC-023, then SC-018, SC-026 and
+  SC-024 in sequence. This is a launch-date risk and is tracked in
+  `docs/STATUS.md`.
